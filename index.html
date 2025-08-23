@@ -25,7 +25,7 @@ textarea { font-family: monospace; resize: vertical; }
 ul { list-style-type: none; padding: 0; margin: 0.55rem 0rem 0rem 0rem; }
 li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; }
 .event-highlighted { border: 2px solid #ffcc66; }
-.npub-link { color: #66b3ff; white-space: normal; }
+.npub-link { color: #66b3ff; white-space: normal; word-break: break-word; min-width: 0; flex: 1; }
 .nostr-ref, .pubkey-ref { color: #66b3ff; }
 .custom-emoji { height: 1.1rem; vertical-align: bottom; }
 #load-more { font-size: 0.8rem; font-weight: bold; padding: 0.25rem 1rem; margin: 0.5rem 0rem; border: 0px solid #ddd; border-radius: 999px; color: #fff; background-color: #666; white-space: nowrap; cursor: pointer; transition: background-color 0.3s, color 0.3s; }
@@ -52,7 +52,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
 <span style="display:block; margin: 0.5rem 0rem;">秘密鍵（nsec）:</span>
 <input id="nsec" type="text" placeholder="nsec1..." class="full-width" style="margin-bottom:0.5rem;">
 <p id="warning-message" class="hidden" style="margin-top:-0.5rem;margin-bottom:0.5rem;">⚠️秘密鍵を紛失すると、そのアカウントは二度と使えません。大事にしてね。</p>
-<div style="display: flex;"><span style="white-space: nowrap;">公開鍵（npub）:</span><a id="npub-link" target="_blank" rel="noreferrer" style="word-break: break-word; min-width: 0; flex: 1;"></a></div>
+<div style="display: flex;"><span style="white-space: nowrap;">公開鍵（npub）:</span><a id="npub-link" class="npub-link" target="_blank" rel="noreferrer"></a></div>
 <textarea id="new-post-content" rows="3" placeholder="いまなにしてる？" class="full-width" style="margin-top:0.5rem;"></textarea>
 <button id="send-new-post" class="full-width">投稿</button>
 <div id="settings-toggle-area">
