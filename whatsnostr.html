@@ -6,33 +6,30 @@
 <title>flowgazer -What's Nostr?-</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"; padding: 8px; line-height: 1.3; font-weight: normal; background-color: #f7f7f7; color: #333; }
-h1 { font-size: 1.2rem; color: #555; margin-bottom: .5rem; }
-h2 { font-size: 1.1rem; color: #555; margin-bottom: .5rem; }
-p { font-size: .9rem; color: #666; margin-bottom: .25rem; }
-ul { padding-left: 1.5rem; color: #666; font-size: .9rem; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"; padding: 0.5rem; line-height: 1.3; font-weight: normal; background-color: #f7f7f7; color: #666; }
+.container { max-width: 600px; margin-left: .5rem; margin-right: auto; padding: .5rem; }
+@media (max-width: 767px) {.container { max-width: 100%; padding: 8px; margin: 0; }}
+h1 { font-size: 1.2rem; margin-bottom: .5rem; }
+h2 { font-size: 1.1rem; margin-bottom: .5rem; }
+p { font-size: .9rem; margin-bottom: .25rem; }
+ul { padding-left: 1.5rem; font-size: .9rem; }
 a { color: #007bff; text-decoration: none; }
 a:hover { text-decoration: underline; }
-.nostr-link { display: inline-block; background-color: #e0f2f1; color: #00796b; padding: 4px 8px; border-radius: 20px; font-weight: bold; transition: background-color 0.2s; white-space: nowrap; }
-.nostr-link:hover { background-color: #b2dfdb; text-decoration: none; }
-.container { max-width: 600px; margin-left: .5rem; margin-right: auto; padding: .5rem; }
-@media (max-width: 767px) { .container { max-width: 100%; padding: 8px; margin: 0; }
-.container .button { text-decoration: none; padding: 6px 12px; border-radius: 999px; color: white; font-weight: bold; margin:0.5rem 0rem 0rem 0rem; transition: background-color 0.2s; }
-.flex-container { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 2px; }
-.nostr-link-close { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; position: fixed; top: 8px; right: 8px; background-color: #e0f2f1; color: #00796b; font-weight: bold; transition: background-color 0.2s; }
-.nostr-link-close:hover { background-color: #b2dfdb; text-decoration: none; }
+.flex-container { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;}
+.container .flex-container .button{ display: inline-block; text-decoration: none; padding: 0.4rem 0.8rem; margin:0.5rem 0rem; border-radius: 999px; color: white; font-weight: bold; transition: background-color 0.2s;}
+.container .flex-container .button:hover { filter: brightness(0.9) saturate(1.2);}
 </style>
 </head>
 <body>
 <div id="header-placeholder"></div>
 <div class="container">
 <div class="header-container">
-<a href="https://github.com/ompomz/ompomz.github.io/tree/main/flowgazer/index3.html"><h1>Nostrってなに？</h1></a>
+<a href="https://github.com/ompomz/flowgazer"><h1>Nostrってなに？</h1></a>
 </div>
 <p>多くの人は、TwitterやInstagramといった、会社が運営するSNSに慣れていますよね。<br>
 でも、この仕組みにはいくつかの問題があります。</p>
 <br>
-<ul style="padding-left: 1.5rem; color: #666; font-size: .9rem;">
+<ul>
 <li>ある日突然、アカウントが使えなくなるかもしれない。</li>
 <li>投稿が運営側の都合で削除される可能性がある。</li>
 <li>私たちのデータが、会社のビジネスのために使われている。</li>
@@ -59,19 +56,19 @@ Nostrを始めると、「秘密の鍵」と「公開の鍵」という、2つ�
 もし興味を持ったら、まずはNostrのクライアント（アプリ）を試してみてください。<br>
 それぞれのクライアントが、この「基盤」を使って、まったく違う見た目や機能を提供しています。<br>
 どのクライアントを選ぶか、それもあなたの自由です。</p>
-<br>
-<div class="flex-container"><a href="index.html" class="nostr-link">flowgazer -kindness edittion-</a><a href="index2.html" class="nostr-link">flowgazer</a></div>
-<br>
-<h2 style="font-size: 1.1rem; color: #555; margin-bottom: .5rem;">my favorite clients</h2>
 <div class="flex-container">
-    <a href="https://nostter.app/" target="_blank" class="button" style="background-color: #424043;">nostter</a>
-    <a href="https://flycat.club/" target="_blank" class="button" style="background-color: #88b85b;">Flycat</a>
-    <a href="https://lumilumi.app/" target="_blank" class="button" style="background-color: #eb842d;">Lumilumi</a>
-    <a href="https://nos-haiku.pages.dev/" target="_blank" class="button" style="background-color: #a42bf4;">Nos Haiku</a>
-    <a href="https://rabbit.syusui.net/" target="_blank" class="button" style="background-color: #f5b2b2;">Rabbit</a>
+ <a href="index.html" class="button" style="background-color: #e0f2f1; color: #00796b;">flowgazer -kindness edition-</a>
+ <a href="index2.html" class="button" style="background-color: #e0f2f1; color: #00796b;">flowgazer</a>
 </div>
-</div>  
-</div>  
+<h2>my favorite clients</h2>
+<div class="flex-container">
+ <a href="https://nostter.app/" target="_blank" class="button" style="background-color: #424043;">nostter</a>
+ <a href="https://flycat.club/" target="_blank" class="button" style="background-color: #88b85b;">Flycat</a>
+ <a href="https://lumilumi.app/" target="_blank" class="button" style="background-color: #eb842d;">Lumilumi</a>
+ <a href="https://nos-haiku.pages.dev/" target="_blank" class="button" style="background-color: #a42bf4;">Nos Haiku</a>
+ <a href="https://rabbit.syusui.net/" target="_blank" class="button" style="background-color: #f5b2b2;">Rabbit</a>
+</div>
+</div>
 <script src="https://ompomz.github.io/header/loadHeader.js"></script>
 </body>
 </html>
