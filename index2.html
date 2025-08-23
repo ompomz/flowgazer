@@ -180,17 +180,19 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
       return;
     }
 
-    if (nsec === '********' && window.nostrSigner) {
-      // NIP-07拡張機能経由で投稿
-      try {
-        const pubkeyHex = await window.nostrSigner.getPublicKey();
-        const post = {
-          kind: 1,
-          content: content,
-          created_at: Math.floor(Date.now() / 1000),
-          tags: [],
-          pubkey: pubkeyHex,
-        };
+    if (nsec === '********' && window.nostrSigner) {
+      // NIP-07拡張機能経由で投稿
+      try {
+        const pubkeyHex = await window.nostrSigner.getPublicKey();
+        const post = {
+          kind: 1,
+          content: content,
+          created_at: Math.floor(Date.now() / 1000),
+          tags: [
+            ["client", "flowgazer", "31990:a19caaa8404721584746fb0e174cf971a94e0f51baaf4c4e8c6e54fa88985eaf:1755917022711", "wss://relay.nostr.band"]
+          ],
+          pubkey: pubkeyHex,
+        };
         const signedPost = await window.nostrSigner.signEvent(post);
         relayWS.send(JSON.stringify(["EVENT", signedPost]));
         postContentInput.value = "";
@@ -199,25 +201,28 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
         console.error(err);
         alert("投稿に失敗しました。拡張機能が有効になっているか確認してください。");
       }
-    } else {
-      // 既存のnsecを使って投稿
-      if (!nsec) {
-        alert("秘密鍵を入力してください。");
-        return;
-      }
-      try {
-        var nsecDecoded = window.NostrTools.nip19.decode(nsec);
-        if (nsecDecoded.type !== "nsec") {
-          alert("無効な秘密鍵です。");
-          return;
-        }
-        var seckey = nsecDecoded.data;
-        var post = {
-          kind: 1,
-          content: content,
-          created_at: Math.floor(Date.now() / 1000),
-          tags: [],
-        };
+
+    } else {
+      // 既存のnsecを使って投稿
+      if (!nsec) {
+        alert("秘密鍵を入力してください。");
+        return;
+      }
+      try {
+        var nsecDecoded = window.NostrTools.nip19.decode(nsec);
+        if (nsecDecoded.type !== "nsec") {
+          alert("無効な秘密鍵です。");
+          return;
+        }
+        var seckey = nsecDecoded.data;
+        var post = {
+          kind: 1,
+          content: content,
+          created_at: Math.floor(Date.now() / 1000),
+          tags: [
+            ["client", "flowgazer", "31990:a19caaa8404721584746fb0e174cf971a94e0f51baaf4c4e8c6e54fa88985eaf:1755917022711", "wss://relay.nostr.band"]
+          ],
+        };
         var signedPost = window.NostrTools.finalizeEvent(post, seckey);
         relayWS.send(JSON.stringify(["EVENT", signedPost]));
         postContentInput.value = "";
