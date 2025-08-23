@@ -147,8 +147,11 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
         kind: 1,
         content: content,
         created_at: Math.floor(Date.now() / 1000),
-        tags: [],
-      };
+        tags: [
+            ["client", "flowgazer", "31990:a19caaa8404721584746fb0e174cf971a94e0f51baaf4c4e8c6e54fa88985eaf:1755917022711", "wss://relay.nostr.band"]
+          ],
+        };
+
       var signedPost = window.NostrTools.finalizeEvent(post, seckey);
       relayWS.send(JSON.stringify(["EVENT", signedPost]));
       postContentInput.value = "";
