@@ -30,7 +30,8 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
 .nostr-ref, .pubkey-ref { color: #66b3ff; }
 .custom-emoji { height: 1.1rem; vertical-align: bottom; }
 #load-more { font-size: 0.8rem; font-weight: bold; padding: 0.25rem 1rem; margin: 0.5rem 0rem; border: 0px solid #ddd; border-radius: 999px; color: #fff; background-color: #666; white-space: nowrap; cursor: pointer; transition: background-color 0.3s, color 0.3s; }
-#load-more.loading { pointer-events: none; }
+#load-more.loading { font-size: 0; pointer-events: none;}
+#load-more.loading::before { content: "読み込み中..."; font-size: initial;}
 #generate-keypair { background-color: #ff99cc; color: #ffffff; }
 #generate-keypair:hover { background-color: #ff66b2; }
 #get-from-extension, #load-more { background-color: #66b3ff; color: #ffffff; }
@@ -111,7 +112,6 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     return (window.navigator.language || window.navigator.browserLanguage || window.navigator.userLanguage).substring(0, 2);
   }
 
-  // 鍵ペア生成関数
   function generateKeypair() {
     const seckey = window.NostrTools.generateSecretKey();
     const pubkey = window.NostrTools.getPublicKey(seckey);
@@ -123,15 +123,11 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     };
   }
 
-  // NIP-07 ブラウザ拡張機能から公開鍵を取得する機能
   const getFromExtensionButton = document.getElementById('get-from-extension');
   const nsecInput = document.getElementById('nsec');
   const npubLink = document.getElementById('npub-link');
   const warningMessageArea = document.getElementById('warning-message');
   
-  // ブラウザ拡張機能のチェック機能は削除し、ボタンを常に表示します。
-
-  // ログインボタンのクリックイベント
   getFromExtensionButton.addEventListener('click', async() => {
     if (!window.nostr) {
       alert('NIP-07対応のブラウザ拡張機能が見つかりません。');
@@ -141,25 +137,23 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
       const pubkeyHex = await window.nostr.getPublicKey();
       const npub = window.NostrTools.nip19.npubEncode(pubkeyHex);
 
-      nsecInput.value = '********'; // 秘密鍵は取得できないので、隠す
-      nsecInput.readOnly = true; // 秘密鍵の入力欄を読み取り専用にする
+      nsecInput.value = '********';
+      nsecInput.readOnly = true;
       nsecInput.placeholder = 'ブラウザ拡張機能でログイン中';
 
       npubLink.textContent = npub;
       npubLink.href = 'https://nostter.app/' + npub;
       npubLink.style.display = 'inline';
 
-      // 警告メッセージを非表示にする
       warningMessageArea.classList.add('hidden');
 
-      // 投稿処理に備えて、拡張機能から署名機能を提供するオブジェクトを保持
       window.nostrSigner = window.nostr;
 
       alert('ブラウザ拡張機能から公開鍵を取得しました！これで投稿できます。');
     } catch (error) {
       console.error('NIP-07拡張機能からの公開鍵取得に失敗しました:', error);
       alert('公開鍵の取得に失敗しました。拡張機能が有効になっているか、パーミッションが許可されているか確認してください。');
-      nsecInput.readOnly = false; // 失敗時は元に戻す
+      nsecInput.readOnly = false;
       nsecInput.placeholder = 'nsec1...';
       npubLink.textContent = '';
       npubLink.href = '';
@@ -169,7 +163,6 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
   });
 
 
-  // 投稿
   var postContentInput = document.getElementById("new-post-content");
   var sendPostButton = document.getElementById("send-new-post");
 
@@ -182,7 +175,6 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     }
 
     if (nsec === '********' && window.nostrSigner) {
-      // NIP-07拡張機能経由で投稿
       try {
         const pubkeyHex = await window.nostrSigner.getPublicKey();
         const post = {
@@ -204,7 +196,6 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
       }
 
     } else {
-      // 既存のnsecを使って投稿
       if (!nsec) {
         alert("秘密鍵を入力してください。");
         return;
@@ -238,34 +229,26 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
   sendPostButton.addEventListener("click", sendeNewPost);
 
 
-  // 既存のページの読み込み時の処理にNIP-07のチェックを追加
   window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('hide-settings').classList.add('hidden');
     document.getElementById('advanced-settings').classList.add('hidden');
     document.getElementById('npub-link').style.display = 'none';
 
-    // hex-filterに保存された値を読み込み
     const savedFilter = localStorage.getItem('hexFilterValue');
     if (savedFilter) {
       document.getElementById('hex-filter').value = savedFilter;
     }
 
-    // ページ内のすべてのaタグを取得
     const links = document.querySelectorAll('a');
 
-    // それぞれのリンクに対して処理を実行
     links.forEach(link => {
-      // target属性が設定されていない、またはすでに_selfでないリンクのみを対象とする
       if (!link.target || link.target === '_self') {
         link.setAttribute('target', '_blank');
       }
-      // rel="noopener noreferrer"を追加してセキュリティを強化
       if (!link.rel) {
         link.setAttribute('rel', 'noopener noreferrer');
       }
     });
-
-    // NIP-07拡張機能の有無をチェックする関数呼び出しは削除しました
   });
 
   function formatTimestamp(date) {
@@ -297,11 +280,9 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     return a;
   }
 
-  // 修正後: 投稿時刻を投稿へのリンクにする
   function timestampView(unixtime, eventId) {
     var ts = new Date(unixtime * 1000);
     var timeElem = document.createElement("a");
-    // njump.me形式にリンク先を変更し、リレーヒントを追加
     const currentRelay = relayUrlInput.value;
     const neventEncoded = window.NostrTools.nip19.neventEncode({
       id: eventId,
@@ -310,7 +291,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     timeElem.href = "https://njump.me/" + neventEncoded;
     timeElem.setAttribute("datetime", ts.toISOString());
     timeElem.textContent = "[" + formatTimestamp(ts) + "]";
-    timeElem.target = "_blank"; // 新しいタブで開く
+    timeElem.target = "_blank";
     timeElem.rel = "noreferrer";
     return timeElem;
   }
@@ -330,7 +311,6 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     return a;
   }
 
-  // 修正後: metadataView()関数に投稿IDを渡すように変更
   function metadataView(nostrEv) {
     var view = document.createElement("span");
     view.appendChild(timestampView(nostrEv.created_at, nostrEv.id));
@@ -358,7 +338,6 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     return -1;
   }
 
-  // 修正後: http://, https://をリンク形式に
   function urlLinkElems(url) {
     var splitIdx = indexOfFirstUnmatchingCloseParen(url);
     var finalUrl = splitIdx === -1 ? url : url.substring(0, splitIdx);
@@ -391,7 +370,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
   }
 
   function extractReplyRef(tags) {
-    var root; // first "root" p-tag
+    var root;
 
     for (var i = 0; i < tags.length; i++) {
       var tag = tags[i];
@@ -411,7 +390,6 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
         };
       }
     }
-    // no "reply" p-tag
     return root;
   }
 
@@ -637,7 +615,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
   var events = {};
   var filteredAuthors = null;
   const FIXED_CLIENT_TAG = "31990:a19caaa8404721584746fb0e174cf971a94e0f51baaf4c4e8c6e54fa88985eaf:1755917022711";
-  
+  var newEventsCount = 0;
 
   function onEvent(nostrEv, prepend) {
     if (!window.NostrTools.verifyEvent(nostrEv)) {
@@ -658,13 +636,11 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
       return;
     }
 
-// クライアント側のフィルタリングロジック
     if (nostrEv.kind === 1) {
       const hasCorrectClientTag = nostrEv.tags.some(tag => 
         tag[0] === 'client' && tag.length > 2 && tag[2] === FIXED_CLIENT_TAG
       );
       if (!hasCorrectClientTag) {
-        // 指定したclientタグがなければ、イベントを無視する
         return;
       }
     }
@@ -675,6 +651,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     events[nostrEv.id] = nostrEv;
     oldestCreatedAt = Math.min(oldestCreatedAt, nostrEv.created_at);
     pubkeysToFetch.add(nostrEv.pubkey);
+    newEventsCount++;
     var eventView;
     switch (nostrEv.kind) {
       case 1:
@@ -705,9 +682,6 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     });
   }
 
-  function onWSClose() {
-    alert("Relay connection closed");
-  }
 
   var MAIN_SUB_ID = "motherfuncking-main-sub";
   var MORE_POSTS_SUB_ID = "motherfuncking-more-posts";
@@ -730,7 +704,6 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
       while (timeline.firstChild) {
         timeline.removeChild(timeline.firstChild);
       }
-      relayWS.removeEventListener("close", onWSClose);
       relayWS.close();
     }
 
@@ -745,11 +718,12 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     events = {};
     pubkeysToFetch = new Set();
     oldestCreatedAt = Number.MAX_VALUE;
+    newEventsCount = 0;
 
     var afterEose = false;
     var filter = {
       kinds: [1],
-      limit: 1000
+      limit: 50
     };
     if (authors && authors.length > 0) {
       filter.authors = authors;
@@ -780,6 +754,12 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
               fetchProfiles();
             }
             loadMoreButton.classList.remove("loading");
+            if (subId === MORE_POSTS_SUB_ID && newEventsCount === 0) {
+              console.log("No new posts found, fetching more automatically...");
+              loadMoreButton.click();
+            } else if (subId === MORE_POSTS_SUB_ID) {
+              newEventsCount = 0;
+            }
             break;
           default:
             console.log(r2cMsg);
@@ -789,7 +769,9 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
         console.error(err);
       }
     });
-    relayWS.addEventListener("close", onWSClose);
+    relayWS.addEventListener("close", function() {
+      console.log("Relay connection closed.");
+    });
   }
 
   function fetchProfiles() {
@@ -854,26 +836,23 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
 
   subscribeRelay(initialRurl, filteredAuthors);
 
-  // 鍵生成
   var generateButton = document.getElementById("generate-keypair");
   var keypairArea = document.getElementById("keypair-area");
 
   generateButton.addEventListener("click", function() {
     const keys = generateKeypair();
     nsecInput.value = keys.nsec;
-    nsecInput.readOnly = false; // NIP-07ログイン状態を解除
+    nsecInput.readOnly = false;
     nsecInput.placeholder = 'nsec1...';
 
     npubLink.textContent = keys.npub;
     npubLink.href = "https://nostter.app/" + keys.npub;
     npubLink.style.display = "inline";
 
-    // 詳細設定を非表示にする
     settingsArea.classList.add("hidden");
     hideSettingsBtn.classList.add("hidden");
     showSettingsBtn.classList.remove("hidden");
 
-    // 警告メッセージを表示する
     warningMessageArea.classList.remove("hidden");
   });
 
@@ -881,7 +860,6 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     window.open(this.href, "_blank");
   });
 
-  // nsec入力欄の変更を監視し、npubを自動生成する
   nsecInput.addEventListener("input", function() {
     const nsecValue = nsecInput.value.trim();
     if (nsecValue) {
@@ -897,16 +875,13 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
           return;
         }
       } catch (e) {
-        // 無効なnsecの場合
       }
     }
-    // 無効な値または空の場合
     npubLink.textContent = '';
     npubLink.href = '';
     npubLink.style.display = 'none';
   });
 
-  // 詳細設定の表示/非表示
   var showSettingsBtn = document.getElementById("show-settings");
   var hideSettingsBtn = document.getElementById("hide-settings");
   var settingsArea = document.getElementById("advanced-settings");
@@ -923,7 +898,6 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     showSettingsBtn.classList.remove("hidden");
   });
 
-  // 絞り込み
   var hexFilterInput = document.getElementById("hex-filter");
   var applyFilterButton = document.getElementById("apply-filter");
   var clearFilterButton = document.getElementById("clear-filter");
@@ -964,12 +938,10 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     hexFilterInput.value = "";
     filteredAuthors = null;
     localStorage.removeItem('hexFilterValue');
-    var rurl = relayUrlInput.value;
+    var rurl = relayUrl.value;
     subscribeRelay(rurl, filteredAuthors);
   });
   
-
-  // もっと見るボタン
   var loadMoreButton = document.getElementById("load-more");
   var oldestCreatedAt = Number.MAX_VALUE;
 
@@ -977,8 +949,9 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     if (this.classList.contains("loading")) {
       return;
     }
-
     this.classList.add("loading");
+    newEventsCount = 0;
+
     var filter = {
       kinds: [1],
       until: oldestCreatedAt - 1,
@@ -989,7 +962,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     }
     relayWS.send(JSON.stringify(["REQ", MORE_POSTS_SUB_ID, filter]));
   });
-</script>
+</script>  
 <script src="https://ompomz.github.io/header/loadHeader.js"></script>
 </body>
 </html>
