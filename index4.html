@@ -56,6 +56,7 @@
 <span id="checking-datetime"></span><button id="cancel-loading" style="display: none;">あきらめる</button>
 </div>
 <script>
+var afterEose = false;
   String.prototype.padStart = String.prototype.padStart ? String.prototype.padStart : function(targetLength, padString) {
     targetLength = Math.floor(targetLength) || 0;
     if (targetLength < this.length) return String(this);
