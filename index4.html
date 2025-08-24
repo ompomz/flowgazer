@@ -749,7 +749,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     var afterEose = false;
     var filter = {
       kinds: [1],
-      limit: 50
+      limit: 1000
     };
     if (authors && authors.length > 0) {
       filter.authors = authors;
@@ -982,7 +982,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     var filter = {
       kinds: [1],
       until: oldestCreatedAt - 1,
-      limit: 50
+      limit: 1000
     };
     if (filteredAuthors && filteredAuthors.length > 0) {
       filter.authors = filteredAuthors;
