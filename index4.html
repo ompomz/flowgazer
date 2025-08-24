@@ -658,7 +658,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
       return;
     }
 
-    // クライアント側のフィルタリングロジック
+// クライアント側のフィルタリングロジック
     if (nostrEv.kind === 1) {
       const hasCorrectClientTag = nostrEv.tags.some(tag => 
         tag[0] === 'client' && tag.length > 2 && tag[2] === FIXED_CLIENT_TAG
