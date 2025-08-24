@@ -632,12 +632,12 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     return view;
   }
 
-  var supportedKinds = [1, 6];
+  var supportedKinds = [1];
   var profiles = {};
   var events = {};
   var filteredAuthors = null;
   const FIXED_CLIENT_TAG = "31990:a19caaa8404721584746fb0e174cf971a94e0f51baaf4c4e8c6e54fa88985eaf:1755917022711";
-  
+  
 
   function onEvent(nostrEv, prepend) {
     if (!window.NostrTools.verifyEvent(nostrEv)) {
@@ -660,7 +660,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
 
 // クライアント側のフィルタリングロジック
     if (nostrEv.kind === 1) {
-      const hasCorrectClientTag = nostrEv.tags.some(tag => 
+      const hasCorrectClientTag = nostrEv.tags.some(tag => 
         tag[0] === 'client' && tag.length > 2 && tag[2] === FIXED_CLIENT_TAG
       );
       if (!hasCorrectClientTag) {
@@ -679,9 +679,6 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     switch (nostrEv.kind) {
       case 1:
         eventView = postEventView(nostrEv);
-        break;
-      case 6:
-        eventView = repostEventView(nostrEv);
         break;
       default:
         return;
@@ -704,8 +701,6 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     sortedEvents.forEach(e => {
       if (e.kind === 1) {
         timeline.appendChild(postEventView(e));
-      } else if (e.kind === 6) {
-        timeline.appendChild(repostEventView(e));
       }
     });
   }
@@ -753,7 +748,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
 
     var afterEose = false;
     var filter = {
-      kinds: [1, 6],
+      kinds: [1],
       limit: 50
     };
     if (authors && authors.length > 0) {
@@ -972,7 +967,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     var rurl = relayUrlInput.value;
     subscribeRelay(rurl, filteredAuthors);
   });
-  
+  
 
   // もっと見るボタン
   var loadMoreButton = document.getElementById("load-more");
@@ -985,7 +980,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
 
     this.classList.add("loading");
     var filter = {
-      kinds: [1, 6],
+      kinds: [1],
       until: oldestCreatedAt - 1,
       limit: 50
     };
