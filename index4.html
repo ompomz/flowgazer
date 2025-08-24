@@ -698,12 +698,13 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     });
   }
 
-  var MAIN_SUB_ID = "motherfuncking-main-sub";
-  var MORE_POSTS_SUB_ID = "motherfuncking-more-posts";
+  var MAIN_SUB_ID = "main-sub-" + Math.random().toString(36).substring(2, 8);
+  var MORE_POSTS_SUB_ID = "more-posts-sub-" + Math.random().toString(36).substring(2, 8);
   var PROFILE_SUB_ID = "motherfuncking-profile-sub";
 
   var pubkeysToFetch = new Set();
   var currentSubId;
+  var afterEose = false;
 
   function isKnownSubId(subId) {
     return subId === MAIN_SUB_ID || subId === MORE_POSTS_SUB_ID || subId === PROFILE_SUB_ID;
@@ -744,7 +745,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     
     isSubscribed = true;
     
-    var afterEose = false;
+    afterEose = false;
     
     var filter = {
       kinds: [1],
@@ -755,7 +756,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     }
 
     relayWS.addEventListener("open", function() {
-      currentSubId = MAIN_SUB_ID;
+      currentSubId = "main-sub-" + Math.random().toString(36).substring(2, 8);
       relayWS.send(
         JSON.stringify(["REQ", currentSubId, filter])
       );
@@ -775,11 +776,11 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
             break;
           case "EOSE":
             var subId = r2cMsg[1];
-            if (subId === MAIN_SUB_ID) {
+            if (subId === currentSubId && subId.startsWith("main-sub-")) {
               afterEose = true;
               fetchProfiles();
             }
-            if (subId === MORE_POSTS_SUB_ID) {
+            if (subId === currentSubId && subId.startsWith("more-posts-sub-")) {
               loadMoreButton.classList.remove("loading");
               checkingDatetime.textContent = "";
               cancelLoadingButton.style.display = "none";
@@ -993,7 +994,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     newEventsCount = 0;
     
     const date = new Date(oldestCreatedAt * 1000);
-    const dateString = date.getFullYear() + "/" + (date.getMonth() + 1).toString().padStart(2, "0") + "/" + date.getDate().toString().padStart(2, "0");
+    const dateString = date.getFullYear() + "/" + (date.getMonth() + 1).toString().padStart(2, "0") + "/" + date.getDate().toString().padStart(2, "0") + " " + date.getHours().toString().padStart(2, "0") + ":" + date.getMinutes().toString().padStart(2, "0");
     checkingDatetime.textContent = "確認中日時：" + dateString + "のkind:1";
     cancelLoadingButton.style.display = "inline-block";
 
@@ -1006,13 +1007,15 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
       filter.authors = filteredAuthors;
     }
     
-    currentSubId = MORE_POSTS_SUB_ID;
+    currentSubId = "more-posts-sub-" + Math.random().toString(36).substring(2, 8);
     relayWS.send(JSON.stringify(["REQ", currentSubId, filter]));
   });
 
   cancelLoadingButton.addEventListener("click", function() {
     if (relayWS && relayWS.readyState === WebSocket.OPEN) {
-      relayWS.send(JSON.stringify(["CLOSE", currentSubId]));
+      if (currentSubId) {
+        relayWS.send(JSON.stringify(["CLOSE", currentSubId]));
+      }
     }
     loadMoreButton.classList.remove("loading");
     checkingDatetime.textContent = "";
