@@ -31,7 +31,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
 .custom-emoji { height: 1.1rem; vertical-align: bottom; }
 #load-more { font-size: 0.8rem; font-weight: bold; padding: 0.25rem 1rem; margin: 0.5rem 0rem; border: 0px solid #ddd; border-radius: 999px; color: #fff; background-color: #666; white-space: nowrap; cursor: pointer; transition: background-color 0.3s, color 0.3s; }
 #load-more.loading { font-size: 0; pointer-events: none;}
-#load-more.loading::before { content: "読み込み中..."; font-size: initial;}
+#load-more.loading::before { content: "読み込み中..."; font-size: 0.8rem;}
 #generate-keypair { background-color: #ff99cc; color: #ffffff; }
 #generate-keypair:hover { background-color: #ff66b2; }
 #get-from-extension, #load-more { background-color: #66b3ff; color: #ffffff; }
@@ -78,7 +78,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
 </datalist>
 <button id="subscribe-relay">接続</button>
 </div>
-<label for="client-filter-toggle"><input type="checkbox" id="client-filter-toggle" checked>flowgazerで絞り込む</label>
+<p style="margin:0.5rem 0rem;"><label for="client-filter-toggle"><input type="checkbox" id="client-filter-toggle" checked>flowgazerで絞り込む</label></p>
 <label for="hex-filter">投稿者pubkeyしぼりこみ（hex, npub, nprofile）</label>
 <p>複数の鍵は、カンマ、改行、スペースで区切れます</p>
 <div class="flex-container">
@@ -651,8 +651,9 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     const clientFilterToggle = document.getElementById("client-filter-toggle");
     const toggleChecked = clientFilterToggle ? clientFilterToggle.checked : false;
 
+    // クライアント側での最終的な絞り込みロジック
     if (nostrEv.kind === 1 && toggleChecked) {
-      const hasCorrectClientTag = nostrEv.tags.some(tag =>  
+      const hasCorrectClientTag = nostrEv.tags.some(tag => 
         tag[0] === 'client' && tag.length > 2 && tag[2] === FIXED_CLIENT_TAG
       );
       if (!hasCorrectClientTag) {
@@ -752,13 +753,6 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     if (authors && authors.length > 0) {
       filter.authors = authors;
     }
-
-    const clientFilterToggle = document.getElementById("client-filter-toggle");
-    const toggleChecked = clientFilterToggle ? clientFilterToggle.checked : false;
-    if (toggleChecked) {
-      filter["#t"] = ["31990"];
-    }
-
 
     relayWS.addEventListener("open", function() {
       currentSubId = MAIN_SUB_ID;
@@ -975,7 +969,6 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     subscribeRelay(rurl, filteredAuthors);
   });
   
-  // DOMContentLoadedイベント内で要素を取得するように修正
   document.addEventListener('DOMContentLoaded', () => {
     const clientFilterToggle = document.getElementById("client-filter-toggle");
     if (clientFilterToggle) {
@@ -1011,12 +1004,6 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
     };
     if (filteredAuthors && filteredAuthors.length > 0) {
       filter.authors = filteredAuthors;
-    }
-
-    const clientFilterToggle = document.getElementById("client-filter-toggle");
-    const toggleChecked = clientFilterToggle ? clientFilterToggle.checked : false;
-    if (toggleChecked) {
-      filter["#t"] = ["31990"];
     }
     
     currentSubId = MORE_POSTS_SUB_ID;
