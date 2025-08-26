@@ -1,3 +1,5 @@
+// stop.js
+
 function stopAutoLoading() {
   isAutoLoading = false;
 
@@ -40,5 +42,5 @@ function stopAutoLoading() {
     cancelButton.style.display = "none";
   }
 
-  console.log("stop.js: 自動更新を停止しました（WebSocketは維持）");
+  console.log("stop.js: 自動更新を停止しました");
 }
