@@ -14,7 +14,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
 h1 { font-size: 1.2rem; margin: 0rem 0rem 0.5rem 0rem; }
 p { margin: 0; }
 a { color: #666; text-decoration: none; }
-input, textarea { font-size: 0.9rem; padding: 0.5rem 1rem; border: 1px solid #ddd; border-radius: 4px; color: #666; background-color: #fff; cursor: pointer; transition: background-color 0.3s, color 0.3s; }
+input, textarea { font-size: 0.9rem; padding: 0.5rem 0.3rem; border: 1px solid #ddd; border-radius: 4px; color: #666; background-color: #fff; cursor: pointer; transition: background-color 0.3s, color 0.3s; }
+input[type="checkbox"] { padding: 0; margin: 0; vertical-align: middle; appearance: checkbox; -webkit-appearance: checkbox; }
+textarea { resize: vertical; }
 .container button { font-size: 0.8rem; font-weight: bold; padding: 0.25rem 1rem; margin: 0.5rem 0rem; border: 0px solid #ddd; border-radius: 999px; color: #fff; background-color: #666; white-space: nowrap; cursor: pointer; transition: background-color 0.3s, color 0.3s; }
 .full-width { width: 100%; display: block; }
 .hidden { display: none; }
@@ -23,13 +25,12 @@ input, textarea { font-size: 0.9rem; padding: 0.5rem 1rem; border: 1px solid #dd
 .flex-container button { margin: 0; min-width: 0; }
 .flex-container-matome { display: flex; flex-direction: column; align-items: flex-start; gap:0.25rem;}
 #settings-toggle-area { display: flex; justify-content: center; }
-textarea { font-family: monospace; resize: vertical; }
 ul { list-style-type: none; padding: 0; margin: 0.55rem 0rem 0rem 0rem; }
 li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; }
-.event-highlighted { border: 2px solid #ffcc66; }
+.event-highlighted { border: 1px solid #ffcc66; }
 .npub-link { color: #66b3ff; white-space: normal; word-break: break-word; min-width: 0; flex: 1; }
 .nostr-ref, .pubkey-ref { color: #66b3ff; }
-.custom-emoji { height: 1.1rem; vertical-align: bottom; }
+.custom-emoji { height: 1.2rem; vertical-align: bottom; }
 #load-more { font-size: 0.8rem; font-weight: bold; padding: 0.25rem 1rem; margin: 0.5rem 0rem; border: 0px solid #ddd; border-radius: 999px; color: #fff; background-color: #666; white-space: nowrap; cursor: pointer; transition: background-color 0.3s, color 0.3s; }
 #load-more.loading { font-size: 0; pointer-events: none; }
 #load-more.loading::before { content: "読み込み中..."; font-size: 0.8rem; }
@@ -43,7 +44,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
 #subscribe-relay:hover, #apply-filter:hover, #clear-filter:hover { background-color: #ffc400;}
 #show-settings, #hide-settings { background-color: #999999; color: #ffffff; font-size:0.7rem; font-weight:normal; padding:0.2rem 1rem; margin:0; }
 #show-settings:hover, #hide-settings:hover { background-color: #888888; }
-#cancel-loading { margin: 0.5rem 0rem; cursor: pointer; background-color: #bbeeff; color: #666; font-size: 0.8rem; font-weight: normal; padding: 0.25rem 1rem; border: 0px solid #ddd; border-radius: 999px; white-space: nowrap; transition: background-color 0.3s, color 0.3s; }
+#cancel-loading { margin: 0.2rem 0rem; cursor: pointer; background-color: #bbeeff; color: #666; font-size: 0.8rem; font-weight: normal; padding: 0.25rem 1rem; border: 0px solid #ddd; border-radius: 999px; white-space: nowrap; transition: background-color 0.3s, color 0.3s; }
 </style>
 </head>
 <body>
@@ -66,24 +67,23 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
 <button id="hide-settings" class="hidden">詳細設定を隠す</button>
 </div>
 <div id="advanced-settings" class="hidden">
-<label for="relay-url">リレーURL</label>
 <div class="flex-container">
 <input list="relay-suggestions" id="relay-url" type="text">
 <datalist id="relay-suggestions">
+<option value="wss://relay.barine.co/">
 <option value="wss://r.kojira.io/">
 <option value="wss://yabu.me/">
 <option value="wss://relay-jp.nostr.wirednet.jp/">
 <option value="wss://relay.damus.io">
-<option value="wss://wss://nos.lol/">
+<option value="wss://nos.lol/">
 <option value="wss://relay.nostr.band">
 </datalist>
 <button id="subscribe-relay" style="padding:0.25rem 0rem; width:4rem;">接続</button>
 </div>
-<label for="auto-update-toggle"><input type="checkbox" id="auto-update-toggle" checked>自動更新ON</label>
-<label for="filter-flowgazer-only"><input type="checkbox" id="filter-flowgazer-only">via flowgazer しぼりこみ</label>
-<label for="hex-filter">投稿者pubkeyしぼりこみ（hex, npub, nprofile）</label>
+<label for="auto-update-toggle"> 自動更新ON <input type="checkbox" id="auto-update-toggle" checked></label>
+<label for="filter-flowgazer-only">　via flowgazer しぼりこみ <input type="checkbox" id="filter-flowgazer-only"></label>
 <div class="flex-container">
-<textarea id="hex-filter" rows="2" placeholder="hex, npub1..., ..."></textarea>
+<textarea id="hex-filter" rows="2" placeholder="投稿者しぼりこみ(npub1…,hex…)"></textarea>
 <div class="flex-container-matome">
 <button id="apply-filter" style="padding:0.25rem 0rem; width:4rem;">適用</button>
 <button id="clear-filter" style="padding:0.25rem 0rem; width:4rem;">クリア</button>
@@ -91,8 +91,8 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
 </div>
 </div>
 <ul id="timeline"></ul>
-<button id="load-more" class="loading full-width">もっと見る</button>
 <button id="cancel-loading" class="hidden full-width">あきらめる</button>
+<button id="load-more" class="loading full-width">もっと見る</button>
 <script src="https://unpkg.com/nostr-tools/lib/nostr.bundle.js"></script>
 <script src="./stop.js"></script>
 <script>
@@ -201,69 +201,69 @@ var postContentInput = document.getElementById("new-post-content");
 var sendPostButton = document.getElementById("send-new-post");
 
 async function sendeNewPost() {
- var nsec = nsecInput.value;
- var content = postContentInput.value;
- if (!content) {
- alert("投稿内容を入力してください。");
- return;
- }
+  var nsec = nsecInput.value;
+  var content = postContentInput.value;
+  if (!content) {
+    alert("投稿内容を入力してください。");
+    return;
+  }
 
- if (nsec === '********' && window.nostrSigner) {
- // NIP-07拡張機能経由で投稿
- try {
- const pubkeyHex = await window.nostrSigner.getPublicKey();
- const post = {
- kind: 1,
- content: content,
- created_at: Math.floor(Date.now() / 1000),
- tags: [
- ["client", "flowgazer", "31990:a19caaa8404721584746fb0e174cf971a94e0f51baaf4c4e8c6e54fa88985eaf:1755917022711", "wss://relay.nostr.band"]
- ],
- pubkey: pubkeyHex,
- };
- const signedPost = await window.nostrSigner.signEvent(post);
- relayWS.send(JSON.stringify(["EVENT", signedPost]));
- postContentInput.value = "";
- alert('投稿に成功しました！');
- } catch (err) {
- console.error(err);
- alert("投稿に失敗しました。拡張機能が有効になっているか確認してください。");
- }
+  if (nsec === '********' && window.nostrSigner) {
+    // NIP-07拡張機能経由で投稿
+    try {
+      const pubkeyHex = await window.nostrSigner.getPublicKey();
+      const post = {
+        kind: 1,
+        content: content,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [
+          ["client", "flowgazer", "31990:a19caaa8404721584746fb0e174cf971a94e0f51baaf4c4e8c6e54fa88985eaf:1755917022711", "wss://relay.nostr.band"]
+        ],
+        pubkey: pubkeyHex,
+      };
+      const signedPost = await window.nostrSigner.signEvent(post);
+      relayWS.send(JSON.stringify(["EVENT", signedPost]));
+      postContentInput.value = "";
+      // NIP-07では成功アラートを表示しない
+    } catch (err) {
+      console.error(err);
+      alert("投稿に失敗しました。拡張機能が有効になっているか確認してください。");
+    }
+  }
 
- } else {
- // 既存のnsecを使って投稿
- if (!nsec) {
- alert("秘密鍵を入力してください。");
- return;
- }
- try {
- var nsecDecoded = window.NostrTools.nip19.decode(nsec);
- if (nsecDecoded.type !== "nsec") {
- alert("無効な秘密鍵です。");
- return;
- }
- var seckey = nsecDecoded.data;
- var post = {
- kind: 1,
- content: content,
- created_at: Math.floor(Date.now() / 1000),
- tags: [
- ["client", "flowgazer", "31990:a19caaa8404721584746fb0e174cf971a94e0f51baaf4c4e8c6e54fa88985eaf:1755917022711", "wss://relay.nostr.band"]
- ],
- };
- var signedPost = window.NostrTools.finalizeEvent(post, seckey);
- relayWS.send(JSON.stringify(["EVENT", signedPost]));
- postContentInput.value = "";
- alert('投稿に成功しました！');
- } catch (err) {
- console.error(err);
- alert("投稿に失敗しました。");
- }
- }
+  else {
+    // 既存のnsecを使って投稿
+    if (!nsec) {
+      alert("秘密鍵を入力してください。");
+      return;
+    }
+    try {
+      var nsecDecoded = window.NostrTools.nip19.decode(nsec);
+      if (nsecDecoded.type !== "nsec") {
+        alert("無効な秘密鍵です。");
+        return;
+      }
+      var seckey = nsecDecoded.data;
+      var post = {
+        kind: 1,
+        content: content,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [
+          ["client", "flowgazer", "31990:a19caaa8404721584746fb0e174cf971a94e0f51baaf4c4e8c6e54fa88985eaf:1755917022711", "wss://relay.nostr.band"]
+        ],
+      };
+      var signedPost = window.NostrTools.finalizeEvent(post, seckey);
+      relayWS.send(JSON.stringify(["EVENT", signedPost]));
+      postContentInput.value = "";
+      alert('投稿に成功しました！');
+    } catch (err) {
+      console.error(err);
+      alert("投稿に失敗しました；；詳細設定の接続ボタンを押してから、もう一度トライしてみてください。");
+    }
+  }
 }
 
 sendPostButton.addEventListener("click", sendeNewPost);
-
 
 // 既存のページの読み込み時の処理にNIP-07のチェックを追加
 window.addEventListener('DOMContentLoaded', () => {
@@ -331,35 +331,44 @@ function externalLink(url, text) {
 
 // 修正後: 投稿時刻を投稿へのリンクにする
 function timestampView(unixtime, eventId) {
- var ts = new Date(unixtime * 1000);
- var timeElem = document.createElement("a");
- // njump.me形式にリンク先を変更し、リレーヒントを追加
- const currentRelay = relayUrlInput.value;
- const neventEncoded = window.NostrTools.nip19.neventEncode({
- id: eventId,
- relays: [currentRelay]
- });
- timeElem.href = "https://njump.me/" + neventEncoded;
- timeElem.setAttribute("datetime", ts.toISOString());
- timeElem.textContent = "[" + formatTimestamp(ts) + "]";
- timeElem.target = "_blank"; // 新しいタブで開く
- timeElem.rel = "noreferrer";
- return timeElem;
+  var ts = new Date(unixtime * 1000);
+  var timeElem = document.createElement("a");
+  timeElem.classList.add("nostr-ref");
+
+  // njump.me形式にリンク先を変更し、リレーヒントを追加
+  const currentRelay = relayUrlInput.value;
+  const neventEncoded = window.NostrTools.nip19.neventEncode({
+    id: eventId,
+    relays: [currentRelay]
+  });
+  timeElem.href = "https://njump.me/" + neventEncoded;
+  timeElem.setAttribute("datetime", ts.toISOString());
+  timeElem.textContent = "[" + formatTimestamp(ts) + "]";
+  timeElem.target = "_blank"; // 新しいタブで開く
+  timeElem.rel = "noreferrer";
+  return timeElem;
 }
 
 function pubkeyView(pubkey) {
- var npub = window.NostrTools.nip19.npubEncode(pubkey);
- var displayName = profiles[pubkey] && profiles[pubkey].name ? profiles[pubkey].name : pubkey.substring(0, 8);
- var sanitizedName = displayName.replace(/\p{Emoji_Presentation}/gu, "");
- if (sanitizedName.length === 0) {
- sanitizedName = pubkey.substring(0, 8);
- } else if (sanitizedName.length > 8) {
- sanitizedName = sanitizedName.substring(0, 8);
- }
- var a = externalLink("https://njump.me/" + npub, sanitizedName);
- a.classList.add("pubkey-ref");
+  var npub = window.NostrTools.nip19.npubEncode(pubkey);
+  var displayName = profiles[pubkey] && profiles[pubkey].name ? profiles[pubkey].name : pubkey.substring(0, 8);
+  var sanitizedName = displayName.replace(/\p{Emoji_Presentation}/gu, "");
+  if (sanitizedName.length === 0) {
+    sanitizedName = pubkey.substring(0, 8);
+  } else {
+    const isAsciiOnly = /^[\x00-\x7F]*$/.test(sanitizedName);
+    const maxLength = isAsciiOnly ? 12 : 6;
+    sanitizedName = sanitizedName.substring(0, maxLength);
+  }
 
- return a;
+  var a = externalLink("https://njump.me/" + npub, sanitizedName);
+  a.classList.add("pubkey-ref");
+
+  var hue = parseInt(pubkey.substring(0, 2), 16) * 360 / 256;
+  var lightness = (hue >= 50 && hue <= 190) ? 45 : 60;
+  a.style.color = `hsl(${hue}, 95%, ${lightness}%)`;
+
+  return a;
 }
 
 // 修正後: metadataView()関数に投稿IDを渡すように変更
@@ -390,61 +399,61 @@ function indexOfFirstUnmatchingCloseParen(url) {
  return -1;
 }
 
-// 修正後: http://, https://をリンク形式に
+// URL文字列をリンク要素に変換する関数
 function urlLinkElems(url) {
- var splitIdx = indexOfFirstUnmatchingCloseParen(url);
- var finalUrl = splitIdx === -1 ? url : url.substring(0, splitIdx);
- var rest = splitIdx === -1 ? "" : url.substring(splitIdx);
+  var splitIdx = indexOfFirstUnmatchingCloseParen(url);
+  var finalUrl = splitIdx === -1 ? url : url.substring(0, splitIdx);
+  var rest = splitIdx === -1 ? "" : url.substring(splitIdx);
 
- var link = externalLink(finalUrl, finalUrl);
-
- if (rest.length === 0) {
- return [link];
- }
- var restSpan = document.createElement("span");
- restSpan.textContent = rest;
- return [link, restSpan];
+  var link = externalLink(finalUrl, finalUrl);
+  link.classList.add("nostr-ref");
+  if (rest.length === 0) {
+    return [link];
+  }
+  var restSpan = document.createElement("span");
+  restSpan.textContent = rest;
+  return [link, restSpan];
 }
 
+// NIP-19形式でデコードされたイベント参照から、IDと著者情報を抽出する関数
 function extractEventRef(nip19Decoded) {
- switch (nip19Decoded.type) {
- case "nevent":
- return {
- id: nip19Decoded.data.id,
- author: nip19Decoded.data.author
- };
- case "note":
- return {
- id: nip19Decoded.data
- }
- default:
- return undefined;
- }
+  switch (nip19Decoded.type) {
+    case "nevent":
+      return {
+        id: nip19Decoded.data.id,
+        author: nip19Decoded.data.author
+      };
+    case "note":
+      return {
+        id: nip19Decoded.data
+      };
+    default:
+      return undefined;
+  }
 }
 
+// イベントのタグ配列から返信元やルート投稿を抽出する関数
 function extractReplyRef(tags) {
- var root; // first "root" p-tag
-
- for (var i = 0; i < tags.length; i++) {
- var tag = tags[i];
- if (tag[0] !== "e") {
- continue;
- }
- if (tag[3] === "reply" && typeof tag[1] === "string") {
- return {
- id: tag[1],
- author: typeof tag[4] === "string" ? tag[4] : undefined
- };
- }
- if (root === undefined && tag[3] === "root" && typeof tag[1] === "string") {
- root = {
- id: tag[1],
- author: typeof tag[4] === "string" ? tag[4] : undefined
- };
- }
- }
- // no "reply" p-tag
- return root;
+  var root;
+  for (var i = 0; i < tags.length; i++) {
+    var tag = tags[i];
+    if (tag[0] !== "e") {
+      continue;
+    }
+    if (tag[3] === "reply" && typeof tag[1] === "string") {
+      return {
+        id: tag[1],
+        author: typeof tag[4] === "string" ? tag[4] : undefined
+      };
+    }
+    if (root === undefined && tag[3] === "root" && typeof tag[1] === "string") {
+      root = {
+        id: tag[1],
+        author: typeof tag[4] === "string" ? tag[4] : undefined
+      };
+    }
+  }
+  return root;
 }
 
 function nostrRefLink(nip19Id, idType) {
@@ -687,8 +696,8 @@ function onEvent(nostrEv, prepend) {
  }
  }
  
- // 文字数が300文字以上の投稿を非表示にする
-const maxLength = 300; 
+ // 文字数が200文字以上の投稿を非表示にする
+const maxLength = 200; 
 if (nostrEv.content.length > maxLength) {
  console.log(`投稿の文字数が${maxLength}文字を越えているためスキップしました。`);
  return; 
@@ -938,7 +947,7 @@ autoUpdateToggle.addEventListener('change', function() {
 });
 
 var latestRurl = localStorage.getItem(LS_RELAY_URL_KEY);
-var defaultRurl = getLanguage() === "ja" ? "wss://r.kojira.io" : "wss://nos.lol/";
+var defaultRurl = getLanguage() === "ja" ? "wss://relay.barine.co/" : "wss://nos.lol/";
 var initialRurl = latestRurl || defaultRurl;
 relayUrlInput.value = initialRurl;
 subscribeRelay(initialRurl);
@@ -1113,7 +1122,7 @@ function checkForAutoLoad() {
  if (isAutoLoading) {
  loadMoreButton.click();
  }
- }, 500);
+ }, 1000);
  } else {
  isAutoLoading = false;
  document.getElementById('cancel-loading').style.display = 'none';
