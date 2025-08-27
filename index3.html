@@ -44,7 +44,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
 #subscribe-relay:hover, #apply-filter:hover, #clear-filter:hover { background-color: #ffc400;}
 #show-settings, #hide-settings { background-color: #999999; color: #ffffff; font-size:0.7rem; font-weight:normal; padding:0.2rem 1rem; margin:0; }
 #show-settings:hover, #hide-settings:hover { background-color: #888888; }
-#cancel-loading { margin: 0.2rem 0rem; cursor: pointer; background-color: #bbeeff; color: #666; font-size: 0.8rem; font-weight: normal; padding: 0.25rem 1rem; border: 0px solid #ddd; border-radius: 999px; white-space: nowrap; transition: background-color 0.3s, color 0.3s; }
+#cancel-loading { margin: 0.1rem 0rem; cursor: pointer; background-color: #bbeeff; color: #666; font-size: 0.8rem; font-weight: normal; padding: 0.25rem 1rem; border: 0px solid #ddd; border-radius: 999px; white-space: nowrap; transition: background-color 0.3s, color 0.3s; }
 </style>
 </head>
 <body>
@@ -59,7 +59,19 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
 <span style="display:block; margin: 0.5rem 0rem;">秘密鍵（nsec）:</span>
 <input id="nsec" type="text" placeholder="nsec1..." class="full-width" style="margin-bottom:0.5rem;">
 <p id="warning-message" class="hidden" style="margin-top:-0.5rem;margin-bottom:0.5rem;">⚠️秘密鍵を紛失すると、そのアカウントは二度と使えません。大事にしてね。</p>
-<div style="display: flex;"><span style="white-space: nowrap;">公開鍵（npub）:</span><a id="npub-link" class="npub-link" target="_blank" rel="noreferrer"></a></div>
+<div style="display: flex;">
+ <span style="white-space: nowrap;">公開鍵（npub）:</span>
+<span style="word-break: break-all;">
+ <a id="npub-link" class="npub-link" target="_blank" rel="noreferrer"></a>
+ <svg id="copy-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" 
+ viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" 
+ stroke-linecap="round" stroke-linejoin="round" 
+ style="cursor: pointer; margin-left: 0.25rem; vertical-align: middle;" class="hidden">
+ <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+ <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+ </svg>
+</span>
+</div>
 <textarea id="new-post-content" rows="3" placeholder="いまなにしてる？" class="full-width" style="margin-top:0.5rem;"></textarea>
 <button id="send-new-post" class="full-width">投稿</button>
 <div id="settings-toggle-area">
@@ -97,60 +109,73 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
 <script src="./stop.js"></script>
 <script>
 String.prototype.padStart = String.prototype.padStart ? String.prototype.padStart : function(targetLength, padString) {
- targetLength = Math.floor(targetLength) || 0;
- if (targetLength < this.length) return String(this);
- padString = padString ? String(padString) : " ";
- var pad = "";
- var len = targetLength - this.length;
- var i = 0;
- while (pad.length < len) {
- if (!padString[i]) {
- i = 0;
- }
- pad += padString[i];
- i++;
- }
- return pad + String(this).slice(0);
+  targetLength = Math.floor(targetLength) || 0;
+  if (targetLength < this.length) return String(this);
+  padString = padString ? String(padString) : " ";
+  var pad = "";
+  var len = targetLength - this.length;
+  var i = 0;
+  while (pad.length < len) {
+    if (!padString[i]) {
+      i = 0;
+    }
+    pad += padString[i];
+    i++;
+  }
+  return pad + String(this).slice(0);
 };
 
 function getLanguage() {
- return (window.navigator.language || window.navigator.browserLanguage || window.navigator.userLanguage).substring(0, 2);
+  return (window.navigator.language || window.navigator.browserLanguage || window.navigator.userLanguage).substring(0, 2);
 }
 
 // 禁止用語リストを格納する配列
 let forbiddenWords = [];
-
 // 禁止用語リストを非同期で取得・パースする関数
 async function fetchForbiddenWords() {
- const url = 'https://ompomz.github.io/flowgazer/nglist.xml';
- try {
- const response = await fetch(url);
- if (!response.ok) {
- throw new Error(`HTTP error! status: ${response.status}`);
- }
- const xmlText = await response.text();
- const parser = new DOMParser();
- const xmlDoc = parser.parseFromString(xmlText, "text/xml");
- const termNodes = xmlDoc.querySelectorAll('term');
- forbiddenWords = Array.from(termNodes).map(node => node.textContent);
- console.log('禁止用語リストの読み込みが完了しました。');
- } catch (error) {
- console.error('禁止用語リストの読み込みに失敗しました:', error);
- }
+  const url = 'https://ompomz.github.io/flowgazer/nglist.xml';
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const xmlText = await response.text();
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+    const termNodes = xmlDoc.querySelectorAll('term');
+    forbiddenWords = Array.from(termNodes).map(node => node.textContent);
+    console.log('禁止用語リストの読み込みが完了しました。');
+  } catch (error) {
+    console.error('禁止用語リストの読み込みに失敗しました:', error);
+  }
 }
-
 // 鍵ペア生成関数
 function generateKeypair() {
- const seckey = window.NostrTools.generateSecretKey();
- const pubkey = window.NostrTools.getPublicKey(seckey);
- return {
- seckeyHex: seckey,
- pubkeyHex: pubkey,
- nsec: window.NostrTools.nip19.nsecEncode(seckey),
- npub: window.NostrTools.nip19.npubEncode(pubkey)
- };
+  const seckey = window.NostrTools.generateSecretKey();
+  const pubkey = window.NostrTools.getPublicKey(seckey);
+  return {
+    seckeyHex: seckey,
+    pubkeyHex: pubkey,
+    nsec: window.NostrTools.nip19.nsecEncode(seckey),
+    npub: window.NostrTools.nip19.npubEncode(pubkey)
+  };
 }
+function updateCopyIconVisibility() {
+  const npubLink = document.getElementById('npub-link');
+  const copyIcon = document.getElementById('copy-icon');
+  const nsecInput = document.getElementById('nsec');
 
+  if (npubLink && copyIcon && nsecInput) {
+    const npubText = npubLink.textContent.trim();
+    const nsecText = nsecInput.value.trim();
+
+    if (npubText !== '' && nsecText !== '') {
+      copyIcon.classList.remove('hidden');
+    } else {
+      copyIcon.classList.add('hidden');
+    }
+  }
+}
 // NIP-07 ブラウザ拡張機能から公開鍵を取得する機能
 const getFromExtensionButton = document.getElementById('get-from-extension');
 const nsecInput = document.getElementById('nsec');
@@ -160,41 +185,41 @@ const autoUpdateToggle = document.getElementById('auto-update-toggle');
 
 // ログインボタンのクリックイベント
 getFromExtensionButton.addEventListener('click', async() => {
- if (!window.nostr) {
- alert('NIP-07対応のブラウザ拡張機能が見つかりません。');
- return;
- }
- try {
- const pubkeyHex = await window.nostr.getPublicKey();
- const npub = window.NostrTools.nip19.npubEncode(pubkeyHex);
+  if (!window.nostr) {
+    alert('NIP-07対応のブラウザ拡張機能が見つかりません。');
+    return;
+  }
+  try {
+    const pubkeyHex = await window.nostr.getPublicKey();
+    const npub = window.NostrTools.nip19.npubEncode(pubkeyHex);
 
- nsecInput.value = '********'; // 秘密鍵は取得できないので、隠す
- nsecInput.readOnly = true; // 秘密鍵の入力欄を読み取り専用にする
- nsecInput.placeholder = 'ブラウザ拡張機能でログイン中';
+    nsecInput.value = '********'; // 秘密鍵は取得できないので、隠す
+    nsecInput.readOnly = true; // 秘密鍵の入力欄を読み取り専用にする
+    nsecInput.placeholder = 'ブラウザ拡張機能でログイン中';
 
- npubLink.textContent = npub;
- npubLink.href = 'https://nostter.app/' + npub;
- npubLink.style.display = 'inline';
+    npubLink.textContent = npub;
+    npubLink.href = 'https://nostter.app/' + npub;
+    npubLink.style.display = 'inline';
+    updateCopyIconVisibility();
 
- // 警告メッセージを非表示にする
- warningMessageArea.classList.add('hidden');
+    // 警告メッセージを非表示にする
+    warningMessageArea.classList.add('hidden');
 
- // 投稿処理に備えて、拡張機能から署名機能を提供するオブジェクトを保持
- window.nostrSigner = window.nostr;
+    // 投稿処理に備えて、拡張機能から署名機能を提供するオブジェクトを保持
+    window.nostrSigner = window.nostr;
 
- alert('ブラウザ拡張機能から公開鍵を取得しました！これで投稿できます。');
- } catch (error) {
- console.error('NIP-07拡張機能からの公開鍵取得に失敗しました:', error);
- alert('公開鍵の取得に失敗しました。拡張機能が有効になっているか、パーミッションが許可されているか確認してください。');
- nsecInput.readOnly = false; // 失敗時は元に戻す
- nsecInput.placeholder = 'nsec1...';
- npubLink.textContent = '';
- npubLink.href = '';
- npubLink.style.display = 'none';
- warningMessageArea.classList.remove('hidden');
- }
+    alert('ブラウザ拡張機能から公開鍵を取得しました！これで投稿できます。');
+  } catch (error) {
+    console.error('NIP-07拡張機能からの公開鍵取得に失敗しました:', error);
+    alert('公開鍵の取得に失敗しました。拡張機能が有効になっているか、パーミッションが許可されているか確認してください。');
+    nsecInput.readOnly = false; // 失敗時は元に戻す
+    nsecInput.placeholder = 'nsec1...';
+    npubLink.textContent = '';
+    npubLink.href = '';
+    npubLink.style.display = 'none';
+    warningMessageArea.classList.remove('hidden');
+  }
 });
-
 
 // 投稿
 var postContentInput = document.getElementById("new-post-content");
@@ -229,9 +254,7 @@ async function sendeNewPost() {
       console.error(err);
       alert("投稿に失敗しました。拡張機能が有効になっているか確認してください。");
     }
-  }
-
-  else {
+  } else {
     // 既存のnsecを使って投稿
     if (!nsec) {
       alert("秘密鍵を入力してください。");
@@ -258,77 +281,81 @@ async function sendeNewPost() {
       alert('投稿に成功しました！');
     } catch (err) {
       console.error(err);
-      alert("投稿に失敗しました；；詳細設定の接続ボタンを押してから、もう一度トライしてみてください。");
+      alert("投稿に失敗しました；；いろいろ見直して、もう一度やってみてください。");
     }
   }
 }
-
 sendPostButton.addEventListener("click", sendeNewPost);
 
-// 既存のページの読み込み時の処理にNIP-07のチェックを追加
+// ページ読み込み時の初期化処理
 window.addEventListener('DOMContentLoaded', () => {
- document.getElementById('hide-settings').classList.add('hidden');
- document.getElementById('advanced-settings').classList.add('hidden');
- document.getElementById('npub-link').style.display = 'none';
-
- // `filter-flowgazer-only` チェックボックスの初期化
- const flowgazerOnlyCheckbox = document.getElementById('filter-flowgazer-only');
- flowgazerOnlyCheckbox.checked = false;
-
- // hex-filterに保存された値を読み込み
- const savedFilter = localStorage.getItem('hexFilterValue');
- if (savedFilter) {
- document.getElementById('hex-filter').value = savedFilter;
- }
-
- // ページ内のすべてのaタグを取得
- const links = document.querySelectorAll('a');
-
- // それぞれのリンクに対して処理を実行
- links.forEach(link => {
- // target属性が設定されていない、またはすでに_selfでないリンクのみを対象とする
- if (!link.target || link.target === '_self') {
- link.setAttribute('target', '_blank');
- }
- // rel="noopener noreferrer"を追加してセキュリティを強化
- if (!link.rel) {
- link.setAttribute('rel', 'noopener noreferrer');
- }
- });
-
- // 禁止用語リストを非同期で取得
- fetchForbiddenWords();
-});
+  // --- UIの初期状態 ---
+  document.getElementById('hide-settings').classList.add('hidden');
+  document.getElementById('advanced-settings').classList.add('hidden');
+  document.getElementById('npub-link').style.display = 'none';
+  // --- コピーアイコンのクリック処理 ---
+  const copyIcon = document.getElementById('copy-icon');
+  if (copyIcon) {
+    copyIcon.addEventListener('click', () => {
+      const npubText = document.getElementById('npub-link').textContent;
+      if (npubText) {
+        navigator.clipboard.writeText(npubText).then(() => {
+          alert('公開鍵をコピーしました！');
+        }).catch(err => {
+          console.error('コピーに失敗しました:', err);
+        });
+      }
+    });
+  }
+  // --- 公開鍵の表示制御 ---
+  nsecInput.addEventListener('input', updateCopyIconVisibility);
+  // --- チェックボックスの初期化 ---
+  const flowgazerOnlyCheckbox = document.getElementById('filter-flowgazer-only');
+  flowgazerOnlyCheckbox.checked = false;
+  // --- フィルターの読み込み ---
+  const savedFilter = localStorage.getItem('hexFilterValue');
+  if (savedFilter) {
+    document.getElementById('hex-filter').value = savedFilter;
+  }
+  // --- aタグの属性調整 ---
+  const links = document.querySelectorAll('a');
+  links.forEach(link => {
+    if (!link.target || link.target === '_self') {
+      link.setAttribute('target', '_blank');
+    }
+    if (!link.rel) {
+      link.setAttribute('rel', 'noopener noreferrer');
+    }
+  });
+  // --- 禁止用語リストの取得 ---
+  fetchForbiddenWords();
+}); // ← ここが「ひとかたまり」の終わり
 
 function formatTimestamp(date) {
- return String(date.getHours()).padStart(2, "0") + ":" + String(date.getMinutes()).padStart(2, "0") + ":" + String(date.getSeconds()).padStart(2, "0");
+  return String(date.getHours()).padStart(2, "0") + ":" + String(date.getMinutes()).padStart(2, "0") + ":" + String(date.getSeconds()).padStart(2, "0");
 }
-
 function findTagWithValue(tags, name, value, extraPred) {
- for (var i = 0; i < tags.length; i++) {
- var tag = tags[i];
- if (tag[0] === name && tag[1] === value && (extraPred ? extraPred(tag) : true)) {
- return tag;
- }
- }
- return undefined;
+  for (var i = 0; i < tags.length; i++) {
+    var tag = tags[i];
+    if (tag[0] === name && tag[1] === value && (extraPred ? extraPred(tag) : true)) {
+      return tag;
+    }
+  }
+  return undefined;
 }
-
 function baseEventView() {
- var li = document.createElement("li");
- li.classList.add("event");
- return li;
+  var li = document.createElement("li");
+  li.classList.add("event");
+  return li;
 }
-
 function externalLink(url, text) {
- var a = document.createElement("a");
- a.href = url;
- a.target = "_blank";
- a.rel = "noreferrer";
- a.textContent = text;
- return a;
+  var a = document.createElement("a");
+  a.href = url;
+  a.target = "_blank";
+  a.rel = "noreferrer";
+  a.textContent = text;
+  return a;
 }
-
 // 修正後: 投稿時刻を投稿へのリンクにする
 function timestampView(unixtime, eventId) {
   var ts = new Date(unixtime * 1000);
@@ -348,7 +375,6 @@ function timestampView(unixtime, eventId) {
   timeElem.rel = "noreferrer";
   return timeElem;
 }
-
 function pubkeyView(pubkey) {
   var npub = window.NostrTools.nip19.npubEncode(pubkey);
   var displayName = profiles[pubkey] && profiles[pubkey].name ? profiles[pubkey].name : pubkey.substring(0, 8);
@@ -360,7 +386,6 @@ function pubkeyView(pubkey) {
     const maxLength = isAsciiOnly ? 12 : 6;
     sanitizedName = sanitizedName.substring(0, maxLength);
   }
-
   var a = externalLink("https://njump.me/" + npub, sanitizedName);
   a.classList.add("pubkey-ref");
 
@@ -370,35 +395,32 @@ function pubkeyView(pubkey) {
 
   return a;
 }
-
 // 修正後: metadataView()関数に投稿IDを渡すように変更
 function metadataView(nostrEv) {
- var view = document.createElement("span");
- view.appendChild(timestampView(nostrEv.created_at, nostrEv.id));
- view.appendChild(document.createTextNode(" "));
- view.appendChild(pubkeyView(nostrEv.pubkey));
- view.appendChild(document.createTextNode(" > "));
- return view;
+  var view = document.createElement("span");
+  view.appendChild(timestampView(nostrEv.created_at, nostrEv.id));
+  view.appendChild(document.createTextNode(" "));
+  view.appendChild(pubkeyView(nostrEv.pubkey));
+  view.appendChild(document.createTextNode(" > "));
+  return view;
 }
-
 var contentRefPattern = /(https?:\/\/[^\s]+)|(nostr:[\w]+1[ac-hj-np-z02-9]+)|(:[_a-zA-Z0-9]+:)/;
 
 function indexOfFirstUnmatchingCloseParen(url) {
- var nest = 0;
- for (var i = 0; i < url.length; i++) {
- var c = url.charAt(i);
- if (c === "(") {
- nest++;
- } else if (c === ")") {
- if (nest <= 0) {
- return i;
- }
- nest--;
- }
- }
- return -1;
+  var nest = 0;
+  for (var i = 0; i < url.length; i++) {
+    var c = url.charAt(i);
+    if (c === "(") {
+      nest++;
+    } else if (c === ")") {
+      if (nest <= 0) {
+        return i;
+      }
+      nest--;
+    }
+  }
+  return -1;
 }
-
 // URL文字列をリンク要素に変換する関数
 function urlLinkElems(url) {
   var splitIdx = indexOfFirstUnmatchingCloseParen(url);
@@ -414,7 +436,6 @@ function urlLinkElems(url) {
   restSpan.textContent = rest;
   return [link, restSpan];
 }
-
 // NIP-19形式でデコードされたイベント参照から、IDと著者情報を抽出する関数
 function extractEventRef(nip19Decoded) {
   switch (nip19Decoded.type) {
@@ -431,7 +452,6 @@ function extractEventRef(nip19Decoded) {
       return undefined;
   }
 }
-
 // イベントのタグ配列から返信元やルート投稿を抽出する関数
 function extractReplyRef(tags) {
   var root;
@@ -457,220 +477,220 @@ function extractReplyRef(tags) {
 }
 
 function nostrRefLink(nip19Id, idType) {
- var abbrId = nip19Id.substring(0, idType.length + 8) + "...";
- var a = externalLink("https://njump.me/" + nip19Id, "nostr:" + abbrId);
- a.classList.add("nostr-ref");
- return a;
+  var abbrId = nip19Id.substring(0, idType.length + 8) + "...";
+  var a = externalLink("https://njump.me/" + nip19Id, "nostr:" + abbrId);
+  a.classList.add("nostr-ref");
+  return a;
 }
 
 function nostrEventRefLink(nip19id, idType, hexEventId) {
- var abbrId = nip19id.substring(0, idType.length + 8) + "...";
- var a = document.createElement("a");
- a.textContent = "nostr:" + abbrId;
- a.classList.add("nostr-ref");
+  var abbrId = nip19id.substring(0, idType.length + 8) + "...";
+  var a = document.createElement("a");
+  a.textContent = "nostr:" + abbrId;
+  a.classList.add("nostr-ref");
 
- if (document.getElementById(hexEventId)) {
- a.href = "#" + hexEventId;
- } else {
- a.href = "https://njump.me/" + nip19id;
- a.target = "_blank";
- a.rel = "noreferrer";
- }
- return a;
+  if (document.getElementById(hexEventId)) {
+    a.href = "#" + hexEventId;
+  } else {
+    a.href = "https://njump.me/" + nip19id;
+    a.target = "_blank";
+    a.rel = "noreferrer";
+  }
+  return a;
 }
 
 var lastHighlightedEventId;
 window.addEventListener("hashchange", function() {
- if (window.location.hash.length === 0) {
- return;
- }
- var hash = window.location.hash.substring(1);
- if (hash.length === 0) {
- return;
- }
- if (lastHighlightedEventId) {
- var highlighted = document.getElementById(lastHighlightedEventId);
- if (highlighted) {
- highlighted.classList.remove("event-highlighted");
- }
- }
- var target = document.getElementById(hash);
- if (!target) {
- return;
- }
- lastHighlightedEventId = hash;
- target.classList.add("event-highlighted");
+  if (window.location.hash.length === 0) {
+    return;
+  }
+  var hash = window.location.hash.substring(1);
+  if (hash.length === 0) {
+    return;
+  }
+  if (lastHighlightedEventId) {
+    var highlighted = document.getElementById(lastHighlightedEventId);
+    if (highlighted) {
+      highlighted.classList.remove("event-highlighted");
+    }
+  }
+  var target = document.getElementById(hash);
+  if (!target) {
+    return;
+  }
+  lastHighlightedEventId = hash;
+  target.classList.add("event-highlighted");
 });
 
 function pubkeyMention(pubkey) {
- var pubkeyRef = pubkeyView(pubkey);
- pubkeyRef.classList.add("pubkey-mention");
- return pubkeyRef;
+  var pubkeyRef = pubkeyView(pubkey);
+  pubkeyRef.classList.add("pubkey-mention");
+  return pubkeyRef;
 }
 
 function referentAuthor(pubkey) {
- var span = document.createElement("span");
- span.appendChild(document.createTextNode(" by "));
- span.appendChild(pubkeyView(pubkey));
- return span;
+  var span = document.createElement("span");
+  span.appendChild(document.createTextNode(" by "));
+  span.appendChild(pubkeyView(pubkey));
+  return span;
 }
 
 function inReplyToElems(nostrEv) {
- var replyRef = extractReplyRef(nostrEv.tags);
- if (replyRef === undefined) {
- return [];
- }
+  var replyRef = extractReplyRef(nostrEv.tags);
+  if (replyRef === undefined) {
+    return [];
+  }
 
- var replySuffix = document.createElement("span");
- replySuffix.textContent = "<< ";
- replySuffix.classList.add("reply-suffix");
+  var replySuffix = document.createElement("span");
+  replySuffix.textContent = "<< ";
+  replySuffix.classList.add("reply-suffix");
 
- var nevent = window.NostrTools.nip19.neventEncode(replyRef);
- var replyLink = nostrEventRefLink(nevent, "nevent", replyRef.id);
+  var nevent = window.NostrTools.nip19.neventEncode(replyRef);
+  var replyLink = nostrEventRefLink(nevent, "nevent", replyRef.id);
 
- if (!replyRef.author) {
- return [replyLink, replySuffix];
- }
- return [replyLink, referentAuthor(replyRef.author), replySuffix];
+  if (!replyRef.author) {
+    return [replyLink, replySuffix];
+  }
+  return [replyLink, referentAuthor(replyRef.author), replySuffix];
 }
 
 function postQuotationElems(nip19Id, idType, hexEventId, author) {
- var prefix = document.createElement("span");
- prefix.textContent = "QP: ";
- prefix.classList.add("quote-prefix");
+  var prefix = document.createElement("span");
+  prefix.textContent = "QP: ";
+  prefix.classList.add("quote-prefix");
 
- var link = nostrEventRefLink(nip19Id, idType, hexEventId);
+  var link = nostrEventRefLink(nip19Id, idType, hexEventId);
 
- if (!author) {
- return [prefix, link];
- }
- return [prefix, link, referentAuthor(author)];
+  if (!author) {
+    return [prefix, link];
+  }
+  return [prefix, link, referentAuthor(author)];
 }
 
 function nostrUriElems(ref, nostrEv) {
- var nip19Id = ref.substring(6);
- var dec;
- try {
- dec = window.NostrTools.nip19.decode(nip19Id);
- } catch (err) {
- console.error("failed to decode NIP-19 ID:", err);
- return [document.createTextNode(ref)];
- }
+  var nip19Id = ref.substring(6);
+  var dec;
+  try {
+    dec = window.NostrTools.nip19.decode(nip19Id);
+  } catch (err) {
+    console.error("failed to decode NIP-19 ID:", err);
+    return [document.createTextNode(ref)];
+  }
 
- switch (dec.type) {
- case "npub":
- return [pubkeyMention(dec.data)];
- case "nprofile":
- return [pubkeyMention(dec.data.pubkey)];
+  switch (dec.type) {
+    case "npub":
+      return [pubkeyMention(dec.data)];
+    case "nprofile":
+      return [pubkeyMention(dec.data.pubkey)];
 
- case "note":
- case "nevent":
- var evRef = extractEventRef(dec);
- if (ref === undefined) {
- console.error("unreachable");
- return [nostrRefLink(nip19Id, dec.type)];
- }
- var mentionTag = findTagWithValue(nostrEv.tags, "e", evRef.id, function(t) {
- t[3] === "mention"
- });
- var author = (mentionTag && mentionTag[4]) || evRef.author;
- return postQuotationElems(nip19Id, dec.type, evRef.id, evRef.author);
+    case "note":
+    case "nevent":
+      var evRef = extractEventRef(dec);
+      if (ref === undefined) {
+        console.error("unreachable");
+        return [nostrRefLink(nip19Id, dec.type)];
+      }
+      var mentionTag = findTagWithValue(nostrEv.tags, "e", evRef.id, function(t) {
+        t[3] === "mention"
+      });
+      var author = (mentionTag && mentionTag[4]) || evRef.author;
+      return postQuotationElems(nip19Id, dec.type, evRef.id, evRef.author);
 
- default:
- return [nostrRefLink(nip19Id, dec.type)];
- }
+    default:
+      return [nostrRefLink(nip19Id, dec.type)];
+  }
 }
 
 function customEmojiElems(shortcode, nostrEv) {
- var emojiName = shortcode.substring(1, shortcode.length - 1);
- for (var i = 0; i < nostrEv.tags.length; i++) {
- var tag = nostrEv.tags[i];
- if (tag[0] === "emoji" && tag[1] === emojiName && typeof tag[2] === "string") {
- var img = document.createElement('img');
- img.src = tag[2];
- img.alt = shortcode;
- img.classList.add("custom-emoji");
- return [img];
- }
- }
- return [document.createTextNode(shortcode)];
+  var emojiName = shortcode.substring(1, shortcode.length - 1);
+  for (var i = 0; i < nostrEv.tags.length; i++) {
+    var tag = nostrEv.tags[i];
+    if (tag[0] === "emoji" && tag[1] === emojiName && typeof tag[2] === "string") {
+      var img = document.createElement('img');
+      img.src = tag[2];
+      img.alt = shortcode;
+      img.classList.add("custom-emoji");
+      return [img];
+    }
+  }
+  return [document.createTextNode(shortcode)];
 }
 
 function postEventView(nostrEv) {
- var view = baseEventView();
- view.id = nostrEv.id;
- view.classList.add("event-post");
+  var view = baseEventView();
+  view.id = nostrEv.id;
+  view.classList.add("event-post");
 
- view.appendChild(metadataView(nostrEv));
+  view.appendChild(metadataView(nostrEv));
 
- inReplyToElems(nostrEv).forEach(function(e) {
- view.appendChild(e);
- });
+  inReplyToElems(nostrEv).forEach(function(e) {
+    view.appendChild(e);
+  });
 
- var contentElems = nostrEv.content.split(contentRefPattern)
- .filter(function(s) {
- return s !== undefined && s.length > 0;
- })
- .map(function(s) {
- if (s.indexOf("http") === 0) {
- return urlLinkElems(s);
- } else if (s.indexOf("nostr:") === 0) {
- return nostrUriElems(s, nostrEv);
- } else if (s.charAt(0) === ":" && s.charAt(s.length - 1) === ":") {
- return customEmojiElems(s, nostrEv);
- } else {
- return [document.createTextNode(s)];
- }
- });
- contentElems.forEach(function(elems) {
- elems.forEach(function(e) {
- view.appendChild(e);
- });
- });
+  var contentElems = nostrEv.content.split(contentRefPattern)
+    .filter(function(s) {
+      return s !== undefined && s.length > 0;
+    })
+    .map(function(s) {
+      if (s.indexOf("http") === 0) {
+        return urlLinkElems(s);
+      } else if (s.indexOf("nostr:") === 0) {
+        return nostrUriElems(s, nostrEv);
+      } else if (s.charAt(0) === ":" && s.charAt(s.length - 1) === ":") {
+        return customEmojiElems(s, nostrEv);
+      } else {
+        return [document.createTextNode(s)];
+      }
+    });
+  contentElems.forEach(function(elems) {
+    elems.forEach(function(e) {
+      view.appendChild(e);
+    });
+  });
 
- return view;
+  return view;
 }
 
 function repostEventView(nostrEv) {
- var targetPostId;
- var targetPostAuthor;
- for (var i = 0; i < nostrEv.tags.length; i++) {
- var tag = nostrEv.tags[i];
- if (tag[0] === "e" && typeof tag[1] === "string") {
- targetPostId = tag[1];
- }
- if (tag[0] === "p" && typeof tag[1] === "string") {
- targetPostAuthor = tag[1];
- }
- if (targetPostId && targetPostAuthor) {
- break;
- }
- }
- if (targetPostId === undefined) {
- console.error("repost without target post ID:", nostrEv);
- return undefined;
- }
+  var targetPostId;
+  var targetPostAuthor;
+  for (var i = 0; i < nostrEv.tags.length; i++) {
+    var tag = nostrEv.tags[i];
+    if (tag[0] === "e" && typeof tag[1] === "string") {
+      targetPostId = tag[1];
+    }
+    if (tag[0] === "p" && typeof tag[1] === "string") {
+      targetPostAuthor = tag[1];
+    }
+    if (targetPostId && targetPostAuthor) {
+      break;
+    }
+  }
+  if (targetPostId === undefined) {
+    console.error("repost without target post ID:", nostrEv);
+    return undefined;
+  }
 
- var view = baseEventView();
- view.classList.add("event-repost");
+  var view = baseEventView();
+  view.classList.add("event-repost");
 
- view.appendChild(metadataView(nostrEv));
+  view.appendChild(metadataView(nostrEv));
 
- var repostPrefix = document.createElement("span");
- repostPrefix.textContent = "RP: ";
- repostPrefix.classList.add("repost-prefix");
+  var repostPrefix = document.createElement("span");
+  repostPrefix.textContent = "RP: ";
+  repostPrefix.classList.add("repost-prefix");
 
- var nevent = window.NostrTools.nip19.neventEncode({
- id: targetPostId
- });
- var repostLink = nostrEventRefLink(nevent, "nevent", targetPostId);
+  var nevent = window.NostrTools.nip19.neventEncode({
+    id: targetPostId
+  });
+  var repostLink = nostrEventRefLink(nevent, "nevent", targetPostId);
 
- view.appendChild(repostPrefix);
- view.appendChild(repostLink);
- if (targetPostAuthor) {
- view.appendChild(referentAuthor(targetPostAuthor));
- }
- return view;
+  view.appendChild(repostPrefix);
+  view.appendChild(repostLink);
+  if (targetPostAuthor) {
+    view.appendChild(referentAuthor(targetPostAuthor));
+  }
+  return view;
 }
 
 let isFlowgazerOnly = false;
@@ -683,92 +703,92 @@ var filteredAuthors = null;
 
 // onEvent 関数はイベントを保存するだけに変更
 function onEvent(nostrEv, prepend) {
- if (!window.NostrTools.verifyEvent(nostrEv)) {
- console.error("nostr event with invalid signature:", nostrEv);
- return;
- }
- // 投稿内容が禁止用語を含んでいるかチェック
- if (nostrEv.kind === 1) {
- for (const word of forbiddenWords) {
- if (nostrEv.content.includes(word)) {
- console.log('投稿が禁止用語を含んでいるためスキップしました。');
- return;
- }
- }
- 
- // 文字数が200文字以上の投稿を非表示にする
-const maxLength = 200; 
-if (nostrEv.content.length > maxLength) {
- console.log(`投稿の文字数が${maxLength}文字を越えているためスキップしました。`);
- return; 
-}
- }
- if (nostrEv.kind === 0) {
- try {
- profiles[nostrEv.pubkey] = JSON.parse(nostrEv.content);
- refreshTimeline();
- } catch (e) {
- console.error("Failed to parse profile content:", e);
- }
- return;
- }
+  if (!window.NostrTools.verifyEvent(nostrEv)) {
+    console.error("nostr event with invalid signature:", nostrEv);
+    return;
+  }
+  // 投稿内容が禁止用語を含んでいるかチェック
+  if (nostrEv.kind === 1) {
+    for (const word of forbiddenWords) {
+      if (nostrEv.content.includes(word)) {
+        console.log('投稿が禁止用語を含んでいるためスキップしました。');
+        return;
+      }
+    }
+    
+    // 文字数が200文字以上の投稿を非表示にする
+    const maxLength = 200;
+    if (nostrEv.content.length > maxLength) {
+      console.log(`投稿の文字数が${maxLength}文字を越えているためスキップしました。`);
+      return;
+    }
+  }
+  if (nostrEv.kind === 0) {
+    try {
+      profiles[nostrEv.pubkey] = JSON.parse(nostrEv.content);
+      refreshTimeline();
+    } catch (e) {
+      console.error("Failed to parse profile content:", e);
+    }
+    return;
+  }
 
- if (supportedKinds.indexOf(nostrEv.kind) === -1) {
- console.error("unsupported kind:", nostrEv.kind);
- return;
- }
- if (events[nostrEv.id]) {
- return;
- }
- events[nostrEv.id] = nostrEv;
- oldestCreatedAt = Math.min(oldestCreatedAt, nostrEv.created_at);
- pubkeysToFetch.add(nostrEv.pubkey);
+  if (supportedKinds.indexOf(nostrEv.kind) === -1) {
+    console.error("unsupported kind:", nostrEv.kind);
+    return;
+  }
+  if (events[nostrEv.id]) {
+    return;
+  }
+  events[nostrEv.id] = nostrEv;
+  oldestCreatedAt = Math.min(oldestCreatedAt, nostrEv.created_at);
+  pubkeysToFetch.add(nostrEv.pubkey);
 
- // onEventでは表示しない。refreshTimelineで表示する。
- refreshTimeline();
+  // onEventでは表示しない。refreshTimelineで表示する。
+  refreshTimeline();
 }
 
 // タイムラインの表示を制御する関数
 function refreshTimeline() {
- // 古いメッセージがあれば削除
- while (timeline.firstChild) {
- timeline.removeChild(timeline.firstChild);
- }
- const displayedEvents = Object.values(events).filter(e => {
- // チェックボックスがオンのとき
- if (isFlowgazerOnly) {
- // kind:1かつflowgazerのイベントだけを許可
- const isFlowgazerPost = (e.kind === 1 && e.tags.some(tag => {
- return tag[0] === 'client' && tag[1] === 'flowgazer';
- }));
- return isFlowgazerPost;
- }
- // チェックボックスがオフのとき
- else {
- // kind:1とkind:6の両方を許可
- return e.kind === 1 || e.kind === 6;
- }
- });
+  // 古いメッセージがあれば削除
+  while (timeline.firstChild) {
+    timeline.removeChild(timeline.firstChild);
+  }
+  const displayedEvents = Object.values(events).filter(e => {
+    // チェックボックスがオンのとき
+    if (isFlowgazerOnly) {
+      // kind:1かつflowgazerのイベントだけを許可
+      const isFlowgazerPost = (e.kind === 1 && e.tags.some(tag => {
+        return tag[0] === 'client' && tag[1] === 'flowgazer';
+      }));
+      return isFlowgazerPost;
+    }
+    // チェックボックスがオフのとき
+    else {
+      // kind:1とkind:6の両方を許可
+      return e.kind === 1 || e.kind === 6;
+    }
+  });
 
- const sortedEvents = displayedEvents.sort((a, b) => b.created_at - a.created_at);
- sortedEvents.forEach(e => {
- let eventView;
- if (e.kind === 1) {
- eventView = postEventView(e);
- if (eventView) {
- timeline.appendChild(eventView);
- }
- } else if (e.kind === 6) {
- eventView = repostEventView(e);
- if (eventView) {
- timeline.appendChild(eventView);
- }
- }
- });
+  const sortedEvents = displayedEvents.sort((a, b) => b.created_at - a.created_at);
+  sortedEvents.forEach(e => {
+    let eventView;
+    if (e.kind === 1) {
+      eventView = postEventView(e);
+      if (eventView) {
+        timeline.appendChild(eventView);
+      }
+    } else if (e.kind === 6) {
+      eventView = repostEventView(e);
+      if (eventView) {
+        timeline.appendChild(eventView);
+      }
+    }
+  });
 }
 
 function onWSClose() {
- alert("Relay connection closed");
+  alert("Relay connection closed");
 }
 
 var MAIN_SUB_ID = "motherfuncking-main-sub";
@@ -778,172 +798,172 @@ var PROFILE_SUB_ID = "motherfuncking-profile-sub";
 var pubkeysToFetch = new Set();
 
 function isKnownSubId(subId) {
- return subId === MAIN_SUB_ID || subId === MORE_POSTS_SUB_ID || subId === PROFILE_SUB_ID;
+  return subId === MAIN_SUB_ID || subId === MORE_POSTS_SUB_ID || subId === PROFILE_SUB_ID;
 }
 
 function shouldPrependPost(subId, afterEose) {
- return subId === MAIN_SUB_ID && afterEose;
+  return subId === MAIN_SUB_ID && afterEose;
 }
 
 var relayWS;
 
 function subscribeRelay(relayUrl, authors) {
- if (relayWS) {
- while (timeline.firstChild) {
- timeline.removeChild(timeline.firstChild);
- }
- relayWS.removeEventListener("close", onWSClose);
- relayWS.close();
- }
+  if (relayWS) {
+    while (timeline.firstChild) {
+      timeline.removeChild(timeline.firstChild);
+    }
+    relayWS.removeEventListener("close", onWSClose);
+    relayWS.close();
+  }
 
- try {
- relayWS = new WebSocket(relayUrl);
- } catch (err) {
- console.error("failed to connect to relay:", err);
- alert("Failed to connect to relay:", relayUrl);
- return;
- }
+  try {
+    relayWS = new WebSocket(relayUrl);
+  } catch (err) {
+    console.error("failed to connect to relay:", err);
+    alert("Failed to connect to relay:", relayUrl);
+    return;
+  }
 
- // タイムラインをリセット
- events = {};
- pubkeysToFetch = new Set();
- oldestCreatedAt = Number.MAX_VALUE;
+  // タイムラインをリセット
+  events = {};
+  pubkeysToFetch = new Set();
+  oldestCreatedAt = Number.MAX_VALUE;
 
- var afterEose = false;
+  var afterEose = false;
 
- // kindsを[1, 6]に戻す
- var filter = {
- kinds: [1, 6],
- limit: 50
- };
+  // kindsを[1, 6]に戻す
+  var filter = {
+    kinds: [1, 6],
+    limit: 50
+  };
 
- if (authors && authors.length > 0) {
- filter.authors = authors;
- }
+  if (authors && authors.length > 0) {
+    filter.authors = authors;
+  }
 
- relayWS.addEventListener("open", function() {
- relayWS.send(
- JSON.stringify(["REQ", MAIN_SUB_ID, filter])
- );
- });
+  relayWS.addEventListener("open", function() {
+    relayWS.send(
+      JSON.stringify(["REQ", MAIN_SUB_ID, filter])
+    );
+  });
 
- relayWS.addEventListener("message", function(ev) {
- try {
- var r2cMsg = JSON.parse(ev.data);
- switch (r2cMsg[0]) {
- case "EVENT":
- var subId = r2cMsg[1];
- if (!isKnownSubId(subId)) {
- console.error("unknown subId:", subId);
- return;
- }
- onEvent(r2cMsg[2], shouldPrependPost(subId, afterEose));
- break;
- case "EOSE":
- var subId = r2cMsg[1];
- if (subId === MAIN_SUB_ID) {
- afterEose = true;
- fetchProfiles();
- checkForAutoLoad();
- } else if (subId === MORE_POSTS_SUB_ID) {
- checkForAutoLoad();
- }
- loadMoreButton.classList.remove("loading");
- break;
- default:
- console.log(r2cMsg);
- break;
- }
- } catch (err) {
- console.error(err);
- }
- });
- relayWS.addEventListener("close", onWSClose);
+  relayWS.addEventListener("message", function(ev) {
+    try {
+      var r2cMsg = JSON.parse(ev.data);
+      switch (r2cMsg[0]) {
+        case "EVENT":
+          var subId = r2cMsg[1];
+          if (!isKnownSubId(subId)) {
+            console.error("unknown subId:", subId);
+            return;
+          }
+          onEvent(r2cMsg[2], shouldPrependPost(subId, afterEose));
+          break;
+        case "EOSE":
+          var subId = r2cMsg[1];
+          if (subId === MAIN_SUB_ID) {
+            afterEose = true;
+            fetchProfiles();
+            checkForAutoLoad();
+          } else if (subId === MORE_POSTS_SUB_ID) {
+            checkForAutoLoad();
+          }
+          loadMoreButton.classList.remove("loading");
+          break;
+        default:
+          console.log(r2cMsg);
+          break;
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  });
+  relayWS.addEventListener("close", onWSClose);
 }
 
 function fetchProfiles() {
- if (pubkeysToFetch.size === 0) {
- return;
- }
- var profileRelayWS = new WebSocket("wss://relay.nostr.band");
- profileRelayWS.addEventListener("open", function() {
- var pubkeysArray = Array.from(pubkeysToFetch);
- profileRelayWS.send(
- JSON.stringify(["REQ", PROFILE_SUB_ID, {
- kinds: [0],
- authors: pubkeysArray
- }])
- );
- });
- profileRelayWS.addEventListener("message", function(ev) {
- try {
- var r2cMsg = JSON.parse(ev.data);
- switch (r2cMsg[0]) {
- case "EVENT":
- var nostrEv = r2cMsg[2];
- if (nostrEv.kind === 0) {
- try {
- var profileContent = JSON.parse(nostrEv.content);
- profiles[nostrEv.pubkey] = profileContent;
- pubkeysToFetch.delete(nostrEv.pubkey);
- } catch (e) {
- console.error("Failed to parse profile content:", e);
- }
- }
- break;
- case "EOSE":
- refreshTimeline();
- profileRelayWS.close();
- break;
- }
- } catch (err) {
- console.error(err);
- }
- });
+  if (pubkeysToFetch.size === 0) {
+    return;
+  }
+  var profileRelayWS = new WebSocket("wss://relay.nostr.band");
+  profileRelayWS.addEventListener("open", function() {
+    var pubkeysArray = Array.from(pubkeysToFetch);
+    profileRelayWS.send(
+      JSON.stringify(["REQ", PROFILE_SUB_ID, {
+        kinds: [0],
+        authors: pubkeysArray
+      }])
+    );
+  });
+  profileRelayWS.addEventListener("message", function(ev) {
+    try {
+      var r2cMsg = JSON.parse(ev.data);
+      switch (r2cMsg[0]) {
+        case "EVENT":
+          var nostrEv = r2cMsg[2];
+          if (nostrEv.kind === 0) {
+            try {
+              var profileContent = JSON.parse(nostrEv.content);
+              profiles[nostrEv.pubkey] = profileContent;
+              pubkeysToFetch.delete(nostrEv.pubkey);
+            } catch (e) {
+              console.error("Failed to parse profile content:", e);
+            }
+          }
+          break;
+        case "EOSE":
+          refreshTimeline();
+          profileRelayWS.close();
+          break;
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  });
 }
 
 var timeline = document.getElementById("timeline");
 if (timeline === null) {
- throw new Error("no #timeline");
+  throw new Error("no #timeline");
 }
 
 var LS_RELAY_URL_KEY = "relayUrl";
 var relayUrlInput = document.getElementById("relay-url");
 var subscribeButton = document.getElementById("subscribe-relay");
 subscribeButton.addEventListener("click", function() {
- // 自動更新がOFFの場合、チェックボックスをONにする
- if (!autoUpdateToggle.checked) {
- autoUpdateToggle.checked = true;
- console.log("subscribe-relayボタンが押されたため、自動更新をONにしました。");
- }
+  // 自動更新がOFFの場合、チェックボックスをONにする
+  if (!autoUpdateToggle.checked) {
+    autoUpdateToggle.checked = true;
+    console.log("subscribe-relayボタンが押されたため、自動更新をONにしました。");
+  }
 
- var rurl = relayUrlInput.value;
- subscribeRelay(rurl);
- localStorage.setItem(LS_RELAY_URL_KEY, rurl);
+  var rurl = relayUrlInput.value;
+  subscribeRelay(rurl);
+  localStorage.setItem(LS_RELAY_URL_KEY, rurl);
 });
 
 // `filter-flowgazer-only` チェックボックスの変更イベントリスナーを追加
 const flowgazerOnlyCheckbox = document.getElementById('filter-flowgazer-only');
 flowgazerOnlyCheckbox.addEventListener('change', function() {
- isFlowgazerOnly = this.checked;
- // ここではリロードせず、既存のイベントをフィルタリングし直す
- refreshTimeline();
+  isFlowgazerOnly = this.checked;
+  // ここではリロードせず、既存のイベントをフィルタリングし直す
+  refreshTimeline();
 });
 
 autoUpdateToggle.addEventListener('change', function() {
- if (this.checked) {
- // 自動更新ON → リレーに再接続してイベント購読を再開
- console.log("自動更新ON");
+  if (this.checked) {
+    // 自動更新ON → リレーに再接続してイベント購読を再開
+    console.log("自動更新ON");
 
- const rurl = relayUrlInput.value;
- subscribeRelay(rurl, filteredAuthors); // フィルターがあれば渡す
- localStorage.setItem(LS_RELAY_URL_KEY, rurl);
- } else {
- // 自動更新OFF → stop.jsの関数を呼び出す
- if (typeof stopAutoLoading === 'function') {
- stopAutoLoading();
- }
- }
+    const rurl = relayUrlInput.value;
+    subscribeRelay(rurl, filteredAuthors); // フィルターがあれば渡す
+    localStorage.setItem(LS_RELAY_URL_KEY, rurl);
+  } else {
+    // 自動更新OFF → stop.jsの関数を呼び出す
+    if (typeof stopAutoLoading === 'function') {
+      stopAutoLoading();
+    }
+  }
 });
 
 var latestRurl = localStorage.getItem(LS_RELAY_URL_KEY);
@@ -957,51 +977,54 @@ var generateButton = document.getElementById("generate-keypair");
 var keypairArea = document.getElementById("keypair-area");
 
 generateButton.addEventListener("click", function() {
- const keys = generateKeypair();
- nsecInput.value = keys.nsec;
- nsecInput.readOnly = false; // NIP-07ログイン状態を解除
- nsecInput.placeholder = 'nsec1...';
+  const keys = generateKeypair();
+  nsecInput.value = keys.nsec;
+  nsecInput.readOnly = false; // NIP-07ログイン状態を解除
+  nsecInput.placeholder = 'nsec1...';
 
- npubLink.textContent = keys.npub;
- npubLink.href = "https://nostter.app/" + keys.npub;
- npubLink.style.display = "inline";
+  npubLink.textContent = keys.npub;
+  npubLink.href = "https://nostter.app/" + keys.npub;
+  npubLink.style.display = "inline";
 
- // 詳細設定を非表示にする
- settingsArea.classList.add("hidden");
- hideSettingsBtn.classList.add("hidden");
- showSettingsBtn.classList.remove("hidden");
+  // 詳細設定を非表示にする
+  settingsArea.classList.add("hidden");
+  hideSettingsBtn.classList.add("hidden");
+  showSettingsBtn.classList.remove("hidden");
 
- // 警告メッセージを表示する
- warningMessageArea.classList.remove("hidden");
+  // 警告メッセージを表示する
+  warningMessageArea.classList.remove("hidden");
+  
+  // ▼ ここにコピーボタンを表示させるための関数呼び出しを追加 ▼
+  updateCopyIconVisibility();
 });
 
 npubLink.addEventListener("click", function(event) {
- window.open(this.href, "_blank");
+  window.open(this.href, "_blank");
 });
 
 // nsec入力欄の変更を監視し、npubを自動生成する
 nsecInput.addEventListener("input", function() {
- const nsecValue = nsecInput.value.trim();
- if (nsecValue) {
- try {
- const nsecDecoded = window.NostrTools.nip19.decode(nsecValue);
- if (nsecDecoded.type === 'nsec') {
- const seckey = nsecDecoded.data;
- const pubkey = window.NostrTools.getPublicKey(seckey);
- const npub = window.NostrTools.nip19.npubEncode(pubkey);
- npubLink.textContent = npub;
- npubLink.href = "https://nostter.app/" + npub;
- npubLink.style.display = "inline";
- return;
- }
- } catch (e) {
- // 無効なnsecの場合
- }
- }
- // 無効な値または空の場合
- npubLink.textContent = '';
- npubLink.href = '';
- npubLink.style.display = 'none';
+  const nsecValue = nsecInput.value.trim();
+  if (nsecValue) {
+    try {
+      const nsecDecoded = window.NostrTools.nip19.decode(nsecValue);
+      if (nsecDecoded.type === 'nsec') {
+        const seckey = nsecDecoded.data;
+        const pubkey = window.NostrTools.getPublicKey(seckey);
+        const npub = window.NostrTools.nip19.npubEncode(pubkey);
+        npubLink.textContent = npub;
+        npubLink.href = "https://nostter.app/" + npub;
+        npubLink.style.display = "inline";
+        return;
+      }
+    } catch (e) {
+      // 無効なnsecの場合
+    }
+  }
+  // 無効な値または空の場合
+  npubLink.textContent = '';
+  npubLink.href = '';
+  npubLink.style.display = 'none';
 });
 
 // 詳細設定の表示/非表示
@@ -1010,15 +1033,15 @@ var hideSettingsBtn = document.getElementById("hide-settings");
 var settingsArea = document.getElementById("advanced-settings");
 
 showSettingsBtn.addEventListener("click", function() {
- settingsArea.classList.remove("hidden");
- showSettingsBtn.classList.add("hidden");
- hideSettingsBtn.classList.remove("hidden");
+  settingsArea.classList.remove("hidden");
+  showSettingsBtn.classList.add("hidden");
+  hideSettingsBtn.classList.remove("hidden");
 });
 
 hideSettingsBtn.addEventListener("click", function() {
- settingsArea.classList.add("hidden");
- hideSettingsBtn.classList.add("hidden");
- showSettingsBtn.classList.remove("hidden");
+  settingsArea.classList.add("hidden");
+  hideSettingsBtn.classList.add("hidden");
+  showSettingsBtn.classList.remove("hidden");
 });
 
 // 絞り込み
@@ -1027,49 +1050,49 @@ var applyFilterButton = document.getElementById("apply-filter");
 var clearFilterButton = document.getElementById("clear-filter");
 
 function filterAuthors() {
- var inputText = hexFilterInput.value;
- if (!inputText.trim()) {
- return [];
- }
- var authors = inputText.split(/[ , \n]/);
- var filtered = authors.map(function(hex) {
- hex = hex.trim();
- if (hex.startsWith('npub') || hex.startsWith('nprofile')) {
- try {
- var decoded = NostrTools.nip19.decode(hex);
- if (decoded.type === 'npub') {
- return decoded.data;
- } else if (decoded.type === 'nprofile') {
- return decoded.data.pubkey;
- }
- } catch (e) {
- return null;
- }
- }
- return hex.length === 64 && /^[0-9a-fA-F]{64}$/.test(hex) ? hex : null;
- }).filter(Boolean);
- return filtered;
+  var inputText = hexFilterInput.value;
+  if (!inputText.trim()) {
+    return [];
+  }
+  var authors = inputText.split(/[ , \n]/);
+  var filtered = authors.map(function(hex) {
+    hex = hex.trim();
+    if (hex.startsWith('npub') || hex.startsWith('nprofile')) {
+      try {
+        var decoded = NostrTools.nip19.decode(hex);
+        if (decoded.type === 'npub') {
+          return decoded.data;
+        } else if (decoded.type === 'nprofile') {
+          return decoded.data.pubkey;
+        }
+      } catch (e) {
+        return null;
+      }
+    }
+    return hex.length === 64 && /^[0-9a-fA-F]{64}$/.test(hex) ? hex : null;
+  }).filter(Boolean);
+  return filtered;
 }
 
 applyFilterButton.addEventListener("click", function() {
- // 自動更新がOFFの場合、チェックボックスをONにする
- if (!autoUpdateToggle.checked) {
- autoUpdateToggle.checked = true;
- console.log("apply-filterボタンが押されたため、自動更新をONにしました。");
- }
+  // 自動更新がOFFの場合、チェックボックスをONにする
+  if (!autoUpdateToggle.checked) {
+    autoUpdateToggle.checked = true;
+    console.log("apply-filterボタンが押されたため、自動更新をONにしました。");
+  }
 
- filteredAuthors = filterAuthors();
- var rurl = relayUrlInput.value;
- localStorage.setItem('hexFilterValue', hexFilterInput.value);
- subscribeRelay(rurl, filteredAuthors);
+  filteredAuthors = filterAuthors();
+  var rurl = relayUrlInput.value;
+  localStorage.setItem('hexFilterValue', hexFilterInput.value);
+  subscribeRelay(rurl, filteredAuthors);
 });
 
 clearFilterButton.addEventListener("click", function() {
- hexFilterInput.value = "";
- filteredAuthors = null;
- localStorage.removeItem('hexFilterValue');
- var rurl = relayUrlInput.value;
- subscribeRelay(rurl);
+  hexFilterInput.value = "";
+  filteredAuthors = null;
+  localStorage.removeItem('hexFilterValue');
+  var rurl = relayUrlInput.value;
+  subscribeRelay(rurl);
 });
 
 // もっと見るボタン
@@ -1077,56 +1100,56 @@ var loadMoreButton = document.getElementById("load-more");
 var oldestCreatedAt = Number.MAX_VALUE;
 
 loadMoreButton.addEventListener("click", function() {
- if (!relayWS || relayWS.readyState !== WebSocket.OPEN) {
- console.error("WebSocket is not open. Cannot send message.");
- return;
- }
+  if (!relayWS || relayWS.readyState !== WebSocket.OPEN) {
+    console.error("WebSocket is not open. Cannot send message.");
+    return;
+  }
 
- if (this.classList.contains("loading")) {
- return;
- }
+  if (this.classList.contains("loading")) {
+    return;
+  }
 
- this.classList.add("loading");
- isAutoLoading = true;
- document.getElementById('cancel-loading').style.display = 'inline';
+  this.classList.add("loading");
+  isAutoLoading = true;
+  document.getElementById('cancel-loading').style.display = 'inline';
 
- var filter = {
- kinds: [1, 6],
- until: oldestCreatedAt - 1,
- limit: 50
- };
- if (filteredAuthors && filteredAuthors.length > 0) {
- filter.authors = filteredAuthors;
- }
+  var filter = {
+    kinds: [1, 6],
+    until: oldestCreatedAt - 1,
+    limit: 50
+  };
+  if (filteredAuthors && filteredAuthors.length > 0) {
+    filter.authors = filteredAuthors;
+  }
 
- relayWS.send(JSON.stringify(["REQ", MORE_POSTS_SUB_ID, filter]));
+  relayWS.send(JSON.stringify(["REQ", MORE_POSTS_SUB_ID, filter]));
 });
 
 // 「あきらめる」ボタン
 const cancelLoadingButton = document.getElementById('cancel-loading');
 cancelLoadingButton.addEventListener('click', function() {
- isAutoLoading = false;
- loadMoreButton.classList.remove('loading');
- this.style.display = 'none';
- if (relayWS.readyState === WebSocket.OPEN) {
- relayWS.send(JSON.stringify(["CLOSE", MORE_POSTS_SUB_ID]));
- }
+  isAutoLoading = false;
+  loadMoreButton.classList.remove('loading');
+  this.style.display = 'none';
+  if (relayWS.readyState === WebSocket.OPEN) {
+    relayWS.send(JSON.stringify(["CLOSE", MORE_POSTS_SUB_ID]));
+  }
 });
 
 // 自動で次のページを読み込むかチェックする関数
 function checkForAutoLoad() {
- const displayedEventsCount = timeline.children.length;
- if (isAutoLoading && displayedEventsCount < 5) { // 表示数が少ない場合
- console.log("Auto-loading next page...");
- setTimeout(() => {
- if (isAutoLoading) {
- loadMoreButton.click();
- }
- }, 1000);
- } else {
- isAutoLoading = false;
- document.getElementById('cancel-loading').style.display = 'none';
- }
+  const displayedEventsCount = timeline.children.length;
+  if (isAutoLoading && displayedEventsCount < 5) { // 表示数が少ない場合
+    console.log("Auto-loading next page...");
+    setTimeout(() => {
+      if (isAutoLoading) {
+        loadMoreButton.click();
+      }
+    }, 1000);
+  } else {
+    isAutoLoading = false;
+    document.getElementById('cancel-loading').style.display = 'none';
+  }
 }
 </script>
 <script src="https://ompomz.github.io/header/loadHeader.js"></script>
