@@ -11,6 +11,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
 .container { max-width: 600px; margin-left: 0.5rem; margin-right: auto; padding: 0.5rem 0.5rem 0rem 0.5rem; }
 @media (max-width: 767px) { .container { max-width: 100%; padding: 8px 8px 0px 8px; margin: 0; } }
 @media (max-width: 400px) { .flex-container button {font-size: 0.6rem !important;} }
+.auto-stop-message { width: 100%; max-width: 600px; margin: 0 auto; padding-bottom: 0.5rem; color: #666; text-align: center; }
+@media (max-width: 767px) { .auto-stop-message { max-width: 100%; } }
 h1 { font-size: 1.2rem; margin: 0rem 0rem 0.5rem 0rem; }
 p { margin: 0; }
 a { color: #666; text-decoration: none; }
@@ -92,8 +94,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
 </datalist>
 <button id="subscribe-relay" style="padding:0.25rem 0rem; width:4rem;">接続</button>
 </div>
-<label for="auto-update-toggle"> 自動更新ON <input type="checkbox" id="auto-update-toggle" checked></label>
-<label for="filter-flowgazer-only">　via flowgazer しぼりこみ <input type="checkbox" id="filter-flowgazer-only"></label>
+<div style="display: flex; align-items: center; gap: 1rem; margin-left:0.25rem;"><label for="auto-update-toggle">自動更新ON <input type="checkbox" id="auto-update-toggle" checked></label><label for="filter-flowgazer-only">via flowgazer しぼりこみ <input type="checkbox" id="filter-flowgazer-only"></label></div>
 <div class="flex-container">
 <textarea id="hex-filter" rows="2" placeholder="投稿者しぼりこみ(npub1…,hex…)"></textarea>
 <div class="flex-container-matome">
@@ -104,8 +105,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
 </div>
 <ul id="timeline"></ul>
 <button id="cancel-loading" class="hidden full-width">あきらめる</button>
-<button id="load-more" class="loading full-width">もっと見る</button>
-<script src="https://unpkg.com/nostr-tools/lib/nostr.bundle.js"></script>
+<button id="load-more" class="loading full-width">もっと見る</button><script src="https://unpkg.com/nostr-tools/lib/nostr.bundle.js"></script>
 <script src="./stop.js"></script>
 <script>
 // ====================================================================
@@ -174,6 +174,7 @@ var MORE_POSTS_SUB_ID = "motherfuncking-more-posts";
 var PROFILE_SUB_ID = "motherfuncking-profile-sub";
 var pubkeysToFetch = new Set();
 var LS_RELAY_URL_KEY = "relayUrl";
+let pressTimer; // 長押しタイマー用の変数
 
 // ====================================================================
 // 関数定義
@@ -492,6 +493,48 @@ function postEventView(nostrEv) {
   var view = baseEventView();
   view.id = nostrEv.id;
   view.classList.add("event-post");
+  
+  // マウス/タッチによる長押しイベントリスナーを追加
+  let pressTimer;
+  view.addEventListener('mousedown', (e) => {
+    // aタグや他のリンク要素上では長押しを無効にする
+    if (e.target.tagName === 'A') {
+      return;
+    }
+    // 左クリック（ボタン0）のみを対象とする
+    if (e.button !== 0) {
+      return;
+    }
+    pressTimer = setTimeout(() => {
+      clearTimeout(pressTimer);
+      if (confirm("☆ふぁぼる？※ふぁぼるには鍵が必要です。")) {
+        sendLikeEvent(nostrEv.id, nostrEv.pubkey);
+      }
+    }, 800);
+  });
+  view.addEventListener('mouseup', () => {
+    clearTimeout(pressTimer);
+  });
+  view.addEventListener('mouseleave', () => {
+    clearTimeout(pressTimer);
+  });
+
+  // モバイル対応のタッチイベント
+  view.addEventListener('touchstart', (e) => {
+    pressTimer = setTimeout(() => {
+      clearTimeout(pressTimer);
+      if (confirm("☆ふぁぼる？※ふぁぼるには鍵が必要です。")) {
+        sendLikeEvent(nostrEv.id, nostrEv.pubkey);
+      }
+    }, 800);
+  });
+  view.addEventListener('touchend', () => {
+    clearTimeout(pressTimer);
+  });
+  view.addEventListener('touchcancel', () => {
+    clearTimeout(pressTimer);
+  });
+
   view.appendChild(metadataView(nostrEv));
   inReplyToElems(nostrEv).forEach(e => view.appendChild(e));
   var contentElems = nostrEv.content.split(contentRefPattern)
@@ -535,6 +578,61 @@ function repostEventView(nostrEv) {
   return view;
 }
 
+// 新規追加: kind:7イベントを送信する関数
+async function sendLikeEvent(targetEventId, targetPubkey) {
+  const nsec = nsecInput.value;
+  if (!nsec || nsec === '********') {
+    if (window.nostrSigner) { // 拡張機能でログイン
+      try {
+        const pubkeyHex = await window.nostrSigner.getPublicKey();
+        const likeEvent = {
+          kind: 7,
+          content: "+",
+          created_at: Math.floor(Date.now() / 1000),
+          tags: [
+            ["e", targetEventId],
+            ["p", targetPubkey]
+          ],
+          pubkey: pubkeyHex,
+        };
+        const signedEvent = await window.nostrSigner.signEvent(likeEvent);
+        relayWS.send(JSON.stringify(["EVENT", signedEvent]));
+        alert("いいねを送信しました！");
+      } catch (err) {
+        console.error("NIP-07署名に失敗:", err);
+        alert("なんかふぁぼれなかったごめん。");
+      }
+    } else {
+      alert("ふぁぼるには鍵が必要です。鍵ペアを生成するか、既存の秘密鍵を入力するか、ブラウザ拡張機能でログインしてね。");
+    }
+  } else { // 秘密鍵入力でログイン
+    try {
+      const nsecDecoded = window.NostrTools.nip19.decode(nsec);
+      if (nsecDecoded.type !== "nsec") {
+        alert("無効な秘密鍵です。");
+        return;
+      }
+      const seckey = nsecDecoded.data;
+      const likeEvent = {
+        kind: 7,
+        content: "+",
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [
+          ["e", targetEventId],
+          ["p", targetPubkey]
+        ],
+      };
+      const signedEvent = window.NostrTools.finalizeEvent(likeEvent, seckey);
+      relayWS.send(JSON.stringify(["EVENT", signedEvent]));
+      alert('ふぁぼった！');
+    } catch (err) {
+      console.error("秘密鍵署名に失敗:", err);
+      alert("ふぁぼれなかった；；");
+    }
+  }
+}
+
+
 function onEvent(nostrEv, prepend) {
   if (!window.NostrTools.verifyEvent(nostrEv)) {
     console.error("nostr event with invalid signature:", nostrEv);
@@ -559,6 +657,12 @@ function onEvent(nostrEv, prepend) {
     } catch (e) {
       console.error("Failed to parse profile content:", e);
     }
+    return;
+  }
+  // kind:7をサポート対象に追加
+  if (nostrEv.kind === 7) {
+    // kind:7イベントはタイムラインに表示しない
+    // いいねのカウント機能などを追加する際に利用
     return;
   }
   if (supportedKinds.indexOf(nostrEv.kind) === -1) {
