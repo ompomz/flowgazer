@@ -25,7 +25,7 @@ function stopAutoLoading() {
   const timeline = document.getElementById("timeline");
   if (timeline) {
     const msg = document.createElement("li");
-    msg.textContent = "⏸ 自動更新は停止中です。";
+    msg.textContent = "---自動更新を停止中---";
     msg.classList.add("auto-stop-message");
     timeline.prepend(msg);
   }
