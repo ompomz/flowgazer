@@ -6,54 +6,53 @@
 <title>flowgazer</title>
 <link rel="icon" type="image/x-icon" href="favicon.ico">
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"; padding: 0.5rem; line-height: 1.3; font-weight: normal; background-color: #f7f7f7; color: #666; font-size: 0.9rem; }
-.container { max-width: 600px; margin-left: 0.5rem; margin-right: auto; padding: 0.5rem 0.5rem 0rem 0.5rem; }
-@media (max-width: 767px) { .container { max-width: 100%; padding: 8px 8px 0px 8px; margin: 0; } }
+* { margin: 0; padding: 0; box-sizing: border-box;}
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"; padding: 0.5rem; line-height: 1.3; font-weight: normal; background-color: #f7f7f7; color: #666; font-size: 0.9rem;}
+.container { max-width: 600px; margin-left: 0.5rem; margin-right: auto; padding: 0.5rem 0.5rem 0rem 0.5rem;}
+@media (max-width: 767px) { .container { max-width: 100%; padding: 8px 8px 0px 8px; margin: 0;} }
 @media (max-width: 400px) { .flex-container button {font-size: 0.6rem !important;} }
-.auto-stop-message { width: 100%; max-width: 600px; margin: 0 auto; padding-bottom: 0.5rem; color: #666; text-align: center; }
-@media (max-width: 767px) { .auto-stop-message { max-width: 100%; } }
-h1 { font-size: 1.2rem; margin: 0rem 0rem 0.5rem 0rem; }
-p { margin: 0; }
-a { color: #666; text-decoration: none; }
-input, textarea { font-size: 0.9rem; padding: 0.5rem 0.3rem; border: 1px solid #ddd; border-radius: 4px; color: #666; background-color: #fff; cursor: pointer; transition: background-color 0.3s, color 0.3s; }
-input[type="checkbox"] { padding: 0; margin: 0; vertical-align: middle; appearance: checkbox; -webkit-appearance: checkbox; }
-textarea { resize: vertical; }
-.container button { font-size: 0.8rem; font-weight: bold; padding: 0.25rem 1rem; margin: 0.5rem 0rem; border: 0px solid #ddd; border-radius: 999px; color: #fff; background-color: #666; white-space: nowrap; cursor: pointer; transition: background-color 0.3s, color 0.3s; }
-.full-width { width: 100%; display: block; }
-.hidden { display: none; }
+@media (max-width: 767px) { .auto-stop-message div { width: 100% !important; margin:auto;} }
+h1 { font-size: 1.2rem; margin: 0rem 0rem 0.5rem 0rem;}
+p { margin: 0;}
+a { color: #666; text-decoration: none;}
+input, textarea { font-size: 0.9rem; padding: 0.5rem 0.3rem; border: 1px solid #ddd; border-radius: 4px; color: #666; background-color: #fff; cursor: pointer; transition: background-color 0.3s, color 0.3s;}
+input[type="checkbox"] { padding: 0; margin: 0; vertical-align: middle; appearance: checkbox; -webkit-appearance: checkbox;}
+textarea { resize: vertical;}
+.container button { font-size: 0.8rem; font-weight: bold; padding: 0.25rem 1rem; margin: 0.5rem 0rem; border: 0px solid #ddd; border-radius: 999px; color: #fff; background-color: #666; white-space: nowrap; cursor: pointer; transition: background-color 0.3s, color 0.3s;}
+.full-width { width: 100%; display: block;}
+.hidden { display: none;}
 .flex-container { display: flex; align-items: center; gap: 0.5rem; margin:0.5rem 0rem;}
-.flex-container input, .flex-container textarea { flex-grow: 1; margin: 0; }
-.flex-container button { margin: 0; min-width: 0; }
+.flex-container input, .flex-container textarea { flex-grow: 1; margin: 0;}
+.flex-container button { margin: 0; min-width: 0;}
 .flex-container-matome { display: flex; flex-direction: column; align-items: flex-start; gap:0.25rem;}
-#settings-toggle-area { display: flex; justify-content: center; }
-ul { list-style-type: none; padding: 0; margin: 0.55rem 0rem 0rem 0rem; }
-li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; }
-.event-highlighted { border: 1px solid #ffcc66; }
-.npub-link { color: #66b3ff; white-space: normal; word-break: break-word; min-width: 0; flex: 1; }
-.nostr-ref, .pubkey-ref { color: #66b3ff; }
-.custom-emoji { height: 1.2rem; vertical-align: bottom; }
-#load-more { font-size: 0.8rem; font-weight: bold; padding: 0.25rem 1rem; margin: 0.1rem 0rem; border: 0px solid #ddd; border-radius: 999px; color: #fff; background-color: #666; white-space: nowrap; cursor: pointer; transition: background-color 0.3s, color 0.3s; }
-#load-more.loading { font-size: 0; pointer-events: none; }
-#load-more.loading::before { content: "読み込み中..."; font-size: 0.8rem; }
-#generate-keypair { background-color: #ff99cc; color: #ffffff; }
-#generate-keypair:hover { background-color: #ff66b2; }
-#get-from-extension, #load-more { background-color: #66b3ff; color: #ffffff; }
-#get-from-extension:hover, #load-more:hover { background-color: #4da6ff; }
-#send-new-post { background-color: #ffcc66; color: #ffffff; }
-#send-new-post:hover { background-color: #ffb833; }
+#settings-toggle-area { display: flex; justify-content: center;}
+ul { list-style-type: none; padding: 0; margin: 0.55rem 0rem 0rem 0rem;}
+li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd;}
+.event-highlighted { border: 1px solid #ffcc66;}
+.npub-link { color: #66b3ff; white-space: normal; word-break: break-word; min-width: 0; flex: 1;}
+.nostr-ref, .pubkey-ref { color: #66b3ff;}
+.custom-emoji { height: 1.2rem; vertical-align: bottom;}
+#load-more { font-size: 0.8rem; font-weight: bold; padding: 0.25rem 1rem; margin: 0.1rem 0rem; border: 0px solid #ddd; border-radius: 999px; color: #fff; background-color: #666; white-space: nowrap; cursor: pointer; transition: background-color 0.3s, color 0.3s;}
+#load-more.loading { font-size: 0; pointer-events: none;}
+#load-more.loading::before { content: "読み込み中..."; font-size: 0.8rem;}
+#generate-keypair { background-color: #ff99cc; color: #ffffff;}
+#generate-keypair:hover { background-color: #ff66b2;}
+#get-from-extension, #load-more { background-color: #66b3ff; color: #ffffff;}
+#get-from-extension:hover, #load-more:hover { background-color: #4da6ff;}
+#send-new-post { background-color: #ffcc66; color: #ffffff;}
+#send-new-post:hover { background-color: #ffb833;}
 #subscribe-relay, #apply-filter, #clear-filter { background-color: #ffd700; color: #ffffff;}
 #subscribe-relay:hover, #apply-filter:hover, #clear-filter:hover { background-color: #ffc400;}
-#show-settings, #hide-settings { background-color: #999999; color: #ffffff; font-size:0.7rem; font-weight:normal; padding:0.2rem 1rem; margin:0; }
-#show-settings:hover, #hide-settings:hover { background-color: #888888; }
-#cancel-loading { margin: 0.1rem 0rem; cursor: pointer; background-color: #bbeeff; color: #666; font-size: 0.8rem; font-weight: normal; padding: 0.25rem 1rem; border: 0px solid #ddd; border-radius: 999px; white-space: nowrap; transition: background-color 0.3s, color 0.3s; }
+#show-settings, #hide-settings { background-color: #999999; color: #ffffff; font-size:0.7rem; font-weight:normal; padding:0.2rem 1rem; margin:0;}
+#show-settings:hover, #hide-settings:hover { background-color: #888888;}
+#cancel-loading { margin: 0.1rem 0rem; cursor: pointer; background-color: #bbeeff; color: #666; font-size: 0.8rem; font-weight: normal; padding: 0.25rem 1rem; border: 0px solid #ddd; border-radius: 999px; white-space: nowrap; transition: background-color 0.3s, color 0.3s;}
 </style>
 </head>
 <body>
 <div id="header-placeholder"></div>
 <div class="container">
 <a href="https://github.com/ompomz/flowgazer/"><h1>flowgazer</h1></a>
-<p>このページでは、鍵を作って・投稿して・タイムラインを見ることができるよ。作ったのはGemini。</p>
+<p>このページでは、タイムラインを見たり、鍵ペアを作って投稿したり、ふぁぼったりできるよ。作ったのはGemini。</p>
 <div class="flex-container">
 <button id="generate-keypair" style="flex-grow:1;">新しい鍵ペアを生成して試す</button>
 <button id="get-from-extension" style="flex-grow:1;">ブラウザ拡張機能からログイン</button>
@@ -93,7 +92,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
 <option value="wss://relay.nostr.band">
 </datalist>
 <button id="subscribe-relay" style="padding:0.25rem 0rem; width:4rem;">接続</button></div>
-<div style="display: flex; align-items: center; gap: 0.25rem; margin-left: 0.25rem;"><label for="auto-update-toggle">自動更新ON</label><input type="checkbox" id="auto-update-toggle" checked><label for="filter-flowgazer-only">　via flowgazer しぼりこみ</label><input type="checkbox" id="filter-flowgazer-only"></div>
+<div style="display: flex; align-items: center; gap: 0.25rem; margin-left: 0.25rem;"><label for="auto-update-toggle">自動更新ON</label><input type="checkbox" id="auto-update-toggle" checked style="vertical-align: middle;"><label for="filter-flowgazer-only">　via flowgazer しぼりこみ</label><input type="checkbox" id="filter-flowgazer-only" style="vertical-align: middle;"></div>
 <div class="flex-container">
 <textarea id="hex-filter" rows="3" placeholder="投稿者しぼりこみ(npub1…,hex…)"></textarea>
 <div class="flex-container-matome">
@@ -104,7 +103,8 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; 
 </div>
 <ul id="timeline"></ul>
 <button id="cancel-loading" class="hidden full-width">あきらめる</button>
-<button id="load-more" class="loading full-width">もっと見る</button><script src="https://unpkg.com/nostr-tools/lib/nostr.bundle.js"></script>
+<button id="load-more" class="loading full-width">もっと見る</button>
+<script src="https://unpkg.com/nostr-tools/lib/nostr.bundle.js"></script>
 <script src="./stop.js"></script>
 <script>
 // ====================================================================
