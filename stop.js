@@ -1,5 +1,3 @@
-// stop.js
-
 function stopAutoLoading() {
   isAutoLoading = false;
 
@@ -21,14 +19,27 @@ function stopAutoLoading() {
     refreshTimeline();
   }
 
-  // 停止中メッセージを表示
-  const timeline = document.getElementById("timeline");
-  if (timeline) {
-    const msg = document.createElement("li");
-    msg.textContent = "---自動更新を停止中---";
-    msg.classList.add("auto-stop-message");
-    timeline.prepend(msg);
-  }
+  // 停止中メッセージを表示（divを含める）
+ const timeline = document.getElementById("timeline");
+if (timeline) {
+  const li = document.createElement("li");
+  li.className = "auto-stop-message";
+
+  const wrapperDiv = document.createElement("div");
+  wrapperDiv.style.width = "600px";         // 左寄せで幅600px
+  wrapperDiv.style.marginLeft = "0";        // 左寄せ
+  wrapperDiv.style.textAlign = "center";    // 中のテキストを中央寄せ
+  wrapperDiv.style.paddingBottom = "0.5rem";
+  wrapperDiv.style.color = "#666";
+
+  const p = document.createElement("p");
+  p.textContent = "---自動更新を停止中---";
+  p.style.margin = "0";
+
+  wrapperDiv.appendChild(p);
+  li.appendChild(wrapperDiv);
+  timeline.prepend(li);
+}
 
   // 「もっと見る」ボタンのローディング状態を解除
   const loadMoreButton = document.getElementById("load-more");
