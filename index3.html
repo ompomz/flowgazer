@@ -921,7 +921,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // 初期リレーへの接続
   const latestRurl = localStorage.getItem(LS_RELAY_URL_KEY);
-  const defaultRurl = getLanguage() === "ja" ? "wss://relay.barine.co/" : "wss://nos.lol/";
+  const defaultRurl = getLanguage() === "ja" ? "wss://r.kojira.io" : "wss://nos.lol/";
   const initialRurl = latestRurl || defaultRurl;
   relayUrlInput.value = initialRurl;
   subscribeRelay(initialRurl);
