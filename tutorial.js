@@ -26,9 +26,6 @@ document.addEventListener('DOMContentLoaded', () => {
         images[index].classList.add('active');
     }
 
-    // ページ読み込み時にチュートリアルを自動的に表示
-    openTutorial();
-
     // 「閉じる」ボタンでチュートリアルを閉じる
     closeBtn.addEventListener('click', (e) => {
         e.stopPropagation();
