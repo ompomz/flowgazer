@@ -92,7 +92,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd;}
 <option value="wss://relay.nostr.band">
 </datalist>
 <button id="subscribe-relay" style="padding:0.25rem 0rem; width:4rem;">接続</button></div>
-<div style="display: flex; align-items: center; gap: 0.25rem; margin-left: 0.25rem;"><label for="auto-update-toggle">自動更新ON</label><input type="checkbox" id="auto-update-toggle" checked style="vertical-align: middle;"><label for="filter-flowgazer-only">　via flowgazer しぼりこみ</label><input type="checkbox" id="filter-flowgazer-only" style="vertical-align: middle;"><label for="kind-7-content-input" style="margin-left: 0.5rem;">　ふぁぼマーク(1文字まで)</label><input id="kind-7-content-input" type="text" maxlength="1" placeholder="⭐" style="padding:0.25rem; width:3rem; text-align: center;"></div>
+<div style="display: flex; align-items: center; gap: 0.25rem; margin-left: 0.25rem;"><label for="auto-update-toggle">自動更新ON</label><input type="checkbox" id="auto-update-toggle" checked style="vertical-align: middle;"><label for="filter-flowgazer-only">　via flowgazer しぼりこみ</label><input type="checkbox" id="filter-flowgazer-only" style="vertical-align: middle;"><label for="kind-7-content-input" style="margin-left: 0.5rem;">　ふぁぼマーク(1文字まで)</label><input id="kind-7-content-input" type="text" maxlength="1" style="padding:0.25rem; width:3rem; text-align: center;"></div>
 <div class="flex-container">
 <textarea id="hex-filter" rows="3" placeholder="投稿者しぼりこみ(npub1…,hex…)"></textarea>
 <div class="flex-container-matome">
@@ -925,9 +925,9 @@ window.addEventListener('DOMContentLoaded', () => {
   relayUrlInput.value = initialRurl;
   subscribeRelay(initialRurl);
 
-  // ☆の初期値を設定 (変更箇所)
+  // ⭐の初期値を設定 (変更箇所)
   if (kind7ContentInput) {
-    kind7ContentInput.value = '☆';
+    kind7ContentInput.value = '⭐';
   }
 });
 
