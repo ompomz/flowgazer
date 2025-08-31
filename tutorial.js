@@ -1,52 +1,52 @@
 // tutorial.js
 
 document.addEventListener('DOMContentLoaded', () => {
-    
-    const openBtn = document.getElementById('open-tutorial-btn');
-    const overlay = document.getElementById('tutorial-overlay');
-    const closeBtn = document.getElementById('tutorial-close-button');
-    const nextBtn = document.getElementById('next-button');
-    const prevBtn = document.getElementById('prev-button');
-    const images = document.querySelectorAll('.tutorial-image');
-    let currentIndex = 0;
 
-    // チュートリアルを完全に非表示にする関数
-    function closeTutorial() {
-        overlay.style.display = 'none';
-    }
+    const overlay = document.getElementById('tutorial-overlay');
+    const closeBtn = document.getElementById('tutorial-close-button');
+    const nextBtn = document.getElementById('next-button');
+    const prevBtn = document.getElementById('prev-button');
+    const images = document.querySelectorAll('.tutorial-image');
+    let currentIndex = 0;
 
-    // チュートリアルを表示する関数
-    function openTutorial() {
-        overlay.style.display = 'flex';
-    }
+    // チュートリアルを完全に非表示にする関数
+    function closeTutorial() {
+        overlay.style.display = 'none';
+    }
 
-    // 画像を切り替える関数
-    function showImage(index) {
-        images.forEach(img => img.classList.remove('active'));
-        images[index].classList.add('active');
-    }
+    // チュートリアルを表示する関数
+    function openTutorial() {
+        overlay.style.display = 'flex';
+    }
 
-    // チュートリアルを開くボタンのクリックイベント
-    openBtn.addEventListener('click', () => {
-        openTutorial();
-    });
+    // 画像を切り替える関数
+    function showImage(index) {
+        images.forEach(img => img.classList.remove('active'));
+        images[index].classList.add('active');
+    }
 
-    // 「閉じる」ボタンでチュートリアルを閉じる
-    closeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        closeTutorial();
-    });
+    // ページ読み込み時にチュートリアルを自動的に表示
+    openTutorial();
 
-    // 次へボタン
-    nextBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        currentIndex = (currentIndex + 1) % images.length;
-        showImage(currentIndex);
-    });
+    // 「閉じる」ボタンでチュートリアルを閉じる
+    closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeTutorial();
+    });
 
-    // 前へボタン
-    prevBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        currentIndex = (currentIndex - 1 + images.length) % images.length;
-        showImage(currentIndex);
-    });
+    // 次へボタン
+    nextBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        currentIndex = (currentIndex + 1) % images.length;
+        showImage(currentIndex);
+    });
+
+    // 前へボタン
+    prevBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        currentIndex = (currentIndex - 1 + images.length) % images.length;
+        showImage(currentIndex);
+    });
+
+    showImage(currentIndex);
+});
