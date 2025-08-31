@@ -108,10 +108,6 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd;}
 <script src="https://unpkg.com/nostr-tools/lib/nostr.bundle.js"></script>
 <script src="./stop.js"></script>
 <script>
-// ====================================================================
-// グローバルスコープでHTML要素を取得
-// スクリプト全体で再利用するため、ここで一度だけ定義する
-// ====================================================================
 const getFromExtensionButton = document.getElementById('get-from-extension');
 const nsecInput = document.getElementById('nsec');
 const npubLink = document.getElementById('npub-link');
@@ -133,15 +129,12 @@ const clearFilterButton = document.getElementById("clear-filter");
 const loadMoreButton = document.getElementById("load-more");
 const cancelLoadingButton = document.getElementById('cancel-loading');
 const timeline = document.getElementById("timeline");
-const kind7ContentInput = document.getElementById("kind-7-content-input"); // 新規追加
+const kind7ContentInput = document.getElementById("kind-7-content-input");
 
 if (timeline === null) {
   throw new Error("no #timeline");
 }
-
-// ====================================================================
 // グローバル変数・定数
-// ====================================================================
 String.prototype.padStart = String.prototype.padStart ? String.prototype.padStart : function(targetLength, padString) {
   targetLength = Math.floor(targetLength) || 0;
   if (targetLength < this.length) return String(this);
@@ -175,12 +168,11 @@ var MORE_POSTS_SUB_ID = "motherfuncking-more-posts";
 var PROFILE_SUB_ID = "motherfuncking-profile-sub";
 var pubkeysToFetch = new Set();
 var LS_RELAY_URL_KEY = "relayUrl";
-let pressTimer; // 長押しタイマー用の変数
-const likedEventIds = new Set(); // 新規追加: いいねしたイベントIDを保存するSet
+let pressTimer;
+const likedEventIds = new Set();
+let hasSubscribedLikes = false;
 
-// ====================================================================
 // 関数定義
-// ====================================================================
 function getLanguage() {
   return (window.navigator.language || window.navigator.browserLanguage || window.navigator.userLanguage).substring(0, 2);
 }
@@ -496,15 +488,12 @@ function postEventView(nostrEv) {
   view.id = nostrEv.id;
   view.classList.add("event-post");
   
-  // マウス/タッチによる長押しイベントリスナーを追加
-  let pressTimer;
+ let pressTimer;
   view.addEventListener('mousedown', (e) => {
-    // aタグや他のリンク要素上では長押しを無効にする
     if (e.target.tagName === 'A') {
       return;
     }
-    // 左クリック（ボタン0）のみを対象とする
-    if (e.button !== 0) {
+     if (e.button !== 0) {
       return;
     }
     pressTimer = setTimeout(() => {
@@ -580,17 +569,46 @@ function repostEventView(nostrEv) {
   return view;
 }
 
-// 新規追加: kind:7イベントを送信する関数
+async function getMyPubkey() {
+    const nsec = nsecInput.value;
+    if (nsec === '********' && window.nostrSigner) {
+        try {
+            return await window.nostrSigner.getPublicKey();
+        } catch (e) {
+            console.error("NIP-07から公開鍵の取得に失敗:", e);
+            return null;
+        }
+    } else if (nsec && nsec !== '********') {
+        try {
+            const decoded = NostrTools.nip19.decode(nsec);
+            if (decoded.type === 'nsec') {
+                return NostrTools.getPublicKey(decoded.data);
+            }
+        } catch (e) {
+            console.error("秘密鍵のデコードに失敗:", e);
+            return null;
+        }
+    }
+    return null;
+}
+
 async function sendLikeEvent(targetEventId, targetPubkey) {
   const nsec = nsecInput.value;
-  // kind7ContentInputの値が空なら"+"、そうでなければその値を使用
+  if (!hasSubscribedLikes) {
+    const myPubkey = await getMyPubkey();
+    if (myPubkey) {
+        subscribeLikes(myPubkey);
+        hasSubscribedLikes = true;
+    }
+  }
+
   const kind7Content = kind7ContentInput.value.trim() === '' ? '+' : kind7ContentInput.value.trim();
   if (!nsec || nsec === '********') { // 拡張機能でログイン
     try {
       const pubkeyHex = await window.nostrSigner.getPublicKey();
       const likeEvent = {
         kind: 7,
-        content: kind7Content, // ここを修正
+        content: kind7Content,
         created_at: Math.floor(Date.now() / 1000),
         tags: [
           ["e", targetEventId],
@@ -600,7 +618,7 @@ async function sendLikeEvent(targetEventId, targetPubkey) {
       };
       const signedEvent = await window.nostrSigner.signEvent(likeEvent);
       relayWS.send(JSON.stringify(["EVENT", signedEvent]));
-      alert("いいねを送信しました！");
+      alert("ふぁぼった！");
     } catch (err) {
       console.error("NIP-07署名に失敗:", err);
       alert("なんかふぁぼれなかったごめん。");
@@ -615,7 +633,7 @@ async function sendLikeEvent(targetEventId, targetPubkey) {
       const seckey = nsecDecoded.data;
       const likeEvent = {
         kind: 7,
-        content: kind7Content, // ここを修正
+        content: kind7Content,
         created_at: Math.floor(Date.now() / 1000),
         tags: [
           ["e", targetEventId],
@@ -630,6 +648,20 @@ async function sendLikeEvent(targetEventId, targetPubkey) {
       alert("ふぁぼれなかった；；");
     }
   }
+}
+
+function subscribeLikes(myPubkey) {
+    if (!myPubkey || !relayWS || relayWS.readyState !== WebSocket.OPEN) {
+        console.error("Failed to subscribe to likes: Invalid pubkey or relay not open.");
+        return;
+    }
+    const LIKES_SUB_ID = "motherfuncking-likes-sub";
+    const likeFilter = {
+        kinds: [7],
+        authors: [myPubkey],
+    };
+    relayWS.send(JSON.stringify(["REQ", LIKES_SUB_ID, likeFilter]));
+    console.log("Kind:7イベントの購読を開始しました。", myPubkey);
 }
 
 function onEvent(nostrEv, prepend) {
@@ -660,7 +692,6 @@ function onEvent(nostrEv, prepend) {
   }
   // kind:7をサポート対象に追加
   if (nostrEv.kind === 7) {
-    // kind:7イベントのeタグを取得し、likedEventIdsに保存
     const eTag = nostrEv.tags.find(tag => tag[0] === 'e');
     if (eTag) {
       likedEventIds.add(eTag[1]);
@@ -697,7 +728,6 @@ function refreshTimeline() {
     if (e.kind === 1) {
       eventView = postEventView(e);
       if (eventView) {
-        // 新規追加: いいねしたイベントにクラスを追加
         if (likedEventIds.has(e.id)) {
           eventView.classList.add('event-liked');
         }
@@ -715,7 +745,7 @@ function onWSClose() {
 }
 
 function isKnownSubId(subId) {
-  return subId === MAIN_SUB_ID || subId === MORE_POSTS_SUB_ID || subId === PROFILE_SUB_ID;
+  return subId === MAIN_SUB_ID || subId === MORE_POSTS_SUB_ID || subId === PROFILE_SUB_ID || subId === "motherfuncking-likes-sub";
 }
 
 function shouldPrependPost(subId, afterEose) {
@@ -740,14 +770,9 @@ function subscribeRelay(relayUrl, authors) {
   oldestCreatedAt = Number.MAX_VALUE;
   var afterEose = false;
   
-  const myPubkey = nsecInput.value === '********' && window.nostrSigner ? 'nip07-signer' : NostrTools.getPublicKey(NostrTools.nip19.decode(nsecInput.value).data);
-  
   var filters = [{
     kinds: [1, 6],
     limit: 50
-  }, {
-    kinds: [7],
-    authors: [myPubkey],
   }];
 
   if (authors && authors.length > 0) {
@@ -910,17 +935,11 @@ function checkForAutoLoad() {
   }
 }
 
-// ====================================================================
 // イベントリスナー
-// ====================================================================
-
-// ページ読み込み完了時の初期化処理
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('hide-settings').classList.add('hidden');
   document.getElementById('advanced-settings').classList.add('hidden');
   npubLink.style.display = 'none';
-
-  // aタグの属性調整
   const links = document.querySelectorAll('a');
   links.forEach(link => {
     if (!link.target || link.target === '_self') {
@@ -931,32 +950,22 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // チェックボックスの初期化
   flowgazerOnlyCheckbox.checked = false;
-
-  // フィルターの読み込み
   const savedFilter = localStorage.getItem('hexFilterValue');
   if (savedFilter) {
     hexFilterInput.value = savedFilter;
   }
-
-  // 禁止用語リストの取得
   fetchForbiddenWords();
-
-  // 初期リレーへの接続
   const latestRurl = localStorage.getItem(LS_RELAY_URL_KEY);
   const defaultRurl = getLanguage() === "ja" ? "wss://r.kojira.io" : "wss://nos.lol/";
   const initialRurl = latestRurl || defaultRurl;
   relayUrlInput.value = initialRurl;
   subscribeRelay(initialRurl);
-
-  // ⭐の初期値を設定 (変更箇所)
   if (kind7ContentInput) {
     kind7ContentInput.value = '⭐';
   }
 });
 
-// 鍵生成ボタン
 generateButton.addEventListener("click", () => {
   const keys = generateKeypair();
   nsecInput.value = keys.nsec;
@@ -972,7 +981,6 @@ generateButton.addEventListener("click", () => {
   updateCopyIconVisibility();
 });
 
-// nsec入力欄の変更を監視
 nsecInput.addEventListener("input", () => {
   const nsecValue = nsecInput.value.trim();
   if (nsecValue) {
@@ -989,7 +997,6 @@ nsecInput.addEventListener("input", () => {
         return;
       }
     } catch (e) {
-      // 無効なnsecの場合
     }
   }
   npubLink.textContent = '';
@@ -998,7 +1005,6 @@ nsecInput.addEventListener("input", () => {
   updateCopyIconVisibility();
 });
 
-// 公開鍵コピーアイコン
 const copyIcon = document.getElementById('copy-icon');
 if (copyIcon) {
   copyIcon.addEventListener('click', () => {
@@ -1013,7 +1019,6 @@ if (copyIcon) {
   });
 }
 
-// ブラウザ拡張機能から取得ボタン
 getFromExtensionButton.addEventListener('click', async() => {
   if (!window.nostr) {
     alert('NIP-07対応のブラウザ拡張機能が見つかりません。');
@@ -1045,10 +1050,8 @@ getFromExtensionButton.addEventListener('click', async() => {
   }
 });
 
-// 投稿ボタン
 sendPostButton.addEventListener("click", sendeNewPost);
 
-// リレー購読ボタン
 subscribeButton.addEventListener("click", () => {
   if (!autoUpdateToggle.checked) {
     autoUpdateToggle.checked = true;
@@ -1059,7 +1062,6 @@ subscribeButton.addEventListener("click", () => {
   localStorage.setItem(LS_RELAY_URL_KEY, rurl);
 });
 
-// 自動更新トグル
 autoUpdateToggle.addEventListener('change', function() {
   if (this.checked) {
     console.log("自動更新ON");
@@ -1073,13 +1075,11 @@ autoUpdateToggle.addEventListener('change', function() {
   }
 });
 
-// `filter-flowgazer-only` チェックボックス
 flowgazerOnlyCheckbox.addEventListener('change', function() {
   isFlowgazerOnly = this.checked;
   refreshTimeline();
 });
 
-// 詳細設定の表示/非表示
 showSettingsBtn.addEventListener("click", () => {
   settingsArea.classList.remove("hidden");
   showSettingsBtn.classList.add("hidden");
@@ -1092,7 +1092,6 @@ hideSettingsBtn.addEventListener("click", () => {
   showSettingsBtn.classList.remove("hidden");
 });
 
-// 絞り込みボタン
 applyFilterButton.addEventListener("click", () => {
   if (!autoUpdateToggle.checked) {
     autoUpdateToggle.checked = true;
@@ -1104,7 +1103,6 @@ applyFilterButton.addEventListener("click", () => {
   subscribeRelay(rurl, filteredAuthors);
 });
 
-// フィルタークリアボタン
 clearFilterButton.addEventListener("click", () => {
   hexFilterInput.value = "";
   filteredAuthors = null;
@@ -1113,7 +1111,6 @@ clearFilterButton.addEventListener("click", () => {
   subscribeRelay(rurl);
 });
 
-// もっと見るボタン
 loadMoreButton.addEventListener("click", function() {
   if (!relayWS || relayWS.readyState !== WebSocket.OPEN) return;
   if (this.classList.contains("loading")) return;
@@ -1129,7 +1126,6 @@ loadMoreButton.addEventListener("click", function() {
   relayWS.send(JSON.stringify(["REQ", MORE_POSTS_SUB_ID, filter]));
 });
 
-// あきらめるボタン
 cancelLoadingButton.addEventListener('click', function() {
   isAutoLoading = false;
   loadMoreButton.classList.remove('loading');
@@ -1139,7 +1135,6 @@ cancelLoadingButton.addEventListener('click', function() {
   }
 });
 
-// ハッシュチェンジイベント
 window.addEventListener("hashchange", () => {
   if (window.location.hash.length === 0) return;
   const hash = window.location.hash.substring(1);
@@ -1154,7 +1149,6 @@ window.addEventListener("hashchange", () => {
   target.classList.add("event-highlighted");
 });
 
-// npubリンク
 npubLink.addEventListener("click", event => {
   window.open(npubLink.href, "_blank");
 });
