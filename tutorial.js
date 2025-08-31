@@ -8,49 +8,37 @@ document.addEventListener('DOMContentLoaded', () => {
   const images = document.querySelectorAll('.tutorial-image');
   let currentIndex = 0;
 
-  function openTutorial() {
-    overlay.classList.remove('minimized');
+  // チュートリアルを完全に非表示にする関数
+  function closeTutorial() {
+    overlay.style.display = 'none';
   }
 
-  function minimizeTutorial() {
-    overlay.classList.add('minimized');
-  }
-
+  // 画像を切り替える関数
   function showImage(index) {
     images.forEach(img => img.classList.remove('active'));
     images[index].classList.add('active');
   }
 
+  // 「閉じる」ボタンでチュートリアルを閉じる
   closeBtn.addEventListener('click', (e) => {
-    e.stopPropagation(); // イベントの伝播を停止
-    minimizeTutorial();
+    e.stopPropagation();
+    closeTutorial();
   });
-
-  overlay.addEventListener('click', (e) => {
-    // 最小化された状態でのみ実行
-    if (overlay.classList.contains('minimized')) {
-      if (e.target.closest('#tutorial-modal')) {
-        openTutorial();
-      }
-    } else {
-      // 最小化されていない状態で背景がクリックされたら閉じる
-      if (!e.target.closest('#tutorial-modal')) {
-        minimizeTutorial();
-      }
-    }
-  });
-
+  
+  // 次へボタン
   nextBtn.addEventListener('click', (e) => {
-    e.stopPropagation(); // イベントの伝播を停止
+    e.stopPropagation();
     currentIndex = (currentIndex + 1) % images.length;
     showImage(currentIndex);
   });
 
+  // 前へボタン
   prevBtn.addEventListener('click', (e) => {
-    e.stopPropagation(); // イベントの伝播を停止
+    e.stopPropagation();
     currentIndex = (currentIndex - 1 + images.length) % images.length;
     showImage(currentIndex);
   });
 
+  // 初期表示
   showImage(currentIndex);
 });
