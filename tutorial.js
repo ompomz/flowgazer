@@ -21,22 +21,33 @@ document.addEventListener('DOMContentLoaded', () => {
     images[index].classList.add('active');
   }
 
-  closeBtn.addEventListener('click', () => {
+  closeBtn.addEventListener('click', (e) => {
+    e.stopPropagation(); // イベントの伝播を停止
     minimizeTutorial();
   });
 
   overlay.addEventListener('click', (e) => {
-    if (overlay.classList.contains('minimized') && e.target.closest('#tutorial-modal')) {
-      openTutorial();
+    // 最小化された状態でのみ実行
+    if (overlay.classList.contains('minimized')) {
+      if (e.target.closest('#tutorial-modal')) {
+        openTutorial();
+      }
+    } else {
+      // 最小化されていない状態で背景がクリックされたら閉じる
+      if (!e.target.closest('#tutorial-modal')) {
+        minimizeTutorial();
+      }
     }
   });
 
-  nextBtn.addEventListener('click', () => {
+  nextBtn.addEventListener('click', (e) => {
+    e.stopPropagation(); // イベントの伝播を停止
     currentIndex = (currentIndex + 1) % images.length;
     showImage(currentIndex);
   });
 
-  prevBtn.addEventListener('click', () => {
+  prevBtn.addEventListener('click', (e) => {
+    e.stopPropagation(); // イベントの伝播を停止
     currentIndex = (currentIndex - 1 + images.length) % images.length;
     showImage(currentIndex);
   });
