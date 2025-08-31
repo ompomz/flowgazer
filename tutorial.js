@@ -1,3 +1,5 @@
+// tutorial.js
+
 document.addEventListener('DOMContentLoaded', () => {
   const overlay = document.getElementById('tutorial-overlay');
   const closeBtn = document.getElementById('tutorial-close-button');
