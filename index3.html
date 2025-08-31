@@ -46,6 +46,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd;}
 #show-settings, #hide-settings { background-color: #999999; color: #ffffff; font-size:0.7rem; font-weight:normal; padding:0.2rem 1rem; margin:0;}
 #show-settings:hover, #hide-settings:hover { background-color: #888888;}
 #cancel-loading { margin: 0.1rem 0rem; cursor: pointer; background-color: #bbeeff; color: #666; font-size: 0.8rem; font-weight: normal; padding: 0.25rem 1rem; border: 0px solid #ddd; border-radius: 999px; white-space: nowrap; transition: background-color 0.3s, color 0.3s;}
+.event-liked { border-right: 3px solid #ffd700;}
 </style>
 </head>
 <body>
@@ -175,6 +176,7 @@ var PROFILE_SUB_ID = "motherfuncking-profile-sub";
 var pubkeysToFetch = new Set();
 var LS_RELAY_URL_KEY = "relayUrl";
 let pressTimer; // 長押しタイマー用の変数
+const likedEventIds = new Set(); // 新規追加: いいねしたイベントIDを保存するSet
 
 // ====================================================================
 // 関数定義
@@ -630,7 +632,6 @@ async function sendLikeEvent(targetEventId, targetPubkey) {
   }
 }
 
-
 function onEvent(nostrEv, prepend) {
   if (!window.NostrTools.verifyEvent(nostrEv)) {
     console.error("nostr event with invalid signature:", nostrEv);
@@ -659,8 +660,13 @@ function onEvent(nostrEv, prepend) {
   }
   // kind:7をサポート対象に追加
   if (nostrEv.kind === 7) {
-    // kind:7イベントはタイムラインに表示しない
-    // いいねのカウント機能などを追加する際に利用
+    // kind:7イベントのeタグを取得し、likedEventIdsに保存
+    const eTag = nostrEv.tags.find(tag => tag[0] === 'e');
+    if (eTag) {
+      likedEventIds.add(eTag[1]);
+    }
+    // タイムラインの再描画
+    refreshTimeline();
     return;
   }
   if (supportedKinds.indexOf(nostrEv.kind) === -1) {
@@ -690,7 +696,13 @@ function refreshTimeline() {
     let eventView;
     if (e.kind === 1) {
       eventView = postEventView(e);
-      if (eventView) timeline.appendChild(eventView);
+      if (eventView) {
+        // 新規追加: いいねしたイベントにクラスを追加
+        if (likedEventIds.has(e.id)) {
+          eventView.classList.add('event-liked');
+        }
+        timeline.appendChild(eventView);
+      }
     } else if (e.kind === 6) {
       eventView = repostEventView(e);
       if (eventView) timeline.appendChild(eventView);
@@ -727,12 +739,25 @@ function subscribeRelay(relayUrl, authors) {
   pubkeysToFetch = new Set();
   oldestCreatedAt = Number.MAX_VALUE;
   var afterEose = false;
-  var filter = {
+  
+  const myPubkey = nsecInput.value === '********' && window.nostrSigner ? 'nip07-signer' : NostrTools.getPublicKey(NostrTools.nip19.decode(nsecInput.value).data);
+  
+  var filters = [{
     kinds: [1, 6],
     limit: 50
-  };
-  if (authors && authors.length > 0) filter.authors = authors;
-  relayWS.addEventListener("open", () => relayWS.send(JSON.stringify(["REQ", MAIN_SUB_ID, filter])));
+  }, {
+    kinds: [7],
+    authors: [myPubkey],
+  }];
+
+  if (authors && authors.length > 0) {
+    filters[0].authors = authors;
+  }
+  
+  relayWS.addEventListener("open", () => {
+    relayWS.send(JSON.stringify(["REQ", MAIN_SUB_ID, ...filters]));
+  });
+  
   relayWS.addEventListener("message", ev => {
     try {
       var r2cMsg = JSON.parse(ev.data);
