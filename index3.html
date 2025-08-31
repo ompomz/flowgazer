@@ -60,20 +60,21 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd;}
 </div>
 <span style="display:block; margin: 0.5rem 0rem;">秘密鍵（nsec）:</span>
 <div style="display: flex; align-items: center; gap: 0.25rem;">
-<input id="nsec" type="password" placeholder="nsec1..." style="margin-bottom:0.5rem; flex-grow:1;"><svg id="copy-nsec-icon" class="hidden" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer; vertical-align: middle;" onclick="copyNsec()"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></div>
+ <input id="nsec" type="password" placeholder="nsec1..." style="margin-bottom:0.5rem; flex-grow:1;">
+ <svg id="copy-nsec-icon" class="hidden" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer; vertical-align: middle;">
+ <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+ <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+ </svg>
+</div>
 <p id="warning-message" class="hidden" style="margin-top:-0.5rem;margin-bottom:0.5rem;">⚠️秘密鍵を紛失すると、そのアカウントは二度と使えません。大事にしてね。</p>
 <div style="display: flex;">
-<span style="white-space: nowrap;">公開鍵（npub）:</span>
-<span style="word-break: break-all;">
-<a id="npub-link" class="npub-link" target="_blank" rel="noreferrer"></a>
-<svg id="copy-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" 
-viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" 
-stroke-linecap="round" stroke-linejoin="round" 
-style="cursor: pointer; margin-left: 0.25rem; vertical-align: middle;" class="hidden">
-<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-</svg>
-</span>
+ <span style="white-space: nowrap;">公開鍵（npub）:</span>
+ <span style="word-break: break-all;">
+ <a id="npub-link" class="npub-link" target="_blank" rel="noreferrer"></a>
+ <svg id="copy-npub-icon" class="hidden" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer; margin-left: 0.25rem; vertical-align: middle;">
+ <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+ <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+ </svg></span>
 </div>
 <textarea id="new-post-content" rows="3" placeholder="いまなにしてる？" class="full-width" style="margin-top:0.5rem;"></textarea>
 <button id="send-new-post" class="full-width">投稿</button>
