@@ -50,8 +50,3 @@ document.addEventListener('DOMContentLoaded', () => {
         currentIndex = (currentIndex - 1 + images.length) % images.length;
         showImage(currentIndex);
     });
-
-    // 初期状態はチュートリアルを非表示にしておく
-    closeTutorial();
-    showImage(currentIndex);
-});
