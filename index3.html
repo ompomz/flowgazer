@@ -52,10 +52,10 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd;}
 #image-container{text-align:center; }
 .tutorial-image{display:none;max-width:100%;height:auto;}
 .tutorial-image.active{display:block;}
-#tutorial-navigation{display:flex;justify-content:space-between;margin:0.5rem;}
-#prev-button, #next-button { font-size: 1.2rem; color: #00796b; background-color: rgba(224, 242, 241, 0.7); border: none; padding: 0.25rem; border-radius: 50%; cursor: pointer; transition: background-color 0.3s ease, transform 0.2s ease; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15); }
-#prev-button:hover, #next-button:hover { background-color: rgba(224, 242, 241, 0.9);}
-#tutorial-close-button { position: absolute; top: 10px; right: 10px; font-size: 16px; color: #00796b; background-color: #e0f2f1; padding: 8px 16px; border-radius: 999px; cursor: pointer; border: none; z-index: 10000; white-space: nowrap; transition: background-color 0.3s;} 
+#tutorial-navigation{display:flex; justify-content:space-between; margin:1rem;}
+#prev-button, #next-button { width: 2rem; height: 2rem; display: inline-flex; align-items: center; justify-content: center; font-size: 1rem; color: rgba(224, 242, 241, 1); background-color: rgba(0, 121, 107, 0.7); border: none; border-radius: 50%; cursor: pointer; transition: background-color 0.3s ease, transform 0.2s ease; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15); }
+#prev-button:hover, #next-button:hover { background-color: rgba(0, 121, 107, 0.9);}
+#tutorial-close-button { position: absolute; top:0.5rem; right: 0.5rem; font-size: 0.9rem; font-weight:bold; color: #00796b; background-color: #e0f2f1; padding: 0.25rem 0.5rem; border-radius: 999px; cursor: pointer; border: none; z-index: 10000; white-space: nowrap; transition: background-color 0.3s;} 
 #tutorial-close-button:hover { background-color: rgba(224, 242, 241, 0.7);}
 </style>
 </head>
@@ -65,7 +65,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd;}
 <div class="container">
 <div style="display: flex; justify-content: space-between; align-items: flex-end;">
 <a href="https://github.com/ompomz/flowgazer/"><h1>flowgazer</h1></a>
-<button id="open-tutorial-btn">チュートリアルをひらく</button>
+<button id="open-tutorial-btn" style="color: #00796b; background-color: #e0f2f1;">チュートリアルをひらく</button>
 </div>
 <p>このページでは、タイムラインを見たり、鍵ペアを作って投稿したり、ふぁぼったりできるよ。作ったのはGemini。</p>
 <div class="flex-container">
