@@ -1,56 +1,45 @@
-// tutorial.js
-
 document.addEventListener('DOMContentLoaded', () => {
+  const openBtn = document.getElementById('open-tutorial-btn');
+  const overlay = document.getElementById('tutorial-overlay');
+  const closeBtn = document.getElementById('tutorial-close-button');
+  const images = document.querySelectorAll('.tutorial-image');
+  const dots = document.querySelectorAll('.dot');
+  let currentIndex = 0;
 
-    const openBtn = document.getElementById('open-tutorial-btn'); // ボタン要素を取得
-    const overlay = document.getElementById('tutorial-overlay');
-    const closeBtn = document.getElementById('tutorial-close-button');
-    const nextBtn = document.getElementById('next-button');
-    const prevBtn = document.getElementById('prev-button');
-    const images = document.querySelectorAll('.tutorial-image');
-    let currentIndex = 0;
+  function closeTutorial() {
+    overlay.style.display = 'none';
+  }
 
-    // チュートリアルを完全に非表示にする関数
-    function closeTutorial() {
-        overlay.style.display = 'none';
-    }
+  function openTutorial() {
+    overlay.style.display = 'flex';
+  }
 
-    // チュートリアルを表示する関数
-    function openTutorial() {
-        overlay.style.display = 'flex';
-    }
+  function showImage(index) {
+    images.forEach(img => img.classList.remove('active'));
+    images[index].classList.add('active');
+    
+    dots.forEach(dot => dot.classList.remove('active'));
+    dots[index].classList.add('active');
+    
+    currentIndex = index;
+  }
 
-    // 画像を切り替える関数
-    function showImage(index) {
-        images.forEach(img => img.classList.remove('active'));
-        images[index].classList.add('active');
-    }
+  closeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeTutorial();
+  });
 
-    // 「閉じる」ボタンでチュートリアルを閉じる
-    closeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        closeTutorial();
+  openBtn.addEventListener('click', () => {
+    openTutorial();
+    showImage(0); // チュートリアルを開く際に最初の画像に戻す
+  });
+
+  dots.forEach(dot => {
+    dot.addEventListener('click', () => {
+      const dotIndex = parseInt(dot.dataset.index);
+      showImage(dotIndex);
     });
+  });
 
-    // 「チュートリアルをひらく」ボタンのクリックイベント
-    // ユーザーが閉じた後、このボタンで再表示できるようにする
-    openBtn.addEventListener('click', () => {
-        openTutorial();
-    });
-
-    // 次へボタン
-    nextBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        currentIndex = (currentIndex + 1) % images.length;
-        showImage(currentIndex);
-    });
-
-    // 前へボタン
-    prevBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        currentIndex = (currentIndex - 1 + images.length) % images.length;
-        showImage(currentIndex);
-    });
-
-    showImage(currentIndex);
+  showImage(currentIndex);
 });
