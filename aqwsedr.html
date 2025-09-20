@@ -130,7 +130,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd;}
 <button id="load-more" class="loading full-width">もっと見る</button>
 <div id="modal" class="modal">
     <div class="modal-content">
-        <span class="close-button">&times;</span>
+<span class="close-button" id="close-button">&times;</span>
         <img id="modal-image" src="" alt="拡大画像">
     </div>
 </div>
@@ -1199,6 +1199,20 @@ function createElementFromUrl(url, text) {
   if (e.target === this) {
     this.style.display = "none";
   }
+};
+function externalLink(url, text) {
+  var a = document.createElement("a");
+  a.href = url;
+  a.target = "_blank";
+  a.rel = "noreferrer";
+  a.textContent = text;
+  return a;
+}
+ 
+window.onload = function() {
+  document.getElementById('close-button').onclick = function() {
+    document.getElementById('modal').style.display = "none";
+  };
 };
 
  
