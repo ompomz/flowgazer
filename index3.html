@@ -349,20 +349,6 @@ function indexOfFirstUnmatchingCloseParen(url) {
  return -1
 }
 
-function urlLinkElems(url) {
- var splitIdx = indexOfFirstUnmatchingCloseParen(url);
- var finalUrl = splitIdx === -1 ? url : url.substring(0, splitIdx);
- var rest = splitIdx === -1 ? "" : url.substring(splitIdx);
- var link = externalLink(finalUrl, finalUrl);
- link.classList.add("nostr-ref");
- if (rest.length === 0) {
- return [link]
- }
- var restSpan = document.createElement("span");
- restSpan.textContent = rest;
- return [link, restSpan]
-}
-
 function extractEventRef(nip19Decoded) {
  switch (nip19Decoded.type) {
  case "nevent":
@@ -554,8 +540,9 @@ function postEventView(nostrEv) {
  view.appendChild(metadataView(nostrEv));
  inReplyToElems(nostrEv).forEach(e => view.appendChild(e));
  var contentElems = nostrEv.content.split(contentRefPattern).filter(s => s !== undefined && s.length > 0).map(s => {
- if (s.indexOf("http") === 0)
- return urlLinkElems(s);
+ if (s.indexOf("http") === 0) {
+        return [createElementFromUrl(s, s)]; 
+    }
  if (s.indexOf("nostr:") === 0)
  return nostrUriElems(s, nostrEv);
  if (s.charAt(0) === ":" && s.charAt(s.length - 1) === ":")
