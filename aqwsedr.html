@@ -60,6 +60,11 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd;}
 .dot-navigation { text-align: center;}
 .dot { height: 1rem; width: 1rem; background-color: #e0f2f1; border-radius: 50%; display: inline-block; margin: 0 5px; cursor: pointer; transition: background-color 0.3s ease; }
 .dot.active { background-color: #00796b; }
+.modal { display: none; position: fixed; z-index: 1; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0, 0, 0, 0.2); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
+.modal-content { margin: auto; display: block; max-width: 80%; max-height: 80vh; width: 80%; }
+.modal-image { width: 100%; height: auto; display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+.close-button { color: #fff; font-size: 40px; font-weight: 700; cursor: pointer; transition: 0.3s; }
+.close-button:hover, .close-button:focus { color: #eee; text-decoration: none; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -123,6 +128,12 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd;}
 <ul id="timeline"></ul>
 <button id="cancel-loading" class="hidden full-width">あきらめる</button>
 <button id="load-more" class="loading full-width">もっと見る</button>
+<div id="modal" class="modal">
+    <div class="modal-content">
+        <span class="close-button">&times;</span>
+        <img id="modal-image" src="" alt="拡大画像">
+    </div>
+</div>
 <script src="https://ompomz.github.io/header/loadHeader.js"></script>
 <script src="./tutorial.js"></script>
 <script src="./stop.js"></script>
@@ -260,8 +271,20 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd;}
     li.classList.add("event");
     return li;
   }
-
-  function externalLink(url, text) {
+ 
+function createElementFromUrl(url, text) {
+  // 画像かどうかを判定（拡張子でチェック）
+  if (url.match(/\.(jpg|jpeg|png|gif)$/i)) {
+    var img = document.createElement("img");
+    img.src = url;
+    img.alt = text;
+    img.style.cursor = "pointer";
+    img.onclick = function() {
+      openModal(this); // モーダルで表示
+    };
+    return img;
+  } else {
+    // 通常のリンク（元の externalLink の内容）
     var a = document.createElement("a");
     a.href = url;
     a.target = "_blank";
@@ -269,6 +292,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd;}
     a.textContent = text;
     return a;
   }
+}
 
   function timestampView(unixtime, eventId) {
     var ts = new Date(unixtime * 1000);
@@ -1165,6 +1189,19 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd;}
   npubLink.addEventListener("click", event => {
     window.open(npubLink.href, "_blank");
   });
+
+ document.getElementById('close-button').onclick = function() {
+  document.getElementById('modal').style.display = "none";
+};
+
+ document.getElementById('modal').onclick = function(e) {
+  // 画像やボタン以外の場所をクリックしたら閉じる
+  if (e.target === this) {
+    this.style.display = "none";
+  }
+};
+
+ 
 </script>
 <div id="tutorial-overlay">
   <div id="tutorial-modal">
