@@ -952,6 +952,14 @@ window.addEventListener('DOMContentLoaded', () => {
  kind7ContentInput.value = '⭐'
  }
  updateCopyIconVisibility()
+    document.getElementById('close-button').onclick = function() {
+        document.getElementById('modal').style.display = "none"
+    };
+    document.getElementById('modal').onclick = function(e) {
+        if (e.target === this) {
+            this.style.display = "none"
+        }
+    };
 });
 
 generateButton.addEventListener("click", () => {
@@ -1178,37 +1186,7 @@ window.addEventListener("hashchange", () => {
 npubLink.addEventListener("click", event => {
  window.open(npubLink.href, "_blank")
 });
-document.getElementById('close-button').onclick = function() {
- document.getElementById('modal').style.display = "none"
-};
-document.getElementById('modal').onclick = function(e) {
- if (e.target === this) {
- this.style.display = "none"
- }
-}
 </script>
-<div id="modal" class="modal">
- <div class="modal-content">
-<span class="close-button" id="close-button">&times;</span>
- <img id="modal-image" src="" alt="拡大画像">
- </div>
-</div>
-<div id="tutorial-overlay">
- <div id="tutorial-modal">
- <div id="tutorial-close-button">とじる</div>
- <div id="tutorial-content">
- <div id="image-container">
- <img src="image1.png" class="tutorial-image active">
- <img src="image2.png" class="tutorial-image">
- <img src="image3.png" class="tutorial-image">
- </div>
- <div id="dot-navigation" class="dot-navigation">
- <span class="dot active" data-index="0"></span>
- <span class="dot" data-index="1"></span>
- <span class="dot" data-index="2"></span>
- </div>
- </div>
- </div>
-</div>
+<div id="modal" class="modal"><div class="modal-content"><span class="close-button" id="close-button">&times;</span><img id="modal-image" src="" alt="拡大画像"></div></div><div id="tutorial-overlay"><div id="tutorial-modal"><div id="tutorial-close-button">とじる</div><div id="tutorial-content"><div id="image-container"><img src="image1.png" class="tutorial-image active"><img src="image2.png" class="tutorial-image"><img src="image3.png" class="tutorial-image"></div><div id="dot-navigation" class="dot-navigation"><span class="dot active" data-index="0"></span><span class="dot" data-index="1"></span><span class="dot" data-index="2"></span></div></div></div></div>
 </body>
 </html>
