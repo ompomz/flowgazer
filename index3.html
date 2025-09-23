@@ -60,10 +60,16 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd;}
 .dot-navigation { text-align: center;}
 .dot { height: 1rem; width: 1rem; background-color: #e0f2f1; border-radius: 50%; display: inline-block; margin: 0 5px; cursor: pointer; transition: background-color 0.3s ease; }
 .dot.active { background-color: #00796b; }
+.modal{display:none;position:fixed;z-index:1;left:0;top:0;width:100%;height:100%;overflow:auto;background-color:rgba(0,0,0,0.2);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);}
+.modal-content{margin:auto;display:block;max-width:80%;max-height:80vh;width:80%;}
+.modal-image{width:auto;height:auto;max-width:100%;max-height:100%;object-fit:contain;display:block;margin:auto;}
+.close-button{color:#fff;font-size:40px;font-weight:700;cursor:pointer;transition:0.3s;}
+.close-button:hover,.close-button:focus{color:#eee;text-decoration:none;cursor:pointer;}
 </style>
 </head>
 <body>
 <div id="header-placeholder"></div>
+<div id="modal-placeholder"></div>
 <div class="container">
 <div style="display: flex; justify-content: space-between; align-items: flex-start;">
 <a href="https://github.com/ompomz/flowgazer/"><h1>flowgazer</h1></a>
@@ -124,6 +130,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd;}
 <button id="cancel-loading" class="hidden full-width">あきらめる</button>
 <button id="load-more" class="loading full-width">もっと見る</button>
 <script src="https://ompomz.github.io/header/loadHeader.js"></script>
+<script src="https://ompomz.github.io/modal.js"></script>
 <script src="./tutorial.js"></script>
 <script src="./stop.js"></script>
 <script src="https://unpkg.com/nostr-tools/lib/nostr.bundle.js"></script>
@@ -332,21 +339,49 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd;}
     }
     return -1;
   }
-
-  function urlLinkElems(url) {
+  function urlLinkElems(url){
     var splitIdx = indexOfFirstUnmatchingCloseParen(url);
-    var finalUrl = splitIdx === -1 ? url : url.substring(0, splitIdx);
-    var rest = splitIdx === -1 ? "" : url.substring(splitIdx);
-    var link = externalLink(finalUrl, finalUrl);
-    link.classList.add("nostr-ref");
-    if (rest.length === 0) {
-      return [link];
-    }
-    var restSpan = document.createElement("span");
-    restSpan.textContent = rest;
-    return [link, restSpan];
-  }
+    var finalUrl = splitIdx == -1 ? url : url.substring(0, splitIdx);
+    var rest = splitIdx == -1 ? "" : url.substring(splitIdx);
 
+    // 画像ファイルのURLかチェック
+    const isImage = (finalUrl.match(/\.(jpeg|jpg|gif|png|webp|avif)$/i) !== null);
+
+    if (isImage) {
+        // 画像の場合、サムネイルを表示してクリックイベントを設定
+        var img = document.createElement("img");
+        img.src = finalUrl; // サムネイルとして同じURLを使用
+        img.alt = "添付画像";
+        img.classList.add("nostr-image-thumb");
+        img.addEventListener('click', () => {
+            // openModal関数を呼び出してモーダルを開く
+            openModal(finalUrl);
+        });
+        
+        // 元のURLへのリンクも追加
+        var link = externalLink(finalUrl, "画像リンク");
+        link.classList.add("nostr-ref");
+
+        if (rest.length === 0) {
+            return [img, link];
+        } else {
+            var restSpan = document.createElement("span");
+            restSpan.textContent = rest;
+            return [img, link, restSpan];
+        }
+    } else {
+        // 画像でない場合、通常のリンクとして処理
+        var link = externalLink(finalUrl, finalUrl);
+        link.classList.add("nostr-ref");
+        if (rest.length === 0) {
+            return [link];
+        } else {
+            var restSpan = document.createElement("span");
+            restSpan.textContent = rest;
+            return [link, restSpan];
+        }
+    }
+}
   function extractEventRef(nip19Decoded) {
     switch (nip19Decoded.type) {
       case "nevent":
@@ -538,15 +573,22 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd;}
     });
     view.appendChild(metadataView(nostrEv));
     inReplyToElems(nostrEv).forEach(e => view.appendChild(e));
-    var contentElems = nostrEv.content.split(contentRefPattern)
-      .filter(s => s !== undefined && s.length > 0)
-      .map(s => {
-        if (s.indexOf("http") === 0) return urlLinkElems(s);
-        if (s.indexOf("nostr:") === 0) return nostrUriElems(s, nostrEv);
-        if (s.charAt(0) === ":" && s.charAt(s.length - 1) === ":") return customEmojiElems(s, nostrEv);
-        return [document.createTextNode(s)];
-      });
-    contentElems.forEach(elems => elems.forEach(e => view.appendChild(e)));
+   // contentElemsの生成部分を修正
+var contentElems = nostrEv.content.split(contentRefPattern).filter(s => s !== undefined && s.length > 0).flatMap(s => {
+    if (s.indexOf("http") === 0) {
+        // urlLinkElemsからの返り値を直接展開
+        return urlLinkElems(s);
+    }
+    if (s.indexOf("nostr:") === 0) {
+        return nostrUriElems(s, nostrEv);
+    }
+    if (s.charAt(0) === ":" && s.charAt(s.length - 1) === ":") {
+        return customEmojiElems(s, nostrEv);
+    }
+    return [document.createTextNode(s)];
+});
+
+contentElems.forEach(elem => view.appendChild(elem));
     return view;
   }
 
