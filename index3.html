@@ -339,7 +339,8 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd;}
     }
     return -1;
   }
-  function urlLinkElems(url){
+
+function urlLinkElems(url){
     var splitIdx = indexOfFirstUnmatchingCloseParen(url);
     var finalUrl = splitIdx == -1 ? url : url.substring(0, splitIdx);
     var rest = splitIdx == -1 ? "" : url.substring(splitIdx);
@@ -348,26 +349,28 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd;}
     const isImage = (finalUrl.match(/\.(jpeg|jpg|gif|png|webp|avif)$/i) !== null);
 
     if (isImage) {
-        // 画像の場合、サムネイルを表示してクリックイベントを設定
-        var img = document.createElement("img");
-        img.src = finalUrl; // サムネイルとして同じURLを使用
-        img.alt = "添付画像";
-        img.classList.add("nostr-image-thumb");
-        img.addEventListener('click', () => {
-            // openModal関数を呼び出してモーダルを開く
+        // 画像の場合、"expand image"テキストのリンクを生成
+        var expandLink = document.createElement("a");
+        expandLink.textContent = "[expand image]";
+        expandLink.href = "#"; // リンク先を無効にする
+        expandLink.classList.add("nostr-ref");
+        
+        // クリックイベントを設定してモーダルを開く
+        expandLink.addEventListener('click', (e) => {
+            e.preventDefault(); // リンクのデフォルト動作（ページ遷移など）を防止
             openModal(finalUrl);
         });
-        
-        // 元のURLへのリンクも追加
-        var link = externalLink(finalUrl, "画像リンク");
+
+        // "expand image"リンクと元のURLへのリンクを返す
+        var link = externalLink(finalUrl, "画像URL");
         link.classList.add("nostr-ref");
 
         if (rest.length === 0) {
-            return [img, link];
+            return [expandLink, document.createTextNode(" "), link];
         } else {
             var restSpan = document.createElement("span");
             restSpan.textContent = rest;
-            return [img, link, restSpan];
+            return [expandLink, document.createTextNode(" "), link, restSpan];
         }
     } else {
         // 画像でない場合、通常のリンクとして処理
@@ -382,6 +385,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd;}
         }
     }
 }
+ 
   function extractEventRef(nip19Decoded) {
     switch (nip19Decoded.type) {
       case "nevent":
