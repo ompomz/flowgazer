@@ -27,14 +27,25 @@ export const updateProfile = (nostrEv, profiles) => {
     console.error("updateProfile関数はKind:0イベントのみを受け付けます。");
     return;
   }
+const pubkey = nostrEv.pubkey;
 
-  try {
-    const profileContent = JSON.parse(nostrEv.content);
-    profiles[nostrEv.pubkey] = profileContent;
-    // console.log(`公開鍵: ${nostrEv.pubkey.substring(0, 8)}... のプロファイルを更新しました。`);
-  } catch (error) {
-    console.error("プロフィールコンテンツのパースに失敗しました:", error);
+  // 既にプロファイルが存在し、かつ受信したイベントが古い場合は無視する
+  if (profiles[pubkey] && profiles[pubkey].created_at) {
+    // 既に保存されているプロファイルの created_at (秒) と比較
+    if (profiles[pubkey].created_at >= nostrEv.created_at) {
+      // console.log(`公開鍵: ${pubkey.substring(0, 8)}... の古いプロファイルをスキップしました。`);
+      return;
+    }
   }
+try {
+  const profileContent = JSON.parse(nostrEv.content);
+        profiles[nostrEv.pubkey] = {
+            ...profileContent,
+            created_at: nostrEv.created_at
+        };
+    } catch (error) {
+        console.error("プロフィールコンテンツのパースに失敗しました:", error);
+    }
 };
 
 /**
