@@ -110,9 +110,7 @@ li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd;}
 <datalist id="relay-suggestions">
 <option value="wss://r.kojira.io/">
 <option value="wss://yabu.me/">
-<option value="wss://relay-jp.nostr.wirednet.jp/">
-<option value="wss://relay.barine.co/">
-<option value="wss://relay.damus.io">
+<option value="wss://relay.damus.io/">
 <option value="wss://nos.lol/">
 <option value="wss://relay.nostr.band/">
 </datalist>
@@ -909,7 +907,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   fetchForbiddenWords();
   const latestRurl = localStorage.getItem(LS_RELAY_URL_KEY);
-  const defaultRurl = getLanguage() === "ja" ? "wss://r.kojira.io" : "wss://nos.lol/";
+  const defaultRurl = getLanguage() === "ja" ? "wss://r.kojira.io/" : "wss://nos.lol/";
   const initialRurl = latestRurl || defaultRurl;
   relayUrlInput.value = initialRurl;
   subscribeRelay(initialRurl);

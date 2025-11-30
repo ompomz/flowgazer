@@ -9,8 +9,8 @@ const pubkeysInProgress = new Set();
  * 優先度の高い順に並べています。
  */
 const PROFILE_RELAYS = [
-  "wss://relay.nostr.band",
-  "wss://relay.damus.io"
+  "wss://relay.nostr.band/",
+  "wss://relay.damus.io/"
 ];
 
 /**
