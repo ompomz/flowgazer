@@ -17,6 +17,9 @@ class DataStore {
     this.followingPubkeys = new Set();    // フォロー中のpubkey
     this.likedByMeIds = new Set();        // 自分がふぁぼった投稿ID
 
+    // ★ 追加: 自分の投稿専用配列（合成用）
+    this.selfFeed = []; // 自分のkind:1投稿を時系列順に保持
+
     // リアクションカウント
     this.reactionCounts = new Map(); // eventId -> { reposts: 0, reactions: 0 }
 
@@ -65,9 +68,11 @@ class DataStore {
     // kind:1, 6のみ対象
     if (event.kind !== 1 && event.kind !== 6) return;
 
-    // グローバル
-    if (event.created_at < this.oldestTimestamps.global) {
-      this.oldestTimestamps.global = event.created_at;
+    // ★ Global: 自分の投稿は除外
+    if (event.pubkey !== myPubkey) {
+      if (event.created_at < this.oldestTimestamps.global) {
+        this.oldestTimestamps.global = event.created_at;
+      }
     }
 
     // フォロー中
@@ -94,6 +99,13 @@ class DataStore {
     // 自分の投稿
     if (event.kind === 1 && event.pubkey === myPubkey) {
       this.myPostIds.add(event.id);
+      
+      // ★ selfFeedにも追加（重複チェック）
+      if (!this.selfFeed.find(e => e.id === event.id)) {
+        this.selfFeed.push(event);
+        // 時系列順に保つ
+        this.selfFeed.sort((a, b) => b.created_at - a.created_at);
+      }
     }
 
     // 自分が受け取ったkind:7
@@ -115,7 +127,7 @@ class DataStore {
       this.updateReactionCount(event);
     }
 
-    // kind:6（リポスト）のカウント
+    // kind:6(リポスト)のカウント
     if (event.kind === 6) {
       this.updateReactionCount(event);
     }
@@ -172,21 +184,24 @@ class DataStore {
 
     switch (tab) {
       case 'global':
-        // 全イベント（kind:1, 6）
+        // ★ 自分の投稿を除外
         eventIds = Array.from(this.events.keys())
           .filter(id => {
             const ev = this.events.get(id);
-            return ev.kind === 1 || ev.kind === 6;
+            const myPubkey = window.nostrAuth?.pubkey;
+            return (ev.kind === 1 || ev.kind === 6) && ev.pubkey !== myPubkey;
           });
         break;
 
       case 'following':
-        // フォロー中のユーザーの投稿
+        // ★ フォロー中のユーザーの投稿（自分を除く）
         eventIds = Array.from(this.events.keys())
           .filter(id => {
             const ev = this.events.get(id);
+            const myPubkey = window.nostrAuth?.pubkey;
             return (ev.kind === 1 || ev.kind === 6) && 
-                   this.followingPubkeys.has(ev.pubkey);
+                   this.followingPubkeys.has(ev.pubkey) &&
+                   ev.pubkey !== myPubkey;
           });
         break;
 
@@ -218,6 +233,26 @@ class DataStore {
       .map(id => this.events.get(id))
       .filter(Boolean)
       .sort((a, b) => b.created_at - a.created_at);
+  }
+
+  getMergedFeedForTab(tab, filterOptions = {}) {
+    const othersFeed = this.getEventsByTab(tab, filterOptions);
+    
+    // global/following以外はそのまま返す
+    if (tab !== 'global' && tab !== 'following') {
+      return othersFeed;
+    }
+
+    const latestOthers = othersFeed[0]?.created_at ?? 0;
+
+    // 自分の投稿から、みんなの投稿より新しいものだけ抽出
+    const recentMine = this.selfFeed.filter(p => p.created_at > latestOthers);
+
+    // 合成して時系列順にソート
+    const merged = [...recentMine, ...othersFeed]
+      .sort((a, b) => b.created_at - a.created_at);
+
+    return merged;
   }
 
   /**
@@ -275,6 +310,7 @@ class DataStore {
     this.followingPubkeys.clear();
     this.likedByMeIds.clear();
     this.reactionCounts.clear();
+    this.selfFeed = [];
     const now = Date.now() / 1000;
     this.oldestTimestamps = {
       global: now,
@@ -294,7 +330,8 @@ class DataStore {
       profiles: this.profiles.size,
       myPosts: this.myPostIds.size,
       receivedLikes: this.receivedLikeIds.size,
-      following: this.followingPubkeys.size
+      following: this.followingPubkeys.size,
+      selfFeed: this.selfFeed.length
     };
   }
 }

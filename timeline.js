@@ -18,6 +18,8 @@ class Timeline {
    */
   switchTab(tab) {
     this.currentTab = tab;
+    // ★ DOMを完全にクリアしてから描画
+    this.container.innerHTML = '';
     this.refresh();
   }
 
