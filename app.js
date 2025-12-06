@@ -50,7 +50,7 @@ class FlowgazerApp {
         // ★ Global フィルタ: 自分を除外
         const globalFilter = {
             kinds: [1, 6],
-            limit: 50
+            limit: 150
         };
 
         // 著者フィルタが設定されている場合
@@ -75,7 +75,7 @@ class FlowgazerApp {
                 filters.push({
                     kinds: [1, 6],
                     authors: filteredFollowing,
-                    limit: 100
+                    limit: 150
                 });
             }
         }
