@@ -140,12 +140,25 @@ class Timeline {
 
     li.appendChild(this.createMetadata(event));
 
-    // ふぁぼマーク
-    const emoji = document.createElement('span');
-    const content = (event.content && event.content !== '+') ? event.content : '⭐';
-    emoji.textContent = ' ' + content + ' ';
-    emoji.style.cssText = 'font-size: 1rem; margin: 0 0.25rem;';
-    li.appendChild(emoji);
+    // content が :shortcode: 形式かチェック
+    const content = event.content || '+';
+    const isCustomEmoji = content.startsWith(':') && content.endsWith(':') && content.length > 2;
+
+    if (isCustomEmoji) {
+      // カスタム絵文字の場合
+      const emojiElement = this.createCustomEmoji(content, event.tags);
+      emojiElement.style.cssText = 'height: 1.5rem; vertical-align: middle; margin: 0 0.25rem;';
+      li.appendChild(document.createTextNode(' '));
+      li.appendChild(emojiElement);
+      li.appendChild(document.createTextNode(' '));
+    } else {
+      // 通常のテキストまたはUnicode絵文字の場合
+      const emoji = document.createElement('span');
+      const displayContent = (content && content !== '+') ? content : '⭐';
+      emoji.textContent = ' ' + displayContent + ' ';
+      emoji.style.cssText = 'font-size: 1rem; margin: 0 0.25rem;';
+      li.appendChild(emoji);
+    }
 
     // 対象投稿へのリンク
     const targetId = event.tags.find(t => t[0] === 'e')?.[1];
