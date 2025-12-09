@@ -365,6 +365,9 @@ class ViewState {
     /**
      * ★ 修正: 指定されたタブに表示されるべきイベントを取得し、フィルタリングとソートを行います。
      * global/followingの場合は合成フィードを使用。
+     * 
+     * 【重要】投稿者絞り込み（filterOptions.authors）はglobalタブでのみ有効
+     * 
      * @param {string} tab - タブ名
      * @param {Object} filterOptions - 適用する追加のフィルタオプション
      * @returns {Object[]} フィルタリング・ソート済みのイベントの配列
@@ -413,10 +416,12 @@ class ViewState {
             );
         }
 
-        // 4. 特定の著者フィルタ
-        if (filterOptions.authors?.length > 0) {
+        // 4. ★★★ 投稿者絞り込み（globalタブ専用） ★★★
+        // followingタブでは、この絞り込みを適用しない
+        if (tab === 'global' && filterOptions.authors?.length > 0) {
             const authorSet = new Set(filterOptions.authors);
             events = events.filter(ev => authorSet.has(ev.pubkey));
+            console.log(`🔍 globalタブ: 投稿者絞り込み適用（${filterOptions.authors.length}人）`);
         }
 
         // 5. プロフィール情報が取得済みのイベントのみに絞り込み
