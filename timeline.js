@@ -221,7 +221,7 @@ class Timeline {
   /**
    * 投稿者リンク
    */
-  createAuthorLink(pubkey) {
+    createAuthorLink(pubkey) {
     const npub = window.NostrTools.nip19.npubEncode(pubkey);
     const displayName = window.dataStore.getDisplayName(pubkey);
 
@@ -230,7 +230,13 @@ class Timeline {
     link.href = `https://ompomz.github.io/tweetsrecap/tweet?id=${npub}`;
     link.target = '_blank';
     link.rel = 'noreferrer';
-    link.textContent = displayName;
+
+    // 全角10文字以上なら短縮
+    let truncatedName = displayName;
+    if (displayName.length > 10) {
+      truncatedName = displayName.substring(0, 7) + '…' + displayName.slice(-2);
+    }
+    link.textContent = truncatedName;
 
     // 色付け
     const hue = parseInt(pubkey.substring(0, 2), 16) * 360 / 256;
