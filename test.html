@@ -14,7 +14,7 @@ h1{font-size:1.2rem;margin-bottom:.5rem}
 input,textarea{transition:background-color 0.3s,color 0.3s;cursor:pointer;font-size:.9rem;padding:.5rem;border:1px solid #ddd;border-radius:4px;color:#666;background-color:#fff}
 input[type="checkbox"]{padding:0;margin:0;vertical-align:middle;appearance:checkbox;-webkit-appearance:checkbox}
 textarea{resize:vertical}
-.container button{white-space:nowrap;font-size:.8rem;font-weight:700;padding:6px 14px;min-height:36px;margin:.5rem 0;border:none;border-radius:999px;cursor:pointer}
+.container button{white-space:nowrap;font-size:.8rem;font-weight:700;padding:4px 16px;margin:.5rem 0;border:none;border-radius:999px;cursor:pointe;background-color:#ddd;color:#fff}
 .full-width{width:100%}
 .flex-container{display:flex;align-items:center;gap:.5rem;margin:.5rem 0}
 .flex-container input,.flex-container textarea{flex-grow:1;margin:0}
@@ -28,6 +28,7 @@ ul,li{font-size:inherit}
 .custom-emoji{height:1.2rem;vertical-align:bottom}
 .tab-button{border:none;background:#ddd;cursor:pointer;border-radius:4px}
 .tab-button.active{background:#66b3ff;color:#fff}
+#load-more{background:#66b3ff;color:#fff}
 #load-more.loading::before{content:"　読み込み中..."}
 #generate-trial-keypair{background-color:#f9c}
 #send-new-post{background-color:gold}
@@ -120,7 +121,7 @@ ul,li{font-size:inherit}
   </div>
 </div>
 
-<div id="tab-buttons" style="display: flex; gap: 0.5rem; margin: 0.5rem 0;">
+<div id="tab-buttons" style="display: flex; gap: 0.5rem; margin: 0;">
   <button id="tab-global" class="tab-button active">みんな</button>
   <button id="tab-following" class="tab-button">フォロー</button>
   <button id="tab-myposts" class="tab-button">自分</button>
