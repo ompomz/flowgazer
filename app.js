@@ -391,7 +391,7 @@ class FlowgazerApp {
             // ★ 即座に再描画（global/followingで合成表示される）
             window.viewState.renderNow();
             
-            alert('投稿しました!');
+            alert('投稿しました！');
             document.getElementById('new-post-content').value = '';
         } catch (err) {
             console.error('投稿失敗:', err);
@@ -423,7 +423,7 @@ class FlowgazerApp {
             window.dataStore.addEvent(signed);
             window.viewState.addEvent(signed);
             window.viewState.renderNow();
-            alert('ふぁぼった!');
+            alert('ふぁぼった！');
         } catch (err) {
             console.error('失敗:', err);
             alert('ふぁぼれませんでした: ' + err.message);

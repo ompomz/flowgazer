@@ -48,7 +48,7 @@ panel.innerHTML = `
     <input type="text" id="npub-input" placeholder="npub1... or name@domain.com" style="flex-grow: 1; margin: 0; transition: background-color 0.3s, color 0.3s; cursor: pointer; font-size: 0.9rem; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; color: #666; background-color: #fff;">
     <button id="npub-login" 
     style="white-space: nowrap; font-size: 0.8rem; font-weight: bold; padding: 0.25rem 1rem; border: none; border-radius: 999px; background-color: #e0f2f1; color: #00796b; cursor: pointer;">👀 npub</button></div>
-    <small style="color: #999; display: block; margin-top: 0.25rem;">フォローTLが見れます</small>
+    <small style="color: #999; display: block; margin-top: 0.25rem;">一部の機能が使えます</small>
   </div>
 
   <div id="auth-info" style="display: none;">
