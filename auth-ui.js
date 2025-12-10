@@ -135,60 +135,67 @@ if (window.nostrAuth.nsec && !window.nostrAuth.useNIP07 && !existingNsecBtn) {
 // ---
 
 /**
- * 認証に関する各種イベントリスナーを設定する関数
+ * 認証に関連するイベントリスナーを設定する関数
  */
 function setupAuthEvents() {
-    // NIP-07
     document.getElementById('nip07-login').addEventListener('click', async () => {
         try {
             await window.nostrAuth.loginWithExtension();
             updateAuthUI();
-            window.app.updateLoginUI();
+            if (window.app?.updateLoginUI) {
+                window.app.updateLoginUI();
+            }
+
             alert('いけた！');
         } catch (e) {
             alert(e.message);
         }
     });
 
-    // nsec入力
     document.getElementById('nsec-login').addEventListener('click', () => {
         const nsec = document.getElementById('nsec-input').value;
+        
         try {
             window.nostrAuth.loginWithNsec(nsec);
             updateAuthUI();
-            window.app.updateLoginUI();
+            if (window.app?.updateLoginUI) {
+                window.app.updateLoginUI();
+            }
+
             alert('いけた！');
         } catch (e) {
             alert(e.message);
         }
     });
-    
-      // npub入力
-  document.getElementById('npub-login').addEventListener('click', () => {
-    const npub = document.getElementById('npub-input').value.trim();
-    if (!npub) {
-      alert('npubを入力してください');
-      return;
-    }
-    try {
-      window.nostrAuth.loginWithNpub(npub);
-      updateAuthUI();
-      alert('welcome to Nostr！');
-      location.reload(); // ページをリロードして状態を反映
-    } catch (e) {
-      alert(e.message);
-    }
-  });
 
-    // サインアウト
+    document.getElementById('npub-login').addEventListener('click', () => {
+        const npub = document.getElementById('npub-input').value.trim();
+        if (!npub) {
+            alert('npubを入力してください');
+            return;
+        } 
+        
+        try {
+            window.nostrAuth.loginWithNpub(npub);
+            updateAuthUI();
+            
+            alert('welcome to Nostr！');
+            location.reload();
+        } catch (e) {
+            alert(e.message);
+        }
+    });
+
     document.getElementById('logout-btn').addEventListener('click', () => {
         window.nostrAuth.logout();
         updateAuthUI();
-        window.app.updateLoginUI();
+        if (window.app?.updateLoginUI) {
+            window.app.updateLoginUI();
+        }
+
         alert('またきてね');
     });
 
-    // UIを閉じる
     document.getElementById('close-auth').addEventListener('click', () => {
         document.getElementById('auth-overlay').style.display = 'none';
     });
