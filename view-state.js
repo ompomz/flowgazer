@@ -424,9 +424,6 @@ class ViewState {
             console.log(`🔍 globalタブ: 投稿者絞り込み適用（${filterOptions.authors.length}人）`);
         }
 
-        // 5. プロフィール情報が取得済みのイベントのみに絞り込み
-        events = events.filter(ev => window.dataStore.profiles.has(ev.pubkey));
-
         // --- ソート処理 ---
         // 作成日時 (created_at) の降順でソート（新しいものが先頭）
         return events.sort((a, b) => {
