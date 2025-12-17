@@ -1,513 +1,572 @@
 /**
- * ViewStateクラス
- *
- * NostrクライアントのUI状態（主にタイムラインのタブと表示イベント）を管理します。
- * - 各タブ（global, following, myposts, likes）の状態を持ちます。
- * - イベントの追加、タブの切り替え、描画のスケジューリング、フィルタリング処理を担当します。
+ * view-state.js
+ * 【責務】: タブ状態管理、表示判定、フィルタリング
  */
 
-// NostrイベントのKind（種類）を定数として定義し、マジックナンバーを排除
-const KIND_TEXT_NOTE = 1;
-const KIND_REPOST = 6;
-const KIND_REACTION = 7;
-const RENDER_DELAY_MS = 300; // 描画遅延のデフォルト値 (ミリ秒)
+const RENDER_DELAY_MS = 300;
+const CUTOFF_OFFSET_MINUTES = 15; // 初回ロード時のcutoff基準（現在時刻からのオフセット）
 
 class ViewState {
-    constructor() {
-        /**
-         * @property {Object<string, TabState>} tabs - 各タブの状態を保持するオブジェクト
-         * - visibleEventIds: UIに表示されるイベントIDのSet
-         * - cursor: タイムラインのページングに使用する created_at の範囲 (until/since)
-         * - filter: そのタブで表示されるべきイベントの種類 (kinds)
-         * - pendingEventIds: プロフィール情報が未取得で描画保留中のイベントIDのSet
-         */
-        this.tabs = {
-            global: {
-                visibleEventIds: new Set(),
-                cursor: null,
-                filter: { kinds: [KIND_TEXT_NOTE, KIND_REPOST] },
-                pendingEventIds: new Set(),
-            },
-            following: {
-                visibleEventIds: new Set(),
-                cursor: null,
-                filter: { kinds: [KIND_TEXT_NOTE, KIND_REPOST] },
-                pendingEventIds: new Set(),
-            },
-            myposts: {
-                visibleEventIds: new Set(),
-                cursor: null,
-                filter: { kinds: [KIND_TEXT_NOTE] },
-                pendingEventIds: new Set(),
-            },
-            likes: {
-                visibleEventIds: new Set(),
-                cursor: null,
-                filter: { kinds: [KIND_REACTION] },
-                pendingEventIds: new Set(),
-            }
-        };
+  constructor() {
+    // ===== タブ状態管理 =====
+    this.tabs = {
+      global: {
+        visibleEventIds: new Set(),
+        cursor: null,
+        filter: { kinds: [1, 6] }
+      },
+      following: {
+        visibleEventIds: new Set(),
+        cursor: null,
+        filter: { kinds: [1, 6] }
+      },
+      myposts: {
+        visibleEventIds: new Set(),
+        cursor: null,
+        filter: { kinds: [1, 42] }
+      },
+      likes: {
+        visibleEventIds: new Set(),
+        cursor: null,
+        filter: { kinds: [7, 6, 1] }
+      }
+    };
 
-        /** @property {Map<string, Object<string, boolean>>} eventContext - イベントIDごとに、どのタブに属するかを記録するマップ */
-        this.eventContext = new Map();
+    // ===== 現在の状態 =====
+    this.currentTab = 'global';
+    this.renderTimer = null;
+    this.renderDelay = RENDER_DELAY_MS;
 
-        /** @property {string} currentTab - 現在アクティブなタブの名前 ('global', 'following'など) */
-        this.currentTab = 'global';
+    console.log('✅ ViewState初期化完了');
+  }
 
-        /** @property {number|null} renderTimer - 描画スケジューリング用のタイマーID */
-        this.renderTimer = null;
+  // ========================================
+  // イベント受信処理 (ライブストリーム)
+  // ========================================
 
-        /** @property {number} renderDelay - 描画処理を遅延させる時間 (ミリ秒) */
-        this.renderDelay = RENDER_DELAY_MS;
-
-        console.log('✅ ViewState初期化完了');
-    }
-
-    /**
-     * 現在アクティブなタブの状態オブジェクトを取得します。
-     * @returns {TabState} 現在のタブの状態
-     */
-    getCurrentTabState() {
-        return this.tabs[this.currentTab];
-    }
+  /**
+   * 新規イベントを受信したときの処理
+   * @param {Object} event - Nostrイベント
+   * @returns {boolean} いずれかのタブに追加された場合true
+   */
+  onEventReceived(event) {
+    const myPubkey = window.nostrAuth?.pubkey;
     
-    /**
-     * 【ライブストリーム用】イベントを、該当するすべてのタブに追加します。
-     * このメソッドは、すべてのイベントのターゲットタブを自動で判断します。
-     * @param {Object} event - Nostrイベントオブジェクト
-     */
-    addEvent(event) {
-        const myPubkey = window.nostrAuth?.pubkey;
-        // ターゲットタブを自動判定
-        const tabs = this._determineTargetTabs(event, myPubkey);
-
-        let addedToCurrentTab = false;
-        tabs.forEach(tab => {
-            const added = this.addEventToTab(event, tab);
-            if (added && tab === this.currentTab) {
-                addedToCurrentTab = true;
-            }
-        });
-
-        // 現在のタブにイベントが追加された場合のみ、描画をスケジュール
-        if (addedToCurrentTab) {
-            this.scheduleRender();
-        }
+    // 振り分け先タブを判定
+    const tabs = this._determineTargetTabs(event, myPubkey);
+    
+    if (tabs.length === 0) {
+      return false;
     }
 
-    /**
-     * 【履歴/LoadMore用】イベントを指定された単一のタブにのみ追加します。
-     * このイベントは、他のタブ（global, following）には自動ルーティングされません。
-     * @param {Object} event - Nostrイベントオブジェクト
-     * @param {string} tab - 対象のタブ名
-     * @returns {boolean} イベントが追加された場合は true、そうでなければ false
-     */
-    addHistoryEventToTab(event, tab) {
-        // isHistory=true を渡すことで、このイベントが履歴取得由来であることをマークする。
-        const added = this.addEventToTab(event, tab, true); 
+    // 各タブに追加
+    let addedToCurrentTab = false;
+    tabs.forEach(tab => {
+      const added = this._addEventToTab(event, tab, myPubkey);
+      if (added && tab === this.currentTab) {
+        addedToCurrentTab = true;
+      }
+    });
 
-        if (added && tab === this.currentTab) {
-            this.scheduleRender();
-        }
-        return added;
+    // 現在のタブに追加された場合のみ描画スケジュール
+    if (addedToCurrentTab) {
+      this.scheduleRender();
     }
 
-    /**
-     * 指定されたタブにイベントを追加します。
-     * @param {Object} event - Nostrイベントオブジェクト
-     * @param {string} tab - 対象のタブ名
-     * @param {boolean} [isHistory=false] - 履歴（LoadMoreなど）として取得されたか
-     * @returns {boolean} イベントが追加された場合は true、そうでなければ false
-     */
-    addEventToTab(event, tab, isHistory = false) {
-        const tabState = this.tabs[tab];
-        if (!tabState) {
+    return tabs.length > 0;
+  }
+
+  /**
+   * イベントがどのタブに属するかを判定
+   * @private
+   * @param {Object} event
+   * @param {string|null} myPubkey
+   * @returns {string[]} タブ名の配列
+   */
+  _determineTargetTabs(event, myPubkey) {
+    const tabs = [];
+
+    // === Global / Following / MyPosts ===
+    if ([1, 6, 42].includes(event.kind)) {
+
+      // global に入れる条件を緩める
+      tabs.push('global');
+
+      // following は「フォローリストに従う」ので、自分が入っていたら含める
+      if (window.dataStore.isFollowing(event.pubkey)) {
+        tabs.push('following');
+      }
+
+      // 自分の投稿は myposts にも入れる
+      if ([1, 42].includes(event.kind) && event.pubkey === myPubkey) {
+        tabs.push('myposts');
+      }
+    }
+
+    // === Likes (自分宛のリアクション/リポスト/メンション) ===
+    if ([7, 6, 1].includes(event.kind) && myPubkey) {
+      const targetPubkey = event.tags.find(t => t[0] === 'p')?.[1];
+      if (targetPubkey === myPubkey) {
+        tabs.push('likes');
+      }
+    }
+
+    return tabs;
+  }
+
+  /**
+   * イベントを指定タブに追加
+   * @private
+   */
+  _addEventToTab(event, tab, myPubkey) {
+    const tabState = this.tabs[tab];
+    if (!tabState) return false;
+
+    // 重複チェック
+    if (tabState.visibleEventIds.has(event.id)) {
+      return false;
+    }
+
+    // 追加
+    tabState.visibleEventIds.add(event.id);
+
+    // カーソル更新（global/followingのみ特別処理）
+    if (tab === 'global' || tab === 'following') {
+      this._updateCursorForMainTabs(tabState, event, myPubkey);
+    } else {
+      this._updateCursor(tabState, event.created_at);
+    }
+
+    return true;
+  }
+
+  /**
+   * カーソル (until/since) を更新
+   * @private
+   */
+  _updateCursor(tabState, created_at) {
+    if (!tabState.cursor) {
+      tabState.cursor = { until: created_at, since: created_at };
+      return;
+    }
+
+    if (created_at < tabState.cursor.until) {
+      tabState.cursor.until = created_at;
+    }
+    if (created_at > tabState.cursor.since) {
+      tabState.cursor.since = created_at;
+    }
+  }
+
+  /**
+   * global/followingタブ専用のカーソル更新
+   * cursor.untilは「自分以外 かつ pタグに自分なし」のイベントのみで更新
+   * @private
+   */
+  _updateCursorForMainTabs(tabState, event, myPubkey) {
+    const mentionsMe = event.tags.some(t => t[0] === 'p' && t[1] === myPubkey);
+    const isOthersEvent = event.pubkey !== myPubkey && !mentionsMe;
+
+    if (!tabState.cursor) {
+      if (isOthersEvent) {
+        // 他人イベントでカーソル初期化
+        tabState.cursor = { until: event.created_at, since: event.created_at };
+      } else {
+        // 初回が自分関連イベントの場合は15分前を設定
+        const now = Math.floor(Date.now() / 1000);
+        const cutoffTime = now - (CUTOFF_OFFSET_MINUTES * 60);
+        tabState.cursor = { until: cutoffTime, since: event.created_at };
+        console.log(`⏰ ${tabState === this.tabs.global ? 'global' : 'following'}タブ: 初回cutoffを15分前に設定 (${new Date(cutoffTime * 1000).toLocaleString()})`);
+      }
+      return;
+    }
+
+    // 他人イベントのみでuntilを更新
+    if (isOthersEvent && event.created_at < tabState.cursor.until) {
+      tabState.cursor.until = event.created_at;
+    }
+
+    // sinceは全イベントで更新
+    if (event.created_at > tabState.cursor.since) {
+      tabState.cursor.since = event.created_at;
+    }
+  }
+
+  // ========================================
+  // 履歴イベント処理 (LoadMore)
+  // ========================================
+
+  /**
+   * 履歴イベントを指定タブに追加
+   * @param {Object} event
+   * @param {string} tab
+   * @returns {boolean}
+   */
+  addHistoryEventToTab(event, tab) {
+    const myPubkey = window.nostrAuth?.pubkey;
+    const added = this._addEventToTab(event, tab, myPubkey);
+
+    if (added && tab === this.currentTab) {
+      this.scheduleRender();
+    }
+
+    return added;
+  }
+
+  // ========================================
+  // タブ切り替え
+  // ========================================
+
+  /**
+   * タブを切り替え
+   * @param {string} newTab
+   */
+  switchTab(newTab) {
+    if (!this.tabs[newTab]) {
+      console.error(`❌ ViewState: 不明なタブ名: ${newTab}`);
+      return;
+    }
+
+    const oldTab = this.currentTab;
+    console.log(`📑 ViewState: タブ切り替え ${oldTab} → ${newTab}`);
+
+    this.currentTab = newTab;
+
+    // タブの表示内容を再構築
+    this._repopulateTab(newTab);
+
+    // 即座に描画
+    this.renderNow();
+  }
+
+  /**
+   * タブの表示内容を全イベントから再構築
+   * @private
+   */
+  _repopulateTab(tab) {
+    const tabState = this.tabs[tab];
+    if (!tabState) return;
+
+    console.log(`🔄 タブ "${tab}" を再構築中...`);
+
+    // クリア
+    tabState.visibleEventIds.clear();
+    tabState.cursor = null;
+
+    // 全イベントから対象を抽出
+    const allEvents = window.dataStore.getAllEvents();
+    const myPubkey = window.nostrAuth?.pubkey;
+
+    allEvents.forEach(event => {
+      if (this._shouldShowInTab(event, tab, myPubkey)) {
+        this._addEventToTab(event, tab, myPubkey);
+      }
+    });
+
+    console.log(`✅ タブ "${tab}" 再構築完了: ${tabState.visibleEventIds.size}件`);
+  }
+
+  /**
+   * イベントが指定タブに表示されるべきかを判定
+   * @private
+   */
+  _shouldShowInTab(event, tab, myPubkey) {
+    const tabState = this.tabs[tab];
+
+    // kind制約
+    if (!tabState.filter.kinds.includes(event.kind)) {
+      return false;
+    }
+
+    switch (tab) {
+      case 'global':
+      case 'following': {
+
+        // followingタブの追加条件
+        if (tab === 'following') {
+          // フォロー中のユーザーのみ
+          if (!window.dataStore.isFollowing(event.pubkey)) {
             return false;
-        }
-
-        // 1. フィルタリングで弾かれるかチェック
-        if (!this._shouldShowInTab(event, tab)) {
-            return false;
-        }
-        
-        // 2. イベントコンテキストを更新（このイベントはこのタブに属すると記録）
-        if (!this.eventContext.has(event.id)) {
-            this.eventContext.set(event.id, {});
-        }
-        const context = this.eventContext.get(event.id);
-        
-        // 履歴イベントの場合は、そのタブでの履歴フラグを立てる
-        if (isHistory) {
-            context[`${tab}History`] = true;
-        }
-        // タブに属するフラグを立てる
-        context[tab] = true;
-        
-        // 3. すでに追加されている場合は、コンテキストの更新のみで終了
-        if (tabState.visibleEventIds.has(event.id)) {
-            return false;
-        }
-
-        // 4. visibleEventIds に追加
-        tabState.visibleEventIds.add(event.id);
-
-        // 5. カーソルを更新（ページング用）
-        this._updateCursor(tabState, event.created_at);
-
-        // 6. プロフィールが未取得であれば、保留リストに追加し、フェッチをリクエスト
-        if (!window.dataStore.profiles.has(event.pubkey)) {
-            tabState.pendingEventIds.add(event.id);
-            window.profileFetcher.request(event.pubkey);
+          }
         }
 
         return true;
+      }
+
+      case 'myposts':
+        return event.pubkey === myPubkey;
+
+      case 'likes':
+        const targetPubkey = event.tags.find(t => t[0] === 'p')?.[1];
+        return targetPubkey === myPubkey;
+
+      default:
+        return false;
+    }
+  }
+
+  // ========================================
+  // 表示用イベント取得
+  // ========================================
+
+  /**
+   * 指定タブの表示イベントを取得 (フィルタリング済み・ソート済み)
+   * @param {string} tab
+   * @param {Object} filterOptions - { flowgazerOnly, authors }
+   * @returns {Object[]}
+   */
+  getVisibleEvents(tab, filterOptions = {}) {
+    const tabState = this.tabs[tab];
+    if (!tabState) return [];
+
+    // 通常取得
+    let events = Array.from(tabState.visibleEventIds)
+      .map(id => window.dataStore.getEvent(id))
+      .filter(Boolean);
+
+    // === cutoffフィルタ (global/following のみ) ===
+    if (tab === 'global' || tab === 'following') {
+      events = this._applyCutoffFilter(events, tabState);
     }
 
-    /**
-     * 指定されたイベントが特定のタブに表示されるべきかを判断します。
-     * @param {Object} event - Nostrイベント
-     * @param {string} tab - タブ名
-     * @returns {boolean} 表示すべきなら true
-     * @private
-     */
-    _shouldShowInTab(event, tab) {
-        const myPubkey = window.nostrAuth?.pubkey;
-        const tabState = this.tabs[tab];
+    // === 追加フィルタリング ===
+    events = this._applyFilters(events, tab, filterOptions);
 
-        // 1. kindフィルタリング
-        if (!tabState.filter.kinds.includes(event.kind)) {
-            return false;
-        }
+    // === ソート ===
+    return events.sort((a, b) => {
+      const dateDiff = b.created_at - a.created_at;
+      if (dateDiff !== 0) return dateDiff;
+      return a.id.localeCompare(b.id);
+    });
+  }
 
-        // 2. タブ固有のフィルタリング
-        switch (tab) {
-            case 'global':
-                // ★ 自分のkind:1は除外（kind:6は含む）
-                if (event.kind === KIND_TEXT_NOTE && event.pubkey === myPubkey) {
-                    return false;
-                }
-                return event.kind === KIND_TEXT_NOTE || event.kind === KIND_REPOST;
-
-            case 'following':
-                // ★ 自分のkind:1は除外
-                if (event.kind === KIND_TEXT_NOTE && event.pubkey === myPubkey) {
-                    return false;
-                }
-                return (event.kind === KIND_TEXT_NOTE || event.kind === KIND_REPOST) &&
-                       window.dataStore.followingPubkeys.has(event.pubkey);
-
-            case 'myposts':
-                return event.kind === KIND_TEXT_NOTE && event.pubkey === myPubkey;
-
-            case 'likes':
-                if (event.kind !== KIND_REACTION) {
-                    return false;
-                }
-                const targetPubkey = event.tags.find(t => t[0] === 'p')?.[1];
-                return targetPubkey === myPubkey;
-
-            default:
-                return false;
-        }
+  /**
+   * cutoffフィルタを適用
+   * @private
+   */
+  _applyCutoffFilter(events, tabState) {
+    if (!tabState.cursor?.until) {
+      // cursor.untilがない場合は15分前を基準にする
+      const now = Math.floor(Date.now() / 1000);
+      const cutoff = now - (CUTOFF_OFFSET_MINUTES * 60);
+      console.log(`⏰ cutoff基準なし: 15分前 (${new Date(cutoff * 1000).toLocaleString()}) を使用`);
+      return events.filter(ev => ev.created_at >= cutoff);
     }
 
-    /**
-     * 受信したイベントがどのタブに属するかを判定し、タブ名の配列を返します。
-     * @param {Object} event - Nostrイベント
-     * @param {string|null} myPubkey - ログインユーザーの公開鍵
-     * @returns {string[]} 該当するタブ名の配列
-     * @private
-     */
-    _determineTargetTabs(event, myPubkey) {
-        const tabs = [];
-
-        // グローバル/フォロー/自分の投稿の判定
-        if (event.kind === KIND_TEXT_NOTE || event.kind === KIND_REPOST) {
-            
-            // ★ 自分のkind:1はglobal/followingに追加しない（kind:6は追加する）
-            if (event.pubkey !== myPubkey || event.kind === KIND_REPOST) {
-                 tabs.push('global'); 
-            }
-
-            // フォローしているユーザーの投稿であれば
-            if (window.dataStore.followingPubkeys.has(event.pubkey)) {
-                // ★ 自分のkind:1は除外
-                if (event.pubkey !== myPubkey || event.kind === KIND_REPOST) {
-                    tabs.push('following');
-                }
-            }
-
-            // 自分の投稿であれば
-            if (event.kind === KIND_TEXT_NOTE && event.pubkey === myPubkey) {
-                tabs.push('myposts');
-            }
-        }
-
-        // いいね/リアクションの判定
-        if (event.kind === KIND_REACTION && myPubkey) {
-            const targetPubkey = event.tags.find(t => t[0] === 'p')?.[1];
-            // 自分の投稿に対するリアクションであれば
-            if (targetPubkey === myPubkey) {
-                tabs.push('likes');
-            }
-        }
-
-        return tabs;
-    }
-
-    /**
-     * タブの状態のカーソル（until/since）を更新します。
-     * @param {TabState} tabState - 対象のタブの状態
-     * @param {number} created_at - イベントの作成日時（UNIXタイムスタンプ）
-     * @private
-     */
-    _updateCursor(tabState, created_at) {
-        if (!tabState.cursor) {
-            // カーソルが未設定の場合は初期化
-            tabState.cursor = { until: created_at, since: created_at };
-            return;
-        }
-
-        // 最も古いイベントの created_at を更新
-        if (created_at < tabState.cursor.until) {
-            tabState.cursor.until = created_at;
-        }
-
-        // 最も新しいイベントの created_at を更新
-        if (created_at > tabState.cursor.since) {
-            tabState.cursor.since = created_at;
-        }
-    }
-
-    /**
-     * プロフィール情報が取得されたときに呼び出されます。
-     * @param {string} pubkey - 取得されたプロフィールを持つ公開鍵
-     */
-    onProfileFetched(pubkey) {
-        const tabState = this.getCurrentTabState();
-        const eventsToRemove = [];
-
-        tabState.pendingEventIds.forEach(eventId => {
-            const event = window.dataStore.events.get(eventId);
-            if (event && event.pubkey === pubkey) {
-                eventsToRemove.push(eventId);
-            }
-        });
-
-        eventsToRemove.forEach(id => tabState.pendingEventIds.delete(id));
-
-        if (eventsToRemove.length > 0) {
-            this.scheduleRender();
-        }
-    }
-
-    /**
-     * タブを切り替えます。
-     * @param {string} newTab - 新しいタブ名
-     */
-    switchTab(newTab) {
-        if (!this.tabs[newTab]) {
-            console.error(`❌ ViewState: 不明なタブ名: ${newTab}`);
-            return;
-        }
-
-        const oldTab = this.currentTab;
-        console.log(`📑 ViewState: タブ切り替え ${oldTab} → ${newTab}`);
-
-        this.currentTab = newTab;
-
-        // タブ切り替え時に、そのタブの表示イベントを再構築
-        this._repopulateTab(newTab);
-
-        // 新しいタブへの切り替えに伴い、即時描画
-        this.renderNow();
-    }
-
-    /**
-     * 指定されたタブの表示イベントリストを、既存の全イベントから再構築します。
-     * (主にタブ切り替え時やフィルタ変更時に使用)
-     * @param {string} tab - 再構築するタブ名
-     * @private
-     */
-    _repopulateTab(tab) {
-        const tabState = this.tabs[tab];
-        if (!tabState) return;
-
-        console.log(`🔄 タブ "${tab}" を再構築中...`);
-
-        // リストをクリア
-        tabState.visibleEventIds.clear();
-        tabState.pendingEventIds.clear();
-        tabState.cursor = null;
-
-        const allEvents = Array.from(window.dataStore.events.values());
-        
-        allEvents.forEach(event => {
-            if (this._shouldShowInTab(event, tab)) {
-                
-                // 1. visibleEventIds に追加
-                tabState.visibleEventIds.add(event.id);
-
-                // 2. カーソルを更新（ページング用）
-                this._updateCursor(tabState, event.created_at);
-
-                // 3. プロフィールがなければ保留リストに追加
-                if (!window.dataStore.profiles.has(event.pubkey)) {
-                    tabState.pendingEventIds.add(event.id);
-                    window.profileFetcher.request(event.pubkey);
-                }
-            }
-        });
-
-        console.log(`✅ タブ "${tab}" 再構築完了: ${tabState.visibleEventIds.size}件`);
-    }
-
-    /**
-     * ★ 修正: 指定されたタブに表示されるべきイベントを取得し、フィルタリングとソートを行います。
-     * global/followingの場合は合成フィードを使用。
-     * 
-     * 【重要】投稿者絞り込み（filterOptions.authors）はglobalタブでのみ有効
-     * 
-     * @param {string} tab - タブ名
-     * @param {Object} filterOptions - 適用する追加のフィルタオプション
-     * @returns {Object[]} フィルタリング・ソート済みのイベントの配列
-     */
-    getVisibleEvents(tab, filterOptions = {}) {
-        const tabState = this.tabs[tab];
-        if (!tabState) return [];
-
-        let events;
-
-        // ★ global/followingの場合は合成フィードを取得
-        if (tab === 'global' || tab === 'following') {
-            events = window.dataStore.getMergedFeedForTab(tab, filterOptions);
-        } else {
-            // 通常通り取得
-            events = Array.from(tabState.visibleEventIds)
-                .map(id => window.dataStore.events.get(id))
-                .filter(Boolean);
-        }
-
-        // --- その他のフィルタリング処理 ---
-
-        // 1. 卑猥な単語フィルタ（global/followingのみ）
-        const forbiddenWords = window.app?.forbiddenWords || [];
-        if ((tab === 'global' || tab === 'following') && forbiddenWords.length > 0) {
-            events = events.filter(ev => {
-                if (ev.kind !== KIND_TEXT_NOTE) return true;
-                const content = ev.content.toLowerCase();
-                return !forbiddenWords.some(word => content.includes(word.toLowerCase()));
-            });
-        }
-
-        // 2. 短い投稿の制限
-        if (tab === 'global' || tab === 'following') {
-            events = events.filter(ev => {
-                if (ev.kind !== KIND_TEXT_NOTE) return true;
-                return ev.content.length <= 190;
-            });
-        }
-
-        // 3. flowgazer専用フィルタ（'likes'以外）
-        if (filterOptions.flowgazerOnly && tab !== 'likes') {
-            events = events.filter(ev =>
-                ev.kind === KIND_TEXT_NOTE &&
-                ev.tags.some(tag => tag[0] === 'client' && tag[1] === 'flowgazer')
-            );
-        }
-
-        // 4. ★★★ 投稿者絞り込み（globalタブ専用） ★★★
-        // followingタブでは、この絞り込みを適用しない
-        if (tab === 'global' && filterOptions.authors?.length > 0) {
-            const authorSet = new Set(filterOptions.authors);
-            events = events.filter(ev => authorSet.has(ev.pubkey));
-            console.log(`🔍 globalタブ: 投稿者絞り込み適用（${filterOptions.authors.length}人）`);
-        }
-
-        // --- ソート処理 ---
-        // 作成日時 (created_at) の降順でソート（新しいものが先頭）
-        return events.sort((a, b) => {
-            const dateDiff = b.created_at - a.created_at;
-            if (dateDiff !== 0) return dateDiff;
-            return a.id.localeCompare(b.id); // created_at が同じ場合は ID で安定化
-        });
-    }
-
-    /**
-     * 指定されたタブのカーソルオブジェクト（until/since）を取得します。
-     * @param {string} tab - タブ名
-     * @returns {Object|undefined} カーソルオブジェクト
-     */
-    getCursor(tab) {
-        return this.tabs[tab]?.cursor;
-    }
-
-    /**
-     * 指定されたタブで現在表示されている最も古いイベントのタイムスタンプを取得します。
-     * @param {string} tab - タブ名
-     * @returns {number} 最も古いタイムスタンプ、または現在時刻（秒）
-     */
-    getOldestTimestamp(tab) {
-        const cursor = this.tabs[tab]?.cursor;
-        return cursor?.until || Math.floor(Date.now() / 1000);
-    }
+    const cutoff = tabState.cursor.until;
+    const beforeCount = events.length;
+    const filtered = events.filter(ev => ev.created_at >= cutoff);
     
-    /**
-     * ページングのためのアンカータイムスタンプを返します。
-     * @param {string} tab - 対象のタブ名
-     * @returns {number} 次のリクエストで使用すべき until タイムスタンプ（anchor）
-     */
-    requestLoadMore(tab) {
-        const oldest = this.getOldestTimestamp(tab);
-        console.log(`⬇️ Tab "${tab}": LoadMoreリクエスト。アンカー時刻 ${oldest} を返します。`);
-        return oldest;
+    if (beforeCount !== filtered.length) {
+      console.log(`✂️ cutoffフィルタ適用: ${beforeCount}件 → ${filtered.length}件 (基準: ${new Date(cutoff * 1000).toLocaleString()})`);
     }
 
-    /**
-     * 遅延タイマーを設定し、描画処理 (window.timeline.refresh()) をスケジュールします。
-     */
-    scheduleRender() {
-        if (!window.app?.isAutoUpdate) return;
+    return filtered;
+  }
 
-        clearTimeout(this.renderTimer);
-        this.renderTimer = setTimeout(() => {
-            if (window.timeline && typeof window.timeline.refresh === 'function') {
-                window.timeline.refresh();
-            }
-        }, this.renderDelay);
+  /**
+   * 追加フィルタを適用
+   * @private
+   */
+  _applyFilters(events, tab, options) {
+    const { flowgazerOnly = false, authors = null, showKind42 = false } = options;
+
+    // 0. kind:42 フィルタ (global/following のみ)
+    if ((tab === 'global' || tab === 'following') && !showKind42) {
+      events = events.filter(ev => ev.kind !== 42);
+      console.log(`🚫 kind:42を非表示 (${tab}タブ)`);
     }
 
-    /**
-     * スケジュールされている描画処理をキャンセルし、即座に描画を強制実行します。
-     */
-    renderNow() {
-        clearTimeout(this.renderTimer);
-        if (window.timeline && typeof window.timeline.refresh === 'function') {
-            window.timeline.refresh();
+    // 1. 禁止ワードフィルタ (global/following)
+    const forbiddenWords = window.app?.forbiddenWords || [];
+    if ((tab === 'global' || tab === 'following') && forbiddenWords.length > 0) {
+      events = events.filter(ev => {
+        if (ev.kind !== 1) return true;
+        const content = ev.content.toLowerCase();
+        return !forbiddenWords.some(word => content.includes(word.toLowerCase()));
+      });
+    }
+
+    // 2. 短い投稿の制限 (global/following)
+    if (tab === 'global' || tab === 'following') {
+      events = events.filter(ev => {
+        if (ev.kind !== 1) return true;
+        return ev.content.length <= 190;
+      });
+    }
+
+    // 3. flowgazerしぼりこみ (likes以外)
+    if (flowgazerOnly && tab !== 'likes') {
+      events = events.filter(ev =>
+        ev.kind === 1 &&
+        ev.tags.some(tag => tag[0] === 'client' && tag[1] === 'flowgazer')
+      );
+    }
+
+    // 4. 投稿者しぼりこみ (globalのみ)
+    if (tab === 'global' && authors?.length > 0) {
+      const authorSet = new Set(authors);
+      events = events.filter(ev => authorSet.has(ev.pubkey));
+      console.log(`🔍 globalタブ: 投稿者絞り込み適用（${authors.length}人）`);
+    }
+
+    // 5. kind:1基準のフィルタリング (global/following)
+    if (tab === 'global' || tab === 'following') {
+      const kind1Events = events.filter(e => e.kind === 1);
+      
+      if (kind1Events.length > 0) {
+        const kind1Oldest = kind1Events[Math.min(149, kind1Events.length - 1)]?.created_at || 0;
+        
+        events = events.filter(e => {
+          if (e.kind === 1) return true;
+          if ([6, 42].includes(e.kind)) {
+            return e.created_at >= kind1Oldest;
+          }
+          return true;
+        });
+      }
+    }
+
+    return events;
+  }
+
+  // ========================================
+  // LoadMoreフィルタ構築
+  // ========================================
+
+  /**
+   * LoadMore用フィルタを構築
+   * @param {string} tab
+   * @param {number} untilTimestamp
+   * @returns {Object|null} フィルタオブジェクト
+   */
+  buildLoadMoreFilter(tab, untilTimestamp) {
+    const myPubkey = window.nostrAuth?.pubkey;
+
+    const filter = {
+      until: untilTimestamp - 1,
+      limit: 50
+    };
+
+    switch (tab) {
+      case 'global':
+        filter.kinds = [1, 6];
+        break;
+
+      case 'following':
+        if (window.dataStore.followingPubkeys.size === 0) {
+          console.warn('フォローリストが空です');
+          return null;
         }
+        filter.kinds = [1, 6];
+        const followingAuthors = Array.from(window.dataStore.followingPubkeys);
+        filter.authors = myPubkey 
+          ? followingAuthors.filter(pk => pk !== myPubkey)
+          : followingAuthors;
+        break;
+
+      case 'myposts':
+        if (!myPubkey) {
+          console.warn('ログインが必要です');
+          return null;
+        }
+        filter.kinds = [1];
+        filter.authors = [myPubkey];
+        break;
+
+      case 'likes':
+        if (!myPubkey) {
+          console.warn('ログインが必要です');
+          return null;
+        }
+        filter.kinds = [7];
+        filter['#p'] = [myPubkey];
+        break;
+
+      default:
+        console.error('Unknown tab:', tab);
+        return null;
     }
 
-    /**
-     * 指定されたタブの表示イベントリストと保留リストをクリアし、カーソルをリセットします。
-     * @param {string} tab - タブ名
-     */
-    clearTab(tab) {
-        const tabState = this.tabs[tab];
-        if (tabState) {
-            tabState.visibleEventIds.clear();
-            tabState.pendingEventIds.clear();
-            tabState.cursor = null;
-            
-            // コンテキストマップから、このタブの履歴フラグを削除
-            this.eventContext.forEach(context => {
-                delete context[`${tab}History`];
-                delete context[tab];
-            });
-            
-            console.log(`🗑️ タブ "${tab}" の状態をクリアしました。`);
-        }
+    return filter;
+  }
+
+  // ========================================
+  // カーソル/タイムスタンプ管理
+  // ========================================
+
+  /**
+   * 指定タブの最古タイムスタンプを取得
+   * @param {string} tab
+   * @returns {number}
+   */
+  getOldestTimestamp(tab) {
+    const cursor = this.tabs[tab]?.cursor;
+    return cursor?.until || Math.floor(Date.now() / 1000);
+  }
+
+  // ========================================
+  // 描画スケジューリング
+  // ========================================
+
+  /**
+   * 遅延描画をスケジュール
+   */
+  scheduleRender() {
+    if (!window.app?.isAutoUpdate) return;
+
+    clearTimeout(this.renderTimer);
+    this.renderTimer = setTimeout(() => {
+      if (window.timeline && typeof window.timeline.refresh === 'function') {
+        window.timeline.refresh();
+      }
+    }, this.renderDelay);
+  }
+
+  /**
+   * 即座に描画
+   */
+  renderNow() {
+    clearTimeout(this.renderTimer);
+    if (window.timeline && typeof window.timeline.refresh === 'function') {
+      window.timeline.refresh();
     }
+  }
+
+  // ========================================
+  // ユーティリティ
+  // ========================================
+
+  /**
+   * タブをクリア
+   * @param {string} tab
+   */
+  clearTab(tab) {
+    const tabState = this.tabs[tab];
+    if (tabState) {
+      tabState.visibleEventIds.clear();
+      tabState.cursor = null;
+      console.log(`🗑️ タブ "${tab}" の状態をクリアしました。`);
+    }
+  }
+
+  /**
+   * すべてをクリア
+   */
+  clearAll() {
+    Object.keys(this.tabs).forEach(tab => this.clearTab(tab));
+    console.log('🗑️ ViewState全体をクリアしました');
+  }
+
+  /**
+   * 破棄処理
+   */
+  destroy() {
+    clearTimeout(this.renderTimer);
+    this.clearAll();
+    console.log('🗑️ ViewState破棄完了');
+  }
 }
 
-// グローバルスコープに ViewState のインスタンスを初期化してエクスポート
+// グローバルインスタンス
 window.viewState = new ViewState();

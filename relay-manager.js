@@ -184,6 +184,10 @@ class RelayManager {
   disconnect() {
     if (this.ws) {
       this.unsubscribeAll();
+      this.ws.onopen = null;
+      this.ws.onmessage = null;
+      this.ws.onerror = null;
+      this.ws.onclose = null;
       this.ws.close();
       this.ws = null;
     }

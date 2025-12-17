@@ -1,142 +1,121 @@
 /**
  * data-store.js
- * すべてのNostrデータを一元管理するストア
+ * 【責務】: Nostrイベントとプロフィールの保存・正規化のみ
  */
 
 class DataStore {
   constructor() {
-    // 全イベントを保存（kind:1, 6, 7）
+    // ===== 基本データ =====
     this.events = new Map(); // eventId -> event
-
-    // プロフィール情報
     this.profiles = new Map(); // pubkey -> profile
-
-    // カテゴリ別のイベントID管理
-    this.myPostIds = new Set();           // 自分の投稿
-    this.receivedLikeIds = new Set();     // 自分が受け取ったkind:7
-    this.followingPubkeys = new Set();    // フォロー中のpubkey
-    this.likedByMeIds = new Set();        // 自分がふぁぼった投稿ID
-
-    // ★ 追加: 自分の投稿専用配列（合成用）
-    this.selfFeed = []; // 自分のkind:1投稿を時系列順に保持
-
-    // リアクションカウント
+    
+    // ===== カテゴリ分類 (シンプルな分類のみ) =====
+    this.eventsByKind = new Map(); // kind -> Set<eventId>
+    this.eventsByAuthor = new Map(); // pubkey -> Set<eventId>
+    this.eventsByReferencedEvent = new Map(); // eventId -> Set<eventId> (eタグ)
+    this.eventsByReferencedPubkey = new Map(); // pubkey -> Set<eventId> (pタグ)
+    
+    // ===== ユーザー固有のデータ =====
+    this.followingPubkeys = new Set(); // フォロー中のpubkey
+    this.likedByMeIds = new Set(); // 自分がふぁぼった投稿ID
+    
+    // ===== リアクションカウント =====
     this.reactionCounts = new Map(); // eventId -> { reposts: 0, reactions: 0 }
-
-    // タブ別の最古タイムスタンプ
-    this.oldestTimestamps = {
-      global: Date.now() / 1000,
-      following: Date.now() / 1000,
-      myposts: Date.now() / 1000,
-      likes: Date.now() / 1000
-    };
+    
+    console.log('✅ DataStore初期化完了');
   }
 
+  // ========================================
+  // イベント管理
+  // ========================================
+
   /**
-   * イベントを追加
+   * イベントを追加 (署名検証込み)
+   * @param {Object} event - Nostrイベント
+   * @returns {boolean} 新規追加された場合true
    */
   addEvent(event) {
-    // 既存チェック
-    if (this.events.has(event.id)) {
-      return false;
-    }
-
     // 署名検証
     if (!window.NostrTools.verifyEvent(event)) {
       console.warn('⚠️ 署名が無効なイベント:', event.id);
       return false;
     }
 
+    // 既存チェック
+    if (this.events.has(event.id)) {
+      return false;
+    }
+
     // 保存
     this.events.set(event.id, event);
 
-    // カテゴリ分け
-    this.categorizeEvent(event);
-
-    // タブ別の最古タイムスタンプを更新
-    this.updateOldestTimestamps(event);
+    // カテゴリ分類
+    this._categorizeEvent(event);
 
     return true;
   }
 
   /**
-   * タブ別の最古タイムスタンプを更新
+   * イベントをカテゴリ分類 (インデックス作成のみ)
+   * @private
    */
-  updateOldestTimestamps(event) {
+  _categorizeEvent(event) {
     const myPubkey = window.nostrAuth?.pubkey;
 
-    // kind:1, 6のみ対象
-    if (event.kind !== 1 && event.kind !== 6) return;
-
-    // ★ Global: 自分の投稿は除外
-    if (event.pubkey !== myPubkey) {
-      if (event.created_at < this.oldestTimestamps.global) {
-        this.oldestTimestamps.global = event.created_at;
-      }
+    // kind別インデックス
+    if (!this.eventsByKind.has(event.kind)) {
+      this.eventsByKind.set(event.kind, new Set());
     }
+    this.eventsByKind.get(event.kind).add(event.id);
 
-    // フォロー中
-    if (this.followingPubkeys.has(event.pubkey)) {
-      if (event.created_at < this.oldestTimestamps.following) {
-        this.oldestTimestamps.following = event.created_at;
-      }
+    // 投稿者別インデックス
+    if (!this.eventsByAuthor.has(event.pubkey)) {
+      this.eventsByAuthor.set(event.pubkey, new Set());
     }
+    this.eventsByAuthor.get(event.pubkey).add(event.id);
 
-    // 自分の投稿
-    if (event.kind === 1 && event.pubkey === myPubkey) {
-      if (event.created_at < this.oldestTimestamps.myposts) {
-        this.oldestTimestamps.myposts = event.created_at;
-      }
-    }
-  }
-
-  /**
-   * イベントをカテゴリ分け
-   */
-  categorizeEvent(event) {
-    const myPubkey = window.nostrAuth?.pubkey;
-
-    // 自分の投稿
-    if (event.kind === 1 && event.pubkey === myPubkey) {
-      this.myPostIds.add(event.id);
-      
-      // ★ selfFeedにも追加（重複チェック）
-      if (!this.selfFeed.find(e => e.id === event.id)) {
-        this.selfFeed.push(event);
-        // 時系列順に保つ
-        this.selfFeed.sort((a, b) => b.created_at - a.created_at);
-      }
-    }
-
-    // 自分が受け取ったkind:7
-    if (event.kind === 7) {
-      const targetPubkey = event.tags.find(t => t[0] === 'p')?.[1];
-      if (targetPubkey === myPubkey) {
-        this.receivedLikeIds.add(event.id);
-      }
-
-      // 自分がふぁぼったやつ
-      if (event.pubkey === myPubkey) {
-        const targetEventId = event.tags.find(t => t[0] === 'e')?.[1];
-        if (targetEventId) {
-          this.likedByMeIds.add(targetEventId);
+    // eタグ (参照イベント) インデックス
+    event.tags.forEach(tag => {
+      if (tag[0] === 'e' && tag[1]) {
+        if (!this.eventsByReferencedEvent.has(tag[1])) {
+          this.eventsByReferencedEvent.set(tag[1], new Set());
         }
+        this.eventsByReferencedEvent.get(tag[1]).add(event.id);
       }
+    });
 
-      // リアクションカウント
-      this.updateReactionCount(event);
+    // pタグ (参照ユーザー) インデックス
+    event.tags.forEach(tag => {
+      if (tag[0] === 'p' && tag[1]) {
+        if (!this.eventsByReferencedPubkey.has(tag[1])) {
+          this.eventsByReferencedPubkey.set(tag[1], new Set());
+        }
+        this.eventsByReferencedPubkey.get(tag[1]).add(event.id);
+      }
+    });
+
+    // === ユーザー固有の分類 ===
+    if (!myPubkey) return;
+
+    // 自分がふぁぼったイベント
+    if (event.kind === 7 && event.pubkey === myPubkey) {
+      const targetEventId = event.tags.find(t => t[0] === 'e')?.[1];
+      if (targetEventId) {
+        this.likedByMeIds.add(targetEventId);
+      }
     }
 
-    // kind:6(リポスト)のカウント
-    if (event.kind === 6) {
-      this.updateReactionCount(event);
+    // リアクションカウント更新
+    if (event.kind === 6 || event.kind === 7) {
+      this._updateReactionCount(event);
     }
   }
 
   /**
    * リアクション数を更新
+   * @private
    */
-  updateReactionCount(event) {
+  _updateReactionCount(event) {
     const targetId = event.tags.find(t => t[0] === 'e')?.[1];
     if (!targetId) return;
 
@@ -153,10 +132,78 @@ class DataStore {
   }
 
   /**
+   * イベントを取得
+   * @param {string} id - イベントID
+   * @returns {Object|undefined}
+   */
+  getEvent(id) {
+    return this.events.get(id);
+  }
+
+  /**
+   * 複数のイベントを取得
+   * @param {string[]} ids - イベントIDの配列
+   * @returns {Object[]} イベントの配列
+   */
+  getEvents(ids) {
+    return ids.map(id => this.events.get(id)).filter(Boolean);
+  }
+
+  /**
+   * すべてのイベントを取得
+   * @returns {Object[]}
+   */
+  getAllEvents() {
+    return Array.from(this.events.values());
+  }
+
+  /**
+   * kind別のイベントIDを取得
+   * @param {number} kind
+   * @returns {Set<string>}
+   */
+  getEventIdsByKind(kind) {
+    return this.eventsByKind.get(kind) || new Set();
+  }
+
+  /**
+   * 投稿者別のイベントIDを取得
+   * @param {string} pubkey
+   * @returns {Set<string>}
+   */
+  getEventIdsByAuthor(pubkey) {
+    return this.eventsByAuthor.get(pubkey) || new Set();
+  }
+
+  /**
+   * 特定イベントを参照しているイベントIDを取得 (eタグ)
+   * @param {string} eventId
+   * @returns {Set<string>}
+   */
+  getEventIdsReferencingEvent(eventId) {
+    return this.eventsByReferencedEvent.get(eventId) || new Set();
+  }
+
+  /**
+   * 特定ユーザーを参照しているイベントIDを取得 (pタグ)
+   * @param {string} pubkey
+   * @returns {Set<string>}
+   */
+  getEventIdsReferencingPubkey(pubkey) {
+    return this.eventsByReferencedPubkey.get(pubkey) || new Set();
+  }
+
+  // ========================================
+  // プロフィール管理
+  // ========================================
+
+  /**
    * プロフィールを追加
+   * @param {string} pubkey
+   * @param {Object} profileData
+   * @returns {boolean} 更新された場合true
    */
   addProfile(pubkey, profileData) {
-    // 既存プロフィールより古い場合はスキップ
     const existing = this.profiles.get(pubkey);
     if (existing && existing.created_at >= profileData.created_at) {
       return false;
@@ -167,108 +214,9 @@ class DataStore {
   }
 
   /**
-   * フォローリストを設定
-   */
-  setFollowingList(pubkeys) {
-    this.followingPubkeys.clear();
-    pubkeys.forEach(pk => this.followingPubkeys.add(pk));
-    console.log(`👥 フォロー中: ${this.followingPubkeys.size}人`);
-  }
-
-  /**
-   * タブ別のイベントを取得
-   */
-  getEventsByTab(tab, filterOptions = {}) {
-    const { flowgazerOnly = false } = filterOptions;
-    let eventIds = [];
-
-    switch (tab) {
-      case 'global':
-        // ★ 自分の投稿を除外
-        eventIds = Array.from(this.events.keys())
-          .filter(id => {
-            const ev = this.events.get(id);
-            const myPubkey = window.nostrAuth?.pubkey;
-            return (ev.kind === 1 || ev.kind === 6) && ev.pubkey !== myPubkey;
-          });
-        break;
-
-      case 'following':
-        // ★ フォロー中のユーザーの投稿（自分を除く）
-        eventIds = Array.from(this.events.keys())
-          .filter(id => {
-            const ev = this.events.get(id);
-            const myPubkey = window.nostrAuth?.pubkey;
-            return (ev.kind === 1 || ev.kind === 6) && 
-                   this.followingPubkeys.has(ev.pubkey) &&
-                   ev.pubkey !== myPubkey;
-          });
-        break;
-
-      case 'myposts':
-        // 自分の投稿
-        eventIds = Array.from(this.myPostIds);
-        break;
-
-      case 'likes':
-        // 自分が受け取ったkind:7
-        eventIds = Array.from(this.receivedLikeIds);
-        break;
-
-      default:
-        return [];
-    }
-
-    // flowgazerしぼりこみ
-    if (flowgazerOnly && tab !== 'likes') {
-      eventIds = eventIds.filter(id => {
-        const ev = this.events.get(id);
-        return ev.kind === 1 && 
-               ev.tags.some(tag => tag[0] === 'client' && tag[1] === 'flowgazer');
-      });
-    }
-
-    // イベントオブジェクトを取得してソート
-    return eventIds
-      .map(id => this.events.get(id))
-      .filter(Boolean)
-      .sort((a, b) => b.created_at - a.created_at);
-  }
-
-  getMergedFeedForTab(tab, filterOptions = {}) {
-    const othersFeed = this.getEventsByTab(tab, filterOptions);
-    
-    // global/following以外はそのまま返す
-    if (tab !== 'global' && tab !== 'following') {
-      return othersFeed;
-    }
-
-    const latestOthers = othersFeed[0]?.created_at ?? 0;
-
-    // 自分の投稿から、みんなの投稿より新しいものだけ抽出
-    const recentMine = this.selfFeed.filter(p => p.created_at > latestOthers);
-
-    // 合成して時系列順にソート
-    const merged = [...recentMine, ...othersFeed]
-      .sort((a, b) => b.created_at - a.created_at);
-
-    return merged;
-  }
-
-  /**
-   * 投稿者しぼりこみ
-   */
-  filterByAuthors(events, authorPubkeys) {
-    if (!authorPubkeys || authorPubkeys.length === 0) {
-      return events;
-    }
-
-    const authorSet = new Set(authorPubkeys);
-    return events.filter(ev => authorSet.has(ev.pubkey));
-  }
-
-  /**
    * プロフィール表示名を取得
+   * @param {string} pubkey
+   * @returns {string}
    */
   getDisplayName(pubkey) {
     const profile = this.profiles.get(pubkey);
@@ -279,60 +227,92 @@ class DataStore {
   }
 
   /**
+   * プロフィールを取得
+   * @param {string} pubkey
+   * @returns {Object|undefined}
+   */
+  getProfile(pubkey) {
+    return this.profiles.get(pubkey);
+  }
+
+  // ========================================
+  // フォロー管理
+  // ========================================
+
+  /**
+   * フォローリストを設定
+   * @param {string[]} pubkeys
+   */
+  setFollowingList(pubkeys) {
+    this.followingPubkeys.clear();
+    pubkeys.forEach(pk => this.followingPubkeys.add(pk));
+    console.log(`👥 フォロー中: ${this.followingPubkeys.size}人`);
+  }
+
+  /**
+   * フォロー中かチェック
+   * @param {string} pubkey
+   * @returns {boolean}
+   */
+  isFollowing(pubkey) {
+    return this.followingPubkeys.has(pubkey);
+  }
+
+  // ========================================
+  // リアクション情報
+  // ========================================
+
+  /**
    * リアクション数を取得
+   * @param {string} eventId
+   * @returns {Object} { reposts: number, reactions: number }
    */
   getReactionCount(eventId) {
     return this.reactionCounts.get(eventId) || { reposts: 0, reactions: 0 };
   }
 
   /**
-   * タブ別の最古タイムスタンプを取得
-   */
-  getOldestTimestamp(tab) {
-    return this.oldestTimestamps[tab] || Date.now() / 1000;
-  }
-
-  /**
    * ふぁぼ済みかチェック
+   * @param {string} eventId
+   * @returns {boolean}
    */
   isLikedByMe(eventId) {
     return this.likedByMeIds.has(eventId);
   }
 
-  /**
-   * クリア
-   */
-  clear() {
-    this.events.clear();
-    this.profiles.clear();
-    this.myPostIds.clear();
-    this.receivedLikeIds.clear();
-    this.followingPubkeys.clear();
-    this.likedByMeIds.clear();
-    this.reactionCounts.clear();
-    this.selfFeed = [];
-    const now = Date.now() / 1000;
-    this.oldestTimestamps = {
-      global: now,
-      following: now,
-      myposts: now,
-      likes: now
-    };
-    console.log('🗑️ データストアをクリアしました');
-  }
+  // ========================================
+  // ユーティリティ
+  // ========================================
 
   /**
-   * 統計情報
+   * 統計情報を取得
+   * @returns {Object}
    */
   getStats() {
     return {
       totalEvents: this.events.size,
       profiles: this.profiles.size,
-      myPosts: this.myPostIds.size,
-      receivedLikes: this.receivedLikeIds.size,
       following: this.followingPubkeys.size,
-      selfFeed: this.selfFeed.length
+      kindCounts: Object.fromEntries(
+        Array.from(this.eventsByKind.entries()).map(([k, v]) => [k, v.size])
+      )
     };
+  }
+
+  /**
+   * すべてのデータをクリア
+   */
+  clear() {
+    this.events.clear();
+    this.profiles.clear();
+    this.eventsByKind.clear();
+    this.eventsByAuthor.clear();
+    this.eventsByReferencedEvent.clear();
+    this.eventsByReferencedPubkey.clear();
+    this.followingPubkeys.clear();
+    this.likedByMeIds.clear();
+    this.reactionCounts.clear();
+    console.log('🗑️ データストアをクリアしました');
   }
 }
 
