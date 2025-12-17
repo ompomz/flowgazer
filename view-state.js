@@ -452,17 +452,23 @@ class ViewState {
       case 'global':
         filter.kinds = [1, 6];
         break;
-
+        
       case 'following':
         if (window.dataStore.followingPubkeys.size === 0) {
-          console.warn('フォローリストが空です');
-          return null;
+            console.warn('フォローリストが空です');
+            return null;
         }
         filter.kinds = [1, 6];
         const followingAuthors = Array.from(window.dataStore.followingPubkeys);
-        filter.authors = myPubkey 
-          ? followingAuthors.filter(pk => pk !== myPubkey)
-          : followingAuthors;
+        if (myPubkey) {
+            if (window.dataStore.isFollowing(myPubkey)) {
+                filter.authors = followingAuthors;
+            } else {
+                filter.authors = followingAuthors.filter(pk => pk !== myPubkey);
+            }
+        } else {
+            filter.authors = followingAuthors;
+        }
         break;
 
       case 'myposts':
