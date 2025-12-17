@@ -109,19 +109,28 @@ class FlowgazerApp {
 
     // === Following フィルタ ===
     if (window.dataStore.followingPubkeys.size > 0) {
-      const followingAuthors = Array.from(window.dataStore.followingPubkeys);
-      const filteredFollowing = myPubkey
-        ? followingAuthors.filter(pk => pk !== myPubkey)
-        : followingAuthors;
+        const followingAuthors = Array.from(window.dataStore.followingPubkeys);
 
-      if (filteredFollowing.length > 0) {
+        let filteredFollowing;
+        if (myPubkey) {
+            // 自分が自分をフォローしているなら除外しない
+            if (window.dataStore.isFollowing(myPubkey)) {
+                filteredFollowing = followingAuthors;
+            } else {
+                filteredFollowing = followingAuthors.filter(pk => pk !== myPubkey);
+                }
+        } else {
+            filteredFollowing = followingAuthors;
+        }
+
+        if (filteredFollowing.length > 0) {
         filters.push({
-          kinds: this.showKind42 ? [1, 6, 42] : [1, 6], // ← 変更
-          authors: filteredFollowing,
-          limit: 150
+            kinds: this.showKind42 ? [1, 6, 42] : [1, 6],
+            authors: filteredFollowing,
+            limit: 150
         });
-      }
     }
+}
 
     // === Likes フィルタ (自分宛のリアクション等) ===
     if (myPubkey) {
