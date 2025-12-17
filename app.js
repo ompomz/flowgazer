@@ -502,7 +502,14 @@ class FlowgazerApp {
       
       // ViewStateに通知
       window.viewState.addHistoryEventToTab(signed, 'myposts');
-      
+      window.viewState.addHistoryEventToTab(signed, 'global');
+
+      // 自分が自分をフォローしているなら following にも追加
+      const myPubkey = window.nostrAuth?.pubkey;
+      if (window.dataStore.isFollowing(myPubkey)) {
+        window.viewState.addHistoryEventToTab(signed, 'following');
+        }
+    
       // 即座に再描画
       window.viewState.renderNow();
       
