@@ -191,7 +191,7 @@ class Timeline {
         // 元の投稿が存在する場合
         const ts = this.createTimestamp(originalEvent);
         li.appendChild(ts);
-
+        li.appendChild(document.createTextNode(' '));
         const authorLink = this.createAuthorLink(originalEvent.pubkey);
         li.appendChild(authorLink);
 
