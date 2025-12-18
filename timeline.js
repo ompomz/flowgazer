@@ -173,18 +173,36 @@ class Timeline {
     const li = document.createElement('li');
     li.className = 'event event-repost';
 
+    li.destroy = () => {
+      li.remove();
+    };
+
     li.appendChild(this.createMetadata(event));
 
     const prefix = document.createElement('span');
-    prefix.textContent = 'RP: ';
+    prefix.textContent = 'RT: ';
     prefix.className = 'repost-prefix';
     li.appendChild(prefix);
 
-    // 対象投稿へのリンク
     const targetId = event.tags.find(t => t[0] === 'e')?.[1];
     if (targetId) {
-      const link = this.createEventLink(targetId);
-      li.appendChild(link);
+      const originalEvent = window.dataStore.getEvent(targetId);
+      if (originalEvent) {
+        // 元の投稿が存在する場合
+        const ts = this.createTimestamp(originalEvent);
+        li.appendChild(ts);
+
+        const authorLink = this.createAuthorLink(originalEvent.pubkey);
+        li.appendChild(authorLink);
+
+        const content = document.createElement('span');
+        content.textContent = ' > ' + originalEvent.content;
+        li.appendChild(content);
+      } else {
+        // 元の投稿が見つからない場合はリンクを表示
+        const link = this.createEventLink(targetId);
+        li.appendChild(link);
+      }
     }
 
     return li;
