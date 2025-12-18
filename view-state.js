@@ -118,6 +118,10 @@ class ViewState {
    * イベントを指定タブに追加
    * @private
    */
+  /**
+ * イベントを指定タブに追加
+ * @private
+ */
   _addEventToTab(event, tab, myPubkey) {
     const tabState = this.tabs[tab];
     if (!tabState) return false;
@@ -130,9 +134,11 @@ class ViewState {
     // 追加
     tabState.visibleEventIds.add(event.id);
 
-    // カーソル更新（global/followingのみ特別処理）
+    // カーソル更新
     if (tab === 'global' || tab === 'following') {
       this._updateCursorForMainTabs(tabState, event, myPubkey);
+    } else if (tab === 'likes') {
+      this._updateCursorForLikesTab(tabState, event, myPubkey);
     } else {
       this._updateCursor(tabState, event.created_at);
     }
@@ -189,6 +195,34 @@ class ViewState {
     // sinceは全イベントで更新
     if (event.created_at > tabState.cursor.since) {
       tabState.cursor.since = event.created_at;
+    }
+  }
+
+  /**
+ * likesタブ専用のカーソル更新
+ * cursor.untilは kind:7 の最新50件目の created_at を基準にする
+ * @private
+ */
+  _updateCursorForLikesTab(tabState, event, myPubkey) {
+    // まず基本的なカーソル更新
+    this._updateCursor(tabState, event.created_at);
+
+    // kind:7 のイベントが追加された場合、cursor.until を再計算
+    if (event.kind === 7) {
+      // kind:7 のイベントを全て取得してソート
+      const kind7Events = Array.from(tabState.visibleEventIds)
+        .map(id => window.dataStore.getEvent(id))
+        .filter(ev => ev && ev.kind === 7)
+        .sort((a, b) => b.created_at - a.created_at);
+
+      // 50件以上ある場合、50件目の created_at を cursor.until に設定
+      if (kind7Events.length >= 50) {
+        const fiftiethEvent = kind7Events[49];
+        if (tabState.cursor) {
+          tabState.cursor.until = fiftiethEvent.created_at;
+          console.log(`⏰ likesタブ: cursor.until更新 (kind:7の50件目: ${new Date(fiftiethEvent.created_at * 1000).toLocaleString()})`);
+        }
+      }
     }
   }
 
@@ -315,6 +349,12 @@ class ViewState {
    * @param {Object} filterOptions - { flowgazerOnly, authors }
    * @returns {Object[]}
    */
+  /**
+ * 指定タブの表示イベントを取得 (フィルタリング済み・ソート済み)
+ * @param {string} tab
+ * @param {Object} filterOptions - { flowgazerOnly, authors }
+ * @returns {Object[]}
+ */
   getVisibleEvents(tab, filterOptions = {}) {
     const tabState = this.tabs[tab];
     if (!tabState) return [];
@@ -324,9 +364,9 @@ class ViewState {
       .map(id => window.dataStore.getEvent(id))
       .filter(Boolean);
 
-    // === cutoffフィルタ (global/following のみ) ===
-    if (tab === 'global' || tab === 'following') {
-      events = this._applyCutoffFilter(events, tabState);
+    // === cutoffフィルタ (global/following/likes) ===
+    if (tab === 'global' || tab === 'following' || tab === 'likes') {
+      events = this._applyCutoffFilter(events, tabState, tab);
     }
 
     // === 追加フィルタリング ===
@@ -344,21 +384,40 @@ class ViewState {
    * cutoffフィルタを適用
    * @private
    */
-  _applyCutoffFilter(events, tabState) {
+  /**
+ * cutoffフィルタを適用
+ * @private
+ */
+  _applyCutoffFilter(events, tabState, tab) {
     if (!tabState.cursor?.until) {
       // cursor.untilがない場合は15分前を基準にする
       const now = Math.floor(Date.now() / 1000);
       const cutoff = now - (CUTOFF_OFFSET_MINUTES * 60);
       console.log(`⏰ cutoff基準なし: 15分前 (${new Date(cutoff * 1000).toLocaleString()}) を使用`);
+
+      // likesタブの場合は kind:7 を除外してフィルタ
+      if (tab === 'likes') {
+        return events.filter(ev => ev.kind === 7 || ev.created_at >= cutoff);
+      }
       return events.filter(ev => ev.created_at >= cutoff);
     }
 
     const cutoff = tabState.cursor.until;
     const beforeCount = events.length;
-    const filtered = events.filter(ev => ev.created_at >= cutoff);
-    
+
+    // likesタブの場合は kind:7 を残し、kind:1 と kind:6 のみフィルタ
+    let filtered;
+    if (tab === 'likes') {
+      filtered = events.filter(ev => {
+        if (ev.kind === 7) return true; // kind:7 は全て残す
+        return ev.created_at >= cutoff; // kind:1, kind:6 は cutoff でフィルタ
+      });
+    } else {
+      filtered = events.filter(ev => ev.created_at >= cutoff);
+    }
+
     if (beforeCount !== filtered.length) {
-      console.log(`✂️ cutoffフィルタ適用: ${beforeCount}件 → ${filtered.length}件 (基準: ${new Date(cutoff * 1000).toLocaleString()})`);
+      console.log(`✂️ cutoffフィルタ適用 (${tab}): ${beforeCount}件 → ${filtered.length}件 (基準: ${new Date(cutoff * 1000).toLocaleString()})`);
     }
 
     return filtered;
