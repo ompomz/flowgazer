@@ -52,7 +52,7 @@ function createAuthUI() {
 <div id="auth-login" style="display: none;">
 <button id="nip07-login" class="container-button" style="margin-bottom: 0.5rem; white-space: nowrap; font-size: 0.8rem; font-weight: bold; padding: 0.25rem 1rem; margin: 0.5rem 0; border: none; border-radius: 999px; background-color: #e0f2f1; color: #00796b; cursor: pointer;">🔐 NIP-07</button>
 
-    <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem;"><form onsubmit="return false;">
+    <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem;"><form onsubmit="return false;"><input type="text" name="username" autocomplete="username" style="display: none;">
         <input type="password" id="nsec-input" autocomplete="current-password" placeholder="nsec1..."
             style="flex-grow: 1; margin: 0; transition: background-color 0.3s, color 0.3s; cursor: pointer; font-size: 0.9rem; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; color: #666; background-color: #fff;">
             <button type="button" id="nsec-login" style="white-space: nowrap; font-size: 0.8rem; font-weight: bold; padding: 0.25rem 1rem; border: none; border-radius: 999px; background-color: #e0f2f1; color: #00796b; cursor: pointer;">🔑 nsec</button></form>
