@@ -158,47 +158,20 @@ button:hover { background-color: #ffa347; }
     }
 
     // --- 1. ID判別とルート振り分け ---
-    function initializeApp() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const id = urlParams.get('id');
-        const renderArea = document.getElementById('render-area');
+function initializeApp() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const id = urlParams.get('id');
+    const renderArea = document.getElementById('render-area');
 
-        // 1. IDがない場合はフォームを表示
-        if (!id) {
-            renderArea.innerHTML = Components.inputForm();
-            setupFormListener();
-            return;
-        }
-
-        // 2. IDの種類を判定して振り分け
-        try {
-            const decoded = NostrTools.nip19.decode(id);
-
-            switch (decoded.type) {
-                case 'npub':
-                case 'nprofile':
-                    // プロフィール表示モードへ
-                    startProfileWorkflow(decoded);
-                    break;
-
-                case 'note':
-                case 'nevent':
-                case 'naddr':
-                    // 投稿詳細表示モードへ
-                    startEventWorkflow(decoded);
-                    break;
-
-                default:
-                    showStatus('エラー: 未対応のID形式です。');
-                    renderArea.innerHTML = Components.inputForm();
-                    setupFormListener();
-            }
-        } catch (err) {
-            showStatus('エラー: IDの解析に失敗しました。');
-            renderArea.innerHTML = Components.inputForm();
-            setupFormListener();
-        }
+    if (!id) {
+        renderArea.innerHTML = Components.inputForm();
+        setupFormListener();
+        return;
     }
+
+    // ここでデコードせず、そのまま ID文字列を渡す！
+    startEventWorkflow(id); 
+}
 
     // --- 2. レンダリング・コンポーネント (HTMLを組み立てる専門家) ---
     const Components = {
@@ -784,4 +757,5 @@ button:hover { background-color: #ffa347; }
 </script>
 
 </body>
+
 </html>
