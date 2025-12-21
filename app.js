@@ -606,25 +606,17 @@ class FlowgazerApp {
   /**
   * 指定したユーザーの投稿履歴を取得
   */
-  async fetchUserPosts(pubkey) {
-    console.log(`📥 ユーザー(${pubkey})の投稿を取得中...`);
-
-    // RelayManagerのgetEvents（先ほど追加したもの）を使い回す
-    const relay = localStorage.getItem('relayUrl') || 'wss://r.kojira.io/';
+async fetchUserPosts(pubkey) {
+    const relay = this.url || 'wss://relay.nostr.band/';
     const posts = await window.relayManager.getEvents(relay, {
-      kinds: [1, 42],
-      authors: [pubkey],
-      limit: 50
+        kinds: [1],
+        authors: [pubkey],
+        limit: 20
     });
-
-    // DataStoreに保存して、プロフィールもリクエスト
-    posts.forEach(event => {
-      window.dataStore.addEvent(event);
-      window.profileFetcher.request(event.pubkey);
-    });
-
+    // 取得したイベントをストアに入れておく
+    posts.forEach(ev => window.dataStore.addEvent(ev));
     return posts;
-  }
+}
 
   // ========================================
   // UI更新
