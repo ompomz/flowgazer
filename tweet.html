@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>tweetviewer</title>
+<style>
+/* --- Base / Layout --- */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.5; background-color: #f7f7f7; color: #666; font-size: 0.9rem; padding: 0.5rem; }
+.container { max-width: 600px; margin: 0 ; padding: 0.5rem; }
+.header-section, .footer-section { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0; border-bottom: 1px dashed #ddd; }
+.footer-section { border-bottom: none; border-top: 1px dashed #ddd; }
+.hidden { display: none; }
+
+/* --- Components (Buttons/Forms) --- */
+button { border: none; font-size: 0.8rem; padding: 0.5rem 0.8rem; border-radius: 999px; font-weight: bold; cursor: pointer; background-color: #ffb366; color: #fff; transition: 0.3s; }
+button:hover { background-color: #ffa347; }
+.form-input { flex: 1; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; min-width: 0; }
+.nostr-form { display: flex; align-items: center; gap: 0.5rem; padding-top: 0.25rem; }
+
+/* --- Post / Profile --- */
+.post-header { display: flex; align-items: center; gap: 10px; }
+.post-content { margin: 0.5rem 0; line-height: 1.5; overflow-wrap: break-word; word-break: break-all; }
+.post-footer { font-size: 0.8rem; color: #888; }
+.profile-card { display: flex; flex-direction: column; gap: 1rem; padding: 1rem; background: #fff; border-radius: 8px; border: 1px solid #ddd; }
+.profile-picture { width: 6rem; height: 6rem; border-radius: 50%; object-fit: cover; border: 3px solid rgba(0, 121, 107, 0.5); }
+.header-pic { width: 4rem; height: 4rem; border-radius: 50%; object-fit: cover; border: 3px solid rgba(0, 121, 107, 0.5); }
+.user-link { text-decoration: none; color: inherit; font-weight: bold; }
+.user-link:hover { text-decoration: underline; color: #66b3ff; }
+
+/* --- Reactions --- */
+.reactions-list { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.25rem 0 0.75rem 0; }
+.reaction-group { display: inline-flex; align-items: center; background: #f8f8f8; padding: 2px 8px; border-radius: 15px; margin: 0.5rem 0rem 0rem 0rem; font-size: 0.9rem; border: 1px solid #eee; }
+.reaction-avatars { margin-left: 8px; display: flex; align-items: center; flex-direction: row-reverse; }
+.reaction-avatar { width: 20px; height: 20px; border-radius: 50%; margin-left: -5px; border: 1px solid white; background: #eee; object-fit: cover; }
+.reaction-container { background: #fff5f8; border: 1px dashed #ffb3c1; border-radius: 12px; padding: 15px; margin-bottom: 20px; }
+
+/* --- Media / Custom Emoji --- */
+.video-container { margin: 10px 0; }
+.video-container.youtube { aspect-ratio: 16 / 9; }
+.video-container iframe, .video-container video { width: 100%; height: 100%; border-radius: 12px; border: none; }
+.video-container video { max-width: 100%; height: auto; border: 1px solid #eee; }
+.image-container { margin: 8px 0; }
+.post-image { max-width: 15rem; max-height: 15rem; border-radius: 12px; border: 1px solid #eee; display: block; cursor: zoom-in; }
+.custom-emoji { height: 1.2em; vertical-align: middle; display: inline-block; }
+
+/* --- Modal (画像拡大) --- */
+.modal { display: none; position: fixed; z-index: 1; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0, 0, 0, 0.2); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
+.modal-content { margin: auto; display: block; max-width: 80%; max-height: 80vh; width: 80%; }
+.modal-image { width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; display: block; margin: auto; }
+.close-button { color: #fff; font-size: 40px; font-weight: 700; cursor: pointer; transition: 0.3s; }
+.close-button:hover, .close-button:focus { color: #eee; text-decoration: none; cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="modal-placeholder"></div>
+
+<div class="container">
+    <div id="nav-section" class="header-section">
+        <button id="btn-back">もどる</button>
+        <button id="btn-share">シェア</button>
+        <button id="btn-auth" class="auth-button" style="display:none;">鍵をお持ちの方はこちら</button>
+    </div>
+    <div style="margin: 0.5rem 0rem;">
+    <main id="main-content">
+        <div id="loading-status" class="hidden"></div>
+        <div id="render-area"></div>
+    </main>
+
+    <section id="sub-content" class="hidden">
+        <div id="reactions-section">
+            <div id="reactions-list"></div>
+        </div>
+        <div id="related-events-section">
+            <div id="related-events-list"></div>
+        </div>
+    </section>
+    </div>
+    <div id="footer-section" class="footer-section">
+        <button id="btn-back-footer">もどる</button>
+        <button id="save-list-btn" style="display:none;">フォローリストを保存</button>
+    </div>
+</div>
+
+<script src="https://unpkg.com/nostr-tools@2.17.0/lib/nostr.bundle.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://ompomz.github.io/modal.js"></script>
+<script src="https://ompomz.github.io/flowgazer/auth.js"></script>
+<script src="https://ompomz.github.io/flowgazer/auth-ui.js"></script>
+<script src="https://ompomz.github.io/flowgazer/relay-manager.js"></script>
+<script src="https://ompomz.github.io/flowgazer/data-store.js"></script>
+<script src="https://ompomz.github.io/flowgazer/profile-fetcher.js"></script>
+<script src="https://ompomz.github.io/flowgazer/app.js"></script>
+<script src="https://ompomz.github.io/flowgazer2/channel.js"></script>
+<script src="https://ompomz.github.io/flowgazer2/quote-manager.js"></script>
+
+<script>
+    function parseNevent(input) {
+        try {
+            const decoded = window.NostrTools.nip19.decode(input);
+            const type = decoded.type; // 'npub', 'nevent', 'note' など
+            const data = decoded.data;
+
+            if (type === 'npub') {
+                return { id: data, type: 'npub' }; // pubkeyをidとして返す
+            }
+            if (type === 'nevent') {
+                return { id: data.id, type: 'nevent', relays: data.relays || [] };
+            }
+            if (type === 'note') {
+                return { id: data, type: 'note' };
+            }
+            if (type === 'nprofile') {
+                return { id: data.pubkey, type: 'nprofile', relays: data.relays || [] };
+            }
+            return null;
+        } catch (e) {
+            console.error("NIP-19 Decode Error:", e);
+            return null;
+        }
+    }
+    
+    const FALLBACK_RELAYS = [
+        'wss://relay.damus.io/',
+        'wss://nos.lol/',
+        'wss://relay.nostr.band/'
+    ];
+
+    function getPriorityRelays(hintRelays) {
+        const combined = new Set([...hintRelays, ...FALLBACK_RELAYS]);
+        return Array.from(combined);
+    }
+
+    function setupFormListener() {
+        const form = document.getElementById('nostr-form');
+        if (!form) return;
+
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const input = document.getElementById('nostr-id-input').value.trim();
+            if (input) {
+                window.location.href = `?id=${input}`;
+            }
+        });
+    }
+
+    function showStatus(message) {
+        const statusElement = document.getElementById('loading-status');
+        if (!statusElement) return;
+
+        statusElement.textContent = message;
+        if (message) {
+            statusElement.classList.remove('hidden');
+        } else {
+            statusElement.classList.add('hidden');
+        }
+    }
+
+    // --- 1. ID判別とルート振り分け ---
+    function initializeApp() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const id = urlParams.get('id');
+        const renderArea = document.getElementById('render-area');
+
+        // 1. IDがない場合はフォームを表示
+        if (!id) {
+            renderArea.innerHTML = Components.inputForm();
+            setupFormListener();
+            return;
+        }
+
+        // 2. IDの種類を判定して振り分け
+        try {
+            const decoded = NostrTools.nip19.decode(id);
+
+            switch (decoded.type) {
+                case 'npub':
+                case 'nprofile':
+                    // プロフィール表示モードへ
+                    startProfileWorkflow(decoded);
+                    break;
+
+                case 'note':
+                case 'nevent':
+                case 'naddr':
+                    // 投稿詳細表示モードへ
+                    startEventWorkflow(decoded);
+                    break;
+
+                default:
+                    showStatus('エラー: 未対応のID形式です。');
+                    renderArea.innerHTML = Components.inputForm();
+                    setupFormListener();
+            }
+        } catch (err) {
+            showStatus('エラー: IDの解析に失敗しました。');
+            renderArea.innerHTML = Components.inputForm();
+            setupFormListener();
+        }
+    }
+
+    // --- 2. レンダリング・コンポーネント (HTMLを組み立てる専門家) ---
+    const Components = {
+        // プロフィールカードの生成
+        profileCard: (profile, npub) => {
+            const picture = profile.picture || 'https://ompomz.github.io/favicon.ico';
+            const name = profile.name || 'Unknown';
+            const about = profile.about ? `<p class="about-text">${Components.utils.escape(profile.about).replace(/\n/g, '<br>')}</p>` : '';
+
+            return `
+            <div class="profile-card">
+                <div class="profile-header">
+                    <img src="${picture}" class="profile-picture">
+                    <div class="profile-info">
+                        <h2 class="profile-name">${name}</h2>
+                        <code class="npub-text">${npub.substring(0, 12)}...</code>
+                    </div>
+                </div>
+                ${about}
+            </div>
+        `;
+        },
+
+        // 投稿（イベント）本体の生成
+        eventBody: (event, contentHtml, profile = {}) => {
+            const date = new Date(event.created_at * 1000).toLocaleString();
+            const picture = profile.picture || 'https://ompomz.github.io/favicon.ico';
+            const nameHtml = Components.utils.getNameLink(event.pubkey, profile);
+
+            return `
+        <div class="main-post">
+        <div class="post-header">
+            <img src="${picture}" class="header-pic">
+            <div>
+                <div class="user-name">${nameHtml}</div>
+                <div class="profile-npub">@${NostrTools.nip19.npubEncode(event.pubkey).substring(0, 10)}...</div>
+            </div>
+        </div>
+        <div class="post-content">${contentHtml}</div>
+        <div class="post-footer"><span>${date}</span></div>
+        </div>`;
+        },
+
+        // 入力フォームの生成
+        inputForm: () => `
+        <div class="input-form-container">
+            <p class="form-title">Nostr IDを入力してください</p>
+            <form id="nostr-form" class="nostr-form">
+                <input type="text" id="nostr-id-input" placeholder="nevent1..., npub1..." required class="form-input">
+                <button type="submit" class="form-button">表示</button>
+            </form>
+        </div>
+        `,
+
+        // ユーティリティ（テキスト成形など）
+        utils: {
+            escape: (str) => str.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m])),
+
+            // pubkeyからリンク付きの名前（またはnpubの一部）を返す
+            getNameLink: (pubkey, profile = {}) => {
+                const name = profile.display_name || profile.name || "";
+                const npub = NostrTools.nip19.npubEncode(pubkey);
+                const displayName = name ? Components.utils.escape(name) : `${npub.substring(0, 10)}...`;
+                // クリックで ?id=npub... へ移動
+                return `<a href="?id=${npub}" class="user-link" style="text-decoration: none; color: inherit; font-weight: bold;">${displayName}</a>`;
+            },
+
+            // 投稿本文をリッチにする（画像展開・リンク化）
+            formatContent: async (content, tags) => {
+                // 1. まずテキスト全体をエスケープ
+                let html = Components.utils.escape(content);
+
+                // 2. 先に改行を <br> に変換（これで本文の改行はOK）
+                html = html.replace(/\n/g, '<br>');
+
+                // 3. メディア（画像・動画・YouTube）とURLの処理
+                // ここで生成するHTMLには改行を入れないように連結します
+                const urlRegex = /https?:\/\/[\w/:%#\$&\?\(\)~\.=\+\-]+/g;
+
+                html = html.replace(urlRegex, (url) => {
+                    // --- YouTube ---
+                    const ytMatch = url.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+                    if (ytMatch) {
+                        const videoId = ytMatch[1];
+                        return `
+                        <div class="video-container youtube">
+                            <iframe src="https://www.youtube.com/embed/${videoId}" allowfullscreen></iframe>
+                        </div>
+                        `;
+                    }
+
+                    // --- 動画 ---
+                    if (/\.(mp4|webm|mov)(?:\?.*)?$/i.test(url)) {
+                        return `
+                        <div class="video-container">
+                            <video src="${url}" controls></video>
+                        </div>
+                        `;
+                    }
+
+                    // --- 画像 ---
+                    if (/\.(png|jpe?g|gif|webp|svg)(?:\?.*)?$/i.test(url)) {
+                        return `
+                        <div class="image-container">
+                            <img src="${url}" class="post-image" onclick="openModal('${url}')" onerror="this.style.display='none';">
+                        </div>
+                        `;
+                    }
+
+                    // --- 通常リンク ---
+                    return `<a href="${url}" target="_blank" rel="noopener" class="external-link">${url}</a>`;
+                });
+
+                // 4. Nostr ID (nostr:...) の処理
+                const nostrRegex = /nostr:(n(?:pub|event|ote|profile|addr)1[a-z0-9]+)/g;
+                html = html.replace(nostrRegex, (match, nip19Id) => {
+                    return `<div class="quote-placeholder" data-id="${nip19Id}"><a href="?id=${nip19Id}" class="nostr-link">nostr:${nip19Id.substring(0, 12)}...</a></div>`;
+                });
+
+                // 5. カスタム絵文字の置換
+                tags.filter(t => t[0] === 'emoji').forEach(([_, code, url]) => {
+                    const reg = new RegExp(`:${code}:`, 'g');
+                    html = html.replace(reg, `<img src="${url}" class="custom-emoji" title=":${code}:">`);
+                });
+
+                return html;
+            }
+        },
+
+        reactionSection: (reactions) => {
+            if (reactions.length === 0) return '';
+            return `<div class="reactions-summary">🌟 ${reactions.length} reactions</div>`;
+        },
+
+        replyCard: (event, contentHtml) => {
+            return `
+            <div class="reply-card">
+                <div class="reply-content">${contentHtml}</div>
+            </div>
+        `;
+        },
+        
+        quoteCard: (eventId, contentHtml = "読み込み中...", profile = {}) => {
+            const nameHtml = profile.pubkey ? Components.utils.getNameLink(profile.pubkey, profile) : (profile.name || "...");
+            return `
+        <div id="quote-${eventId}" class="quote-card" ...>
+            <div style="display: flex; align-items: center; gap: 5px; margin-bottom: 5px;">
+                <img src="${profile.picture || ''}" ...>
+                <span style="font-weight: bold;">${nameHtml}</span>
+            </div>
+            <div class="quote-content">${contentHtml}</div>
+        </div>
+        `;
+        }
+    };
+
+    // --- 3. ユーザーアクションの管理 ---
+    function setupEventListeners() {
+        // もどるボタン
+        const backBtns = [document.getElementById('btn-back'), document.getElementById('btn-back-footer')];
+        backBtns.forEach(btn => {
+            btn?.addEventListener('click', () => {
+                window.history.length > 1 ? window.history.back() : window.location.href = './';
+            });
+        });
+
+        // シェアボタン
+        document.getElementById('btn-share')?.addEventListener('click', () => {
+            navigator.clipboard.writeText(window.location.href).then(() => alert('URLをコピーしました'));
+        });
+
+        // 認証ボタン (外部の auth-ui.js を呼び出す想定)
+        document.getElementById('btn-auth')?.addEventListener('click', () => {
+            if (typeof showAuthUI === 'function') showAuthUI();
+        });
+    }
+
+    // --- 4. Workflow (データの取得から表示までの手順) ---
+
+    // プロフィール表示の流れ
+        async function startProfileWorkflow(decoded) {
+            showStatus('プロフィール情報を取得中...');
+
+            // npubまたはnprofileから公開鍵を取得
+            const pubkey = decoded.data.pubkey || decoded.data.id || decoded.data;
+
+            // リレーリストの決定（IDに紐づくリレーがあれば優先、なければFallback）
+            const relays = (decoded.data.relays && decoded.data.relays.length > 0)
+                ? decoded.data.relays
+                : FALLBACK_RELAYS;
+
+            try {
+                // 1. リレーに接続
+                await relayManager.connect(relays[0]);
+
+                // 2. 購読開始 (subId, filters, handler)
+                // relay-manager.js の仕様通り、3つの引数を渡します
+                relayManager.subscribe(
+                    'profile-query',           // subId
+                    {                          // filters
+                        kinds: [0],
+                        authors: [pubkey],
+                        limit: 1
+                    },
+                    (type, event) => {         // handler (コールバック)
+                        if (type === 'EVENT' && event) {
+                            try {
+                                const profile = JSON.parse(event.content);
+                                const npub = NostrTools.nip19.npubEncode(pubkey);
+
+                                // 3. 描画
+                                const renderArea = document.getElementById('render-area');
+                                renderArea.innerHTML = Components.profileCard(profile, npub);
+
+                                showStatus(''); // ステータスを消す
+
+                                // 4. 用が済んだら購読解除
+                                relayManager.unsubscribe('profile-query');
+                            } catch (e) {
+                                console.error("Profile parse error:", e);
+                            }
+                        }
+                    }
+                );
+
+            } catch (err) {
+                console.error("Connection error:", err);
+                showStatus('リレーへの接続に失敗しました');
+            }
+        }
+
+    // --- 1. まずイベントを1つだけ取ってくる関数 ---
+    async function fetchSingleEvent(originalId) {
+        const decoded = parseNevent(originalId);
+        if (!decoded) return null;
+
+        const { id, relays: hintRelays } = decoded;
+        const targetRelays = getPriorityRelays(hintRelays || []);
+
+        for (const url of targetRelays) {
+            try {
+                console.log(`[探索開始] ${url} に接続中...`);
+                const event = await window.relayManager.getEvent(url, { ids: [id] });
+
+                if (event) {
+                    console.log(`[発見！] ${url} でイベントを発見しました`);
+                    return { event, foundRelay: url };
+                }
+            } catch (error) {
+                console.warn(`[エラー] ${url} で問題が発生しました:`, error);
+            }
+        }
+        return null;
+    }
+
+    // --- 2. 振り分けを行うメインワークフロー ---
+    async function startEventWorkflow(originalId) {
+        try {
+            // 1. IDの解析
+            const decoded = parseNevent(originalId);
+
+            // 解析に失敗した場合のガード
+            if (!decoded || !decoded.id) {
+                throw new Error("IDの形式が正しくありません。");
+            }
+
+            const renderArea = document.getElementById('render-area');
+
+            // ==========================================
+            // ケースA: npub または nprofile (ユーザー投稿一覧表示)
+            // ==========================================
+            if (originalId.startsWith('npub') || originalId.startsWith('nprofile')) {
+                const pubkey = decoded.id;
+                showStatus('ユーザーの投稿を取得中...');
+
+                // app.js の汎用メソッドを使って投稿を取得
+                // window.app が初期化されていることが前提
+                const posts = await window.app.fetchUserPosts(pubkey);
+
+                if (posts && posts.length > 0) {
+                    renderArea.innerHTML = ''; // エリアをクリア
+
+                    for (const post of posts) {
+                        // 第2引数 true: タイムラインモードで描画
+                        await renderStandardPost(post, true);
+                    }
+                    showStatus('');
+                } else {
+                    showStatus('投稿が見つかりませんでした。', true);
+                    renderArea.innerHTML = Components.inputForm();
+                    setupFormListener();
+                }
+                return; // 投稿一覧を出したらここで終了
+            }
+
+            // ==========================================
+            // ケースB: nevent / note (単一イベント詳細表示)
+            // ==========================================
+            const eventId = decoded.id;
+            const existingEvent = window.dataStore.getEvent(eventId);
+
+            let result;
+
+            // データの取得（キャッシュ or リレー）
+            if (existingEvent) {
+                result = { event: existingEvent, foundRelay: null };
+            } else {
+                showStatus('イベントをロード中...');
+                // fetchSingleEvent は nevent/note 用の既存ロジック
+                result = await fetchSingleEvent(originalId);
+            }
+
+            // 結果の存在確認
+            if (!result || !result.event) {
+                showStatus('イベントが見つかりませんでした。', true);
+                if (renderArea) {
+                    renderArea.innerHTML = Components.inputForm();
+                    setupFormListener();
+                }
+                return;
+            }
+
+            const { event, foundRelay } = result;
+            console.log(`📡 Event Kind: ${event.kind} (Source: ${foundRelay || 'Cache'})`);
+
+            // 3. Kind ごとの表示処理に分岐
+            switch (event.kind) {
+                case 1:
+                case 30023:
+                    await renderStandardPost(event, false); // 詳細表示
+                    break;
+                case 6:
+                    if (typeof renderRepost === 'function') {
+                        renderRepost(event);
+                    } else {
+                        renderGenericEvent(event, "リポストされました");
+                    }
+                    break;
+                case 7:
+                    await renderReactionEvent(event);
+                    break;
+                case 40:
+                case 41:
+                    ChannelHandlers.renderMetadata(event);
+                    break;
+                case 42:
+                    await ChannelHandlers.renderMessage(event);
+                    break;
+                default:
+                    renderGenericEvent(event);
+                    break;
+            }
+
+            // 4. 関連データ（リプライ・リアクション）の取得
+            const relaysForRelated = foundRelay
+                ? [...new Set([foundRelay, ...FALLBACK_RELAYS])]
+                : FALLBACK_RELAYS;
+
+            fetchRelatedData(event.id, relaysForRelated);
+            showStatus('');
+
+        } catch (error) {
+            console.error("Workflow Error:", error);
+            showStatus('エラー: ' + error.message, true);
+
+            const renderArea = document.getElementById('render-area');
+            if (renderArea) {
+                renderArea.innerHTML = Components.inputForm();
+                setupFormListener();
+            }
+        }
+    }
+
+    /**
+     * Kind 1 や 30023 などの標準的な投稿をレンダリングする
+     */
+    async function renderStandardPost(event) {
+        const renderArea = document.getElementById('render-area');
+        const profile = window.dataStore.getProfile(event.pubkey);
+
+        // 1. 本文をフォーマット（HTML化）
+        const contentHtml = await Components.utils.formatContent(event.content, event.tags);
+
+        // 2. メインエリアを描画
+        renderArea.innerHTML = Components.eventBody(event, contentHtml, profile || {});
+
+        // 3. プロフィールがなければ取得をリクエスト
+        if (!profile) {
+            window.profileFetcher.request(event.pubkey);
+        }
+
+        // 4. 本文の中の「引用 (nostr:...)」をスキャンして展開
+        if (typeof QuoteManager !== 'undefined') {
+            QuoteManager.scanAndRender();
+        }
+
+        // 5. 下部のリプライやリアクションを取得開始
+        // IDに紐づくリレーがあれば優先、なければFallback
+        const relays = FALLBACK_RELAYS;
+        fetchRelatedData(event.id, relays);
+    }
+
+    // --- 関連データ（リプライ・リアクション）の取得 ---
+    async function fetchRelatedData(eventId, relays) {
+        const reactionsList = document.getElementById('reactions-list');
+        const relatedList = document.getElementById('related-events-list');
+        const subContent = document.getElementById('sub-content');
+
+        // リプライ(1)とリアクション(7)を購読
+        relayManager.subscribe('related-data', { '#e': [eventId], kinds: [1, 7] }, async (type, event) => {
+            if (type === 'EVENT' && event) {
+                // 1. まずは DataStore に保存
+                window.dataStore.addEvent(event);
+                subContent.classList.remove('hidden');
+
+                if (event.kind === 7) {
+                    // --- リアクションの集計と描画 ---
+                    // ストアにある全イベントから、この投稿(eventId)に対するKind 7だけを抽出
+                    const allReactions = Array.from(window.dataStore.events.values()).filter(e =>
+                        e.kind === 7 && e.tags.some(t => t[0] === 'e' && t[1] === eventId)
+                    );
+
+                    // 絵文字ごとにグループ化
+                    const reactionGroups = new Map();
+                    allReactions.forEach(r => {
+                        const emoji = r.content.trim() || '+';
+                        if (!reactionGroups.has(emoji)) {
+                            reactionGroups.set(emoji, { pubkeys: new Set(), event: r });
+                        }
+                        reactionGroups.get(emoji).pubkeys.add(r.pubkey);
+                    });
+
+                    // HTML組み立て
+                    let html = '';
+                    for (const [emoji, group] of reactionGroups.entries()) {
+                        // カスタム絵文字対応（formatContentを利用）
+                        const emojiHtml = await Components.utils.formatContent(emoji === '+' ? '⭐' : emoji, group.event.tags);
+
+                        // アバターのリスト作成
+                        const avatarsHtml = Array.from(group.pubkeys).map(pubkey => {
+                            const profile = window.dataStore.getProfile(pubkey) || {};
+                            const pic = profile.picture || 'https://ompomz.github.io/favicon.ico';
+                            const npub = NostrTools.nip19.npubEncode(pubkey);
+                            return `
+                            <a href="?id=${npub}">
+                            <img src="${pic}" class="reaction-avatar" title="${profile.name || ''}">
+                            </a>`;
+                        }).join('');
+
+                        html += `
+                        <div class="reaction-group">
+                        <span class="reaction-emoji">${emojiHtml}</span>
+                        <div class="reaction-avatars">${avatarsHtml}</div>
+                        </div>`;
+                    }
+                    reactionsList.innerHTML = html;
+
+                } else if (event.kind === 1) {
+                    // リプライの追加
+                    const html = await Components.utils.formatContent(event.content, event.tags);
+                    const profile = window.dataStore.getProfile(event.pubkey) || {};
+
+                    // リプライにも名前リンクやアイコンを入れるならここを Components.replyCard に渡す
+                    relatedList.innerHTML += Components.replyCard(event, html);
+
+                    if (!window.dataStore.getProfile(event.pubkey)) {
+                        window.profileFetcher.request(event.pubkey);
+                    }
+                }
+            }
+        });
+    }
+
+    /**
+     * Kind 7 (リアクション) のレンダリング
+     */
+    async function renderReactionEvent(event) {
+        const renderArea = document.getElementById('render-area');
+
+        // 1. リアクションの内容（通常は "+" や "⭐"、カスタム絵文字なら :name:）
+        const emoji = event.content === "" ? "⭐" : event.content;
+
+        // 2. 対象となるイベントID（eタグ）を探す
+        const targetEventId = event.tags.find(t => t[0] === 'e')?.[1];
+
+        // 3. 本文の整形（カスタム絵文字対応のためフォーマッタを通す）
+        const emojiHtml = await Components.utils.formatContent(emoji, event.tags);
+        const profile = window.dataStore.getProfile(event.pubkey);
+
+        // ★名前リンクの生成
+        const nameHtml = (typeof Components.utils.getNameLink === 'function') 
+            ? Components.utils.getNameLink(event.pubkey, profile)
+            : (() => {
+                const name = profile?.display_name || profile?.name || event.pubkey.substring(0, 8);
+                const npub = NostrTools.nip19.npubEncode(event.pubkey);
+                return `<a href="?id=${npub}" style="text-decoration: none; color: inherit; font-weight: bold;">${Components.utils.escape(name)}</a>`;
+            })();
+
+        renderArea.innerHTML = `
+        <div class="reaction-container">
+        <div style="font-size: 1.2rem; display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 2rem;">${emojiHtml}</span>
+            <span>リアクションされました</span>
+        </div>
+        <div class="post-footer" style="color:#666">By: ${nameHtml}</div>
+        </div>
+        <div id="reaction-target-root">
+        <p style="color: #888; font-size: 0.8rem;">対象の投稿を読み込み中...</p>
+        </div>`;
+
+        // 4. プロフィールがなければ取得
+        if (!profile) {
+            window.profileFetcher.request(event.pubkey);
+        }
+
+        // 5. リアクションの「対象」となった投稿を下に表示する
+        if (targetEventId) {
+            renderTargetEvent(targetEventId);
+        }
+    }
+
+    // 補助関数：対象イベントを取得して表示
+    async function renderTargetEvent(eventId) {
+        const targetRoot = document.getElementById('reaction-target-root');
+
+        // すでに dataStore にあるか確認（無駄な通信を防ぐ）
+        let targetEvent = window.dataStore.getEvent(eventId);
+
+        if (!targetEvent) {
+            // dataStoreに無い場合のみリレーに聞きに行く
+            targetEvent = await fetchSingleEvent(eventId);
+        }
+
+        if (targetEvent) {
+            // ... (ここから下の描画ロジックは今のままでOKです) ...
+            const contentHtml = await Components.utils.formatContent(targetEvent.content, targetEvent.tags);
+            const profile = window.dataStore.getProfile(targetEvent.pubkey);
+
+            targetRoot.innerHTML = `
+            <div style="margin-bottom: 10px; font-size: 0.8rem; color: #888; margin-top:20px;">👇リアクション元</div>
+            ${Components.eventBody(targetEvent, contentHtml, profile || {})}
+        `;
+
+            if (!profile) {
+                window.profileFetcher.request(targetEvent.pubkey);
+            }
+
+            // 引用展開
+            if (typeof QuoteManager !== 'undefined') {
+                QuoteManager.scanAndRender();
+            }
+        } else {
+            targetRoot.innerHTML = `<p style="color: #ccc; padding: 20px;">対象の投稿（${eventId.substring(0, 8)}）をリレーから取得できませんでした。しばらく待ってから再読み込みしてください。</p>`;
+        }
+    }
+
+    function renderGenericEvent(event, message = "不明なイベント") {
+        const renderArea = document.getElementById('render-area');
+        renderArea.innerHTML = `
+        <div style="padding: 20px; border: 1px solid #ccc; border-radius: 8px;">
+            <h3>${message} (Kind: ${event.kind})</h3>
+            <pre style="background: #eee; padding: 10px; overflow-x: auto;">${JSON.stringify(event, null, 2)}</pre>
+        </div>
+    `;
+    }
+
+    // --- 5. 実行（ここがスタート地点） ---
+    document.addEventListener('DOMContentLoaded', () => {
+        // ボタンのクリックイベントなどを有効にする
+        setupEventListeners();
+
+        // URLをチェックして描画を開始する
+        initializeApp();
+    });
+
+    // プロフィールが届いたら、今の画面をもう一度描画し直す
+    document.addEventListener('profiles_updated', () => {
+        console.log("プロフィール更新を検知。画面をリフレッシュします。");
+        // URLのIDから今のイベントを再描画する
+        initializeApp(); 
+    });
+
+</script>
+
+</body>
+</html>

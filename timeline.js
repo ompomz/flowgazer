@@ -345,7 +345,7 @@ class Timeline {
 
     const link = document.createElement('a');
     link.className = 'nostr-ref';
-    link.href = `https://ompomz.github.io/tweetsrecap/tweet?id=${nevent}`;
+    link.href = `https://ompomz.github.io/flowgazer/tweet?id=${nevent}`;
     link.target = '_blank';
     link.rel = 'noreferrer';
     link.textContent = `[${timeStr}]`;
@@ -359,7 +359,7 @@ class Timeline {
 
     const link = document.createElement('a');
     link.className = 'pubkey-ref';
-    link.href = `https://ompomz.github.io/tweetsrecap/tweet?id=${npub}`;
+    link.href = `https://ompomz.github.io/flowgazer/tweet?id=${npub}`;
     link.target = '_blank';
     link.rel = 'noreferrer';
 
@@ -435,7 +435,7 @@ class Timeline {
 
   createNostrRef(nip19) {
     const link = document.createElement('a');
-    link.href = `https://ompomz.github.io/tweetsrecap/tweet?id=${nip19}`;
+    link.href = `https://ompomz.github.io/flowgazer/tweet?id=${nip19}`;
     link.target = '_blank';
     link.rel = 'noreferrer';
     link.className = 'nostr-ref';
@@ -465,7 +465,7 @@ class Timeline {
     });
 
     const link = document.createElement('a');
-    link.href = `https://ompomz.github.io/tweetsrecap/tweet?id=${nevent}`;
+    link.href = `https://ompomz.github.io/flowgazer/tweet?id=${nevent}`;
     link.target = '_blank';
     link.rel = 'noreferrer';
     link.className = 'nostr-ref';
