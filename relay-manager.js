@@ -247,6 +247,31 @@ class RelayManager {
       this.subscribe(subId, filters, handler);
     });
   }
+// 複数のイベントをまとめて取得する機能を追加
+async getEvents(relayUrl, filter, timeout = 5000) {
+    return new Promise((resolve) => {
+        const events = [];
+        // ランダムな購読IDを作成
+        const subId = 'list-' + Math.random().toString(36).substring(7);
+        
+        // タイムアウトを設定（リレーが反応しない時のため）
+        const timer = setTimeout(() => {
+            this.unsubscribe(subId);
+            resolve(events); 
+        }, timeout);
+
+        this.subscribe(subId, filter, (type, event) => {
+            if (type === 'EVENT') {
+                events.push(event);
+            } else if (type === 'EOSE') {
+                // リレーが「出し切ったよ」と言ったら終了
+                clearTimeout(timer);
+                this.unsubscribe(subId);
+                resolve(events);
+            }
+        }, relayUrl);
+    });
+}
 }
 
 // グローバルインスタンス
