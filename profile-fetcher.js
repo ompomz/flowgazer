@@ -80,20 +80,22 @@ class ProfileFetcher {
         } catch (err) {
           console.error('❌ プロファイルパースエラー:', err);
         }
-      } else if (type === 'EOSE') {
-        // 購読終了
-        window.relayManager.unsubscribe(subId);
 
-        // 取得できなかったものを除外
-        pubkeys.forEach(pk => this.inProgress.delete(pk));
+} else if (type === 'EOSE') {
+    window.relayManager.unsubscribe(subId);
+    pubkeys.forEach(pk => this.inProgress.delete(pk));
 
-        console.log(`✅ プロファイル取得完了: ${window.dataStore.profiles.size}件`);
+    console.log(`✅ プロファイル取得完了: ${window.dataStore.profiles.size}件`);
 
-        // タイムライン再描画
-        if (window.timeline) {
-          window.timeline.refresh();
-        }
-      }
+    // A. 既存ツール用の処理（あれば実行、なければ無視）
+    if (window.timeline && typeof window.timeline.refresh === 'function') {
+        window.timeline.refresh();
+    }
+
+    // B. 今回のツール用の処理（イベントを飛ばす方式にすると安全！）
+    // 「プロフィールが更新されたよ！」という合図をブラウザ全体に出す
+    document.dispatchEvent(new CustomEvent('profiles_updated'));
+}
     };
 
     // 購読
