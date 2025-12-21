@@ -580,21 +580,17 @@ function initializeApp() {
         const relatedList = document.getElementById('related-events-list');
         const subContent = document.getElementById('sub-content');
 
-        // リプライ(1)とリアクション(7)を購読
         relayManager.subscribe('related-data', { '#e': [eventId], kinds: [1, 7] }, async (type, event) => {
             if (type === 'EVENT' && event) {
-                // 1. まずは DataStore に保存
                 window.dataStore.addEvent(event);
                 subContent.classList.remove('hidden');
 
                 if (event.kind === 7) {
-                    // --- リアクションの集計と描画 ---
-                    // ストアにある全イベントから、この投稿(eventId)に対するKind 7だけを抽出
+                    // --- 1. リアクションの集計 ---
                     const allReactions = Array.from(window.dataStore.events.values()).filter(e =>
                         e.kind === 7 && e.tags.some(t => t[0] === 'e' && t[1] === eventId)
                     );
 
-                    // 絵文字ごとにグループ化
                     const reactionGroups = new Map();
                     allReactions.forEach(r => {
                         const emoji = r.content.trim() || '+';
@@ -604,41 +600,53 @@ function initializeApp() {
                         reactionGroups.get(emoji).pubkeys.add(r.pubkey);
                     });
 
-                    // HTML組み立て
+                    // --- 2. HTMLの組み立て ---
                     let html = '';
                     for (const [emoji, group] of reactionGroups.entries()) {
-                        // カスタム絵文字対応（formatContentを利用）
                         const emojiHtml = await Components.utils.formatContent(emoji === '+' ? '⭐' : emoji, group.event.tags);
 
-                        // アバターのリスト作成
                         const avatarsHtml = Array.from(group.pubkeys).map(pubkey => {
-                            const profile = window.dataStore.getProfile(pubkey) || {};
-                            const pic = profile.picture || 'https://ompomz.github.io/favicon.ico';
+                            const profile = window.dataStore.getProfile(pubkey);
+
+                            // プロフィールがなければ取得を依頼する
+                            if (!profile) {
+                                window.profileFetcher.request(pubkey);
+                            }
+
+                            const pic = profile?.picture || 'https://ompomz.github.io/favicon.ico';
+                            const name = profile?.name || '...';
                             const npub = NostrTools.nip19.npubEncode(pubkey);
+
                             return `
-                            <a href="?id=${npub}">
-                            <img src="${pic}" class="reaction-avatar" title="${profile.name || ''}">
-                            </a>`;
+                        <a href="?id=${npub}">
+                            <img src="${pic}" class="reaction-avatar" title="${Components.utils.escape(name)}" onerror="this.src='https://ompomz.github.io/favicon.ico'">
+                        </a>`;
                         }).join('');
 
                         html += `
-                        <div class="reaction-group">
+                    <div class="reaction-group">
                         <span class="reaction-emoji">${emojiHtml}</span>
                         <div class="reaction-avatars">${avatarsHtml}</div>
-                        </div>`;
+                    </div>`;
                     }
                     reactionsList.innerHTML = html;
 
                 } else if (event.kind === 1) {
-                    // リプライの追加
+                    // --- リプライの処理 ---
                     const html = await Components.utils.formatContent(event.content, event.tags);
-                    const profile = window.dataStore.getProfile(event.pubkey) || {};
+                    const profile = window.dataStore.getProfile(event.pubkey);
 
-                    // リプライにも名前リンクやアイコンを入れるならここを Components.replyCard に渡す
-                    relatedList.innerHTML += Components.replyCard(event, html);
-
-                    if (!window.dataStore.getProfile(event.pubkey)) {
+                    // プロフィールがなければ取得依頼
+                    if (!profile) {
                         window.profileFetcher.request(event.pubkey);
+                    }
+
+                    // リプライを画面に追加（重複表示を防ぐため、すでにあるかチェックするとより安全です）
+                    if (!document.getElementById(`reply-${event.id}`)) {
+                        const replyWrapper = document.createElement('div');
+                        replyWrapper.id = `reply-${event.id}`;
+                        replyWrapper.innerHTML = Components.replyCard(event, html);
+                        relatedList.appendChild(replyWrapper);
                     }
                 }
             }
@@ -747,15 +755,12 @@ function initializeApp() {
         initializeApp();
     });
 
-    // プロフィールが届いたら、今の画面をもう一度描画し直す
+    // プロフィールが届いたら、画面全体を壊さずに「再描画」だけを依頼する
     document.addEventListener('profiles_updated', () => {
-        console.log("プロフィール更新を検知。画面をリフレッシュします。");
-        // URLのIDから今のイベントを再描画する
-        initializeApp(); 
+        console.log("プロフィール更新を検知。リアクション欄を再レンダリングします。");
     });
 
 </script>
 
 </body>
-
 </html>
