@@ -213,65 +213,6 @@ class RelayManager {
     this.ws.send(JSON.stringify(['EVENT', event]));
     console.log('📤 イベント送信:', event.kind);
   }
-  
-  /**
-   * 指定したリレーから単一のイベントを取得する (Promise版)
-   */
-  async getEvent(url, filters) {
-    // 1. 指定されたリレーに接続
-    await this.connect(url);
-
-    return new Promise((resolve) => {
-      const subId = 'single-fetch-' + Math.random().toString(36).substring(7);
-      let foundEvent = null;
-
-      // タイムアウト設定 (3秒待っても来なければ諦める)
-      const timer = setTimeout(() => {
-        this.unsubscribe(subId);
-        resolve(null);
-      }, 3000);
-
-      const handler = (type, event) => {
-        if (type === 'EVENT') {
-          foundEvent = event;
-          clearTimeout(timer);
-          this.unsubscribe(subId);
-          resolve(event);
-        } else if (type === 'EOSE') {
-          clearTimeout(timer);
-          this.unsubscribe(subId);
-          resolve(foundEvent); // EVENTが来ていればそれを、無ければnullを返す
-        }
-      };
-
-      this.subscribe(subId, filters, handler);
-    });
-  }
-// 複数のイベントをまとめて取得する機能を追加
-async getEvents(relayUrl, filter, timeout = 5000) {
-    return new Promise((resolve) => {
-        const events = [];
-        // ランダムな購読IDを作成
-        const subId = 'list-' + Math.random().toString(36).substring(7);
-        
-        // タイムアウトを設定（リレーが反応しない時のため）
-        const timer = setTimeout(() => {
-            this.unsubscribe(subId);
-            resolve(events); 
-        }, timeout);
-
-        this.subscribe(subId, filter, (type, event) => {
-            if (type === 'EVENT') {
-                events.push(event);
-            } else if (type === 'EOSE') {
-                // リレーが「出し切ったよ」と言ったら終了
-                clearTimeout(timer);
-                this.unsubscribe(subId);
-                resolve(events);
-            }
-        }, relayUrl);
-    });
-}
 }
 
 // グローバルインスタンス

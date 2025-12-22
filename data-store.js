@@ -1,6 +1,6 @@
 /**
  * data-store.js
- * 【責務】: Nostrイベントとプロフィールの保存・正規化・取得状態の管理
+ * 【責務】: Nostrイベントとプロフィールの保存・正規化のみ
  */
 
 class DataStore {
@@ -8,9 +8,6 @@ class DataStore {
     // ===== 基本データ =====
     this.events = new Map(); // eventId -> event
     this.profiles = new Map(); // pubkey -> profile
-    
-    // ===== 管理用状態 (重複リクエスト防止用) =====
-    this.pendingProfiles = new Set(); // 現在リクエスト中のpubkey
     
     // ===== カテゴリ分類 (シンプルな分類のみ) =====
     this.eventsByKind = new Map(); // kind -> Set<eventId>
@@ -29,106 +26,55 @@ class DataStore {
   }
 
   // ========================================
-  // プロフィール管理（更新・取得・状態）
-  // ========================================
-
-  /**
-   * プロフィールを追加
-   * @param {string} pubkey
-   * @param {Object} profileData
-   * @returns {boolean} 更新された場合true
-   */
-  addProfile(pubkey, profileData) {
-    const existing = this.profiles.get(pubkey);
-    // すでに新しいデータがある場合は更新しない
-    if (existing && existing.created_at >= profileData.created_at) {
-      this.setProfilePending(pubkey, false); // 古いデータだった場合もリクエスト終了とする
-      return false;
-    }
-
-    this.profiles.set(pubkey, profileData);
-    
-    // プロフィールが保存されたので、リクエスト中フラグを解除
-    this.setProfilePending(pubkey, false);
-    
-    return true;
-  }
-
-  /**
-   * プロフィールが現在リクエスト中（通信中）か確認
-   * @param {string} pubkey 
-   * @returns {boolean}
-   */
-  isProfilePending(pubkey) {
-    return this.pendingProfiles.has(pubkey);
-  }
-
-  /**
-   * プロフィールのリクエスト状態を設定
-   * @param {string} pubkey 
-   * @param {boolean} pending - 取得開始時はtrue, 完了/失敗時はfalse
-   */
-  setProfilePending(pubkey, pending = true) {
-    if (pending) {
-      this.pendingProfiles.add(pubkey);
-    } else {
-      this.pendingProfiles.delete(pubkey);
-    }
-  }
-
-  /**
-   * プロフィール表示名を取得
-   */
-  getDisplayName(pubkey) {
-    const profile = this.profiles.get(pubkey);
-    if (profile?.name) {
-      return profile.name;
-    }
-    return pubkey.substring(0, 8);
-  }
-
-  /**
-   * プロフィールを取得
-   */
-  getProfile(pubkey) {
-    return this.profiles.get(pubkey);
-  }
-
-  // ========================================
   // イベント管理
   // ========================================
 
   /**
    * イベントを追加 (署名検証込み)
+   * @param {Object} event - Nostrイベント
+   * @returns {boolean} 新規追加された場合true
    */
   addEvent(event) {
+    // 署名検証
     if (!window.NostrTools.verifyEvent(event)) {
       console.warn('⚠️ 署名が無効なイベント:', event.id);
       return false;
     }
 
+    // 既存チェック
     if (this.events.has(event.id)) {
       return false;
     }
 
+    // 保存
     this.events.set(event.id, event);
+
+    // カテゴリ分類
     this._categorizeEvent(event);
+
     return true;
   }
 
+  /**
+   * イベントをカテゴリ分類 (インデックス作成のみ)
+   * @private
+   */
   _categorizeEvent(event) {
     const myPubkey = window.nostrAuth?.pubkey;
 
+    // kind別インデックス
     if (!this.eventsByKind.has(event.kind)) {
       this.eventsByKind.set(event.kind, new Set());
     }
     this.eventsByKind.get(event.kind).add(event.id);
 
+    // 投稿者別インデックス
     if (!this.eventsByAuthor.has(event.pubkey)) {
       this.eventsByAuthor.set(event.pubkey, new Set());
     }
     this.eventsByAuthor.get(event.pubkey).add(event.id);
 
+    // eタグ (参照イベント) インデックス
     event.tags.forEach(tag => {
       if (tag[0] === 'e' && tag[1]) {
         if (!this.eventsByReferencedEvent.has(tag[1])) {
@@ -136,6 +82,10 @@ class DataStore {
         }
         this.eventsByReferencedEvent.get(tag[1]).add(event.id);
       }
+    });
+
+    // pタグ (参照ユーザー) インデックス
+    event.tags.forEach(tag => {
       if (tag[0] === 'p' && tag[1]) {
         if (!this.eventsByReferencedPubkey.has(tag[1])) {
           this.eventsByReferencedPubkey.set(tag[1], new Set());
@@ -144,17 +94,27 @@ class DataStore {
       }
     });
 
+    // === ユーザー固有の分類 ===
     if (!myPubkey) return;
+
+    // 自分がふぁぼったイベント
     if (event.kind === 7 && event.pubkey === myPubkey) {
       const targetEventId = event.tags.find(t => t[0] === 'e')?.[1];
-      if (targetEventId) this.likedByMeIds.add(targetEventId);
+      if (targetEventId) {
+        this.likedByMeIds.add(targetEventId);
+      }
     }
 
+    // リアクションカウント更新
     if (event.kind === 6 || event.kind === 7) {
       this._updateReactionCount(event);
     }
   }
 
+  /**
+   * リアクション数を更新
+   * @private
+   */
   _updateReactionCount(event) {
     const targetId = event.tags.find(t => t[0] === 'e')?.[1];
     if (!targetId) return;
@@ -171,41 +131,180 @@ class DataStore {
     }
   }
 
-  getEvent(id) { return this.events.get(id); }
-  getEvents(ids) { return ids.map(id => this.events.get(id)).filter(Boolean); }
-  getAllEvents() { return Array.from(this.events.values()); }
-  getEventIdsByKind(kind) { return this.eventsByKind.get(kind) || new Set(); }
-  getEventIdsByAuthor(pubkey) { return this.eventsByAuthor.get(pubkey) || new Set(); }
-  getEventIdsReferencingEvent(eventId) { return this.eventsByReferencedEvent.get(eventId) || new Set(); }
-  getEventIdsReferencingPubkey(pubkey) { return this.eventsByReferencedPubkey.get(pubkey) || new Set(); }
+  /**
+   * イベントを取得
+   * @param {string} id - イベントID
+   * @returns {Object|undefined}
+   */
+  getEvent(id) {
+    return this.events.get(id);
+  }
+
+  /**
+   * 複数のイベントを取得
+   * @param {string[]} ids - イベントIDの配列
+   * @returns {Object[]} イベントの配列
+   */
+  getEvents(ids) {
+    return ids.map(id => this.events.get(id)).filter(Boolean);
+  }
+
+  /**
+   * すべてのイベントを取得
+   * @returns {Object[]}
+   */
+  getAllEvents() {
+    return Array.from(this.events.values());
+  }
+
+  /**
+   * kind別のイベントIDを取得
+   * @param {number} kind
+   * @returns {Set<string>}
+   */
+  getEventIdsByKind(kind) {
+    return this.eventsByKind.get(kind) || new Set();
+  }
+
+  /**
+   * 投稿者別のイベントIDを取得
+   * @param {string} pubkey
+   * @returns {Set<string>}
+   */
+  getEventIdsByAuthor(pubkey) {
+    return this.eventsByAuthor.get(pubkey) || new Set();
+  }
+
+  /**
+   * 特定イベントを参照しているイベントIDを取得 (eタグ)
+   * @param {string} eventId
+   * @returns {Set<string>}
+   */
+  getEventIdsReferencingEvent(eventId) {
+    return this.eventsByReferencedEvent.get(eventId) || new Set();
+  }
+
+  /**
+   * 特定ユーザーを参照しているイベントIDを取得 (pタグ)
+   * @param {string} pubkey
+   * @returns {Set<string>}
+   */
+  getEventIdsReferencingPubkey(pubkey) {
+    return this.eventsByReferencedPubkey.get(pubkey) || new Set();
+  }
 
   // ========================================
-  // フォロー管理・リアクション情報・ユーティリティ
+  // プロフィール管理
   // ========================================
 
+  /**
+   * プロフィールを追加
+   * @param {string} pubkey
+   * @param {Object} profileData
+   * @returns {boolean} 更新された場合true
+   */
+  addProfile(pubkey, profileData) {
+    const existing = this.profiles.get(pubkey);
+    if (existing && existing.created_at >= profileData.created_at) {
+      return false;
+    }
+
+    this.profiles.set(pubkey, profileData);
+    return true;
+  }
+
+  /**
+   * プロフィール表示名を取得
+   * @param {string} pubkey
+   * @returns {string}
+   */
+  getDisplayName(pubkey) {
+    const profile = this.profiles.get(pubkey);
+    if (profile?.name) {
+      return profile.name;
+    }
+    return pubkey.substring(0, 8);
+  }
+
+  /**
+   * プロフィールを取得
+   * @param {string} pubkey
+   * @returns {Object|undefined}
+   */
+  getProfile(pubkey) {
+    return this.profiles.get(pubkey);
+  }
+
+  // ========================================
+  // フォロー管理
+  // ========================================
+
+  /**
+   * フォローリストを設定
+   * @param {string[]} pubkeys
+   */
   setFollowingList(pubkeys) {
     this.followingPubkeys.clear();
     pubkeys.forEach(pk => this.followingPubkeys.add(pk));
+    console.log(`👥 フォロー中: ${this.followingPubkeys.size}人`);
   }
 
-  isFollowing(pubkey) { return this.followingPubkeys.has(pubkey); }
-  getReactionCount(eventId) { return this.reactionCounts.get(eventId) || { reposts: 0, reactions: 0 }; }
-  isLikedByMe(eventId) { return this.likedByMeIds.has(eventId); }
+  /**
+   * フォロー中かチェック
+   * @param {string} pubkey
+   * @returns {boolean}
+   */
+  isFollowing(pubkey) {
+    return this.followingPubkeys.has(pubkey);
+  }
 
+  // ========================================
+  // リアクション情報
+  // ========================================
+
+  /**
+   * リアクション数を取得
+   * @param {string} eventId
+   * @returns {Object} { reposts: number, reactions: number }
+   */
+  getReactionCount(eventId) {
+    return this.reactionCounts.get(eventId) || { reposts: 0, reactions: 0 };
+  }
+
+  /**
+   * ふぁぼ済みかチェック
+   * @param {string} eventId
+   * @returns {boolean}
+   */
+  isLikedByMe(eventId) {
+    return this.likedByMeIds.has(eventId);
+  }
+
+  // ========================================
+  // ユーティリティ
+  // ========================================
+
+  /**
+   * 統計情報を取得
+   * @returns {Object}
+   */
   getStats() {
     return {
       totalEvents: this.events.size,
       profiles: this.profiles.size,
-      pendingProfiles: this.pendingProfiles.size,
       following: this.followingPubkeys.size,
-      kindCounts: Object.fromEntries(Array.from(this.eventsByKind.entries()).map(([k, v]) => [k, v.size]))
+      kindCounts: Object.fromEntries(
+        Array.from(this.eventsByKind.entries()).map(([k, v]) => [k, v.size])
+      )
     };
   }
 
+  /**
+   * すべてのデータをクリア
+   */
   clear() {
     this.events.clear();
     this.profiles.clear();
-    this.pendingProfiles.clear(); // クリア時にリクエスト中も消す
     this.eventsByKind.clear();
     this.eventsByAuthor.clear();
     this.eventsByReferencedEvent.clear();
@@ -219,3 +318,4 @@ class DataStore {
 
 // グローバルインスタンス
 window.dataStore = new DataStore();
+console.log('✅ DataStore初期化完了');

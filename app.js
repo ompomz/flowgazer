@@ -603,34 +603,6 @@ class FlowgazerApp {
     }
   }
 
-  /**
-  * 指定したユーザーの投稿履歴を取得
-  */
-async fetchUserPosts(pubkey) {
-    const relayUrl = this.url || 'wss://relay.nostr.band/';
-    
-    try {
-        // 1. まずリレーに接続する（これが必要！）
-        await window.relayManager.connect(relayUrl);
-        
-        // 2. 接続できたら取得する
-        const posts = await window.relayManager.getEvents(relayUrl, {
-            kinds: [1],
-            authors: [pubkey],
-            limit: 20
-        });
-
-        // 取得したイベントをストアに入れておく
-        if (posts && posts.length > 0) {
-            posts.forEach(ev => window.dataStore.addEvent(ev));
-        }
-        return posts;
-    } catch (error) {
-        console.error("fetchUserPosts error:", error);
-        return [];
-    }
-}
-
   // ========================================
   // UI更新
   // ========================================

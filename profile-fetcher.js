@@ -1,6 +1,12 @@
+/**
+ * profile-fetcher.js
+ * プロファイル（kind:0）を効率的にバッチ取得
+ */
+
 class ProfileFetcher {
   constructor() {
     this.queue = new Set();          // 取得待ちpubkey
+    this.inProgress = new Set();     // 取得中pubkey
     this.timer = null;
     this.batchDelay = 500;           // バッチ処理の遅延（ms）
     this.maxBatchSize = 100;         // 一度に取得する最大数
@@ -10,13 +16,13 @@ class ProfileFetcher {
    * プロファイル取得をリクエスト
    */
   request(pubkey) {
-    // 1. 既にデータがある場合はスキップ
-    if (window.dataStore && window.dataStore.getProfile(pubkey)) {
+    // 既にデータがある
+    if (window.dataStore.profiles.has(pubkey)) {
       return;
     }
 
-    // 2. DataStore側で「取得中」マークが付いているならスキップ（ここが重要！）
-    if (window.dataStore && window.dataStore.isProfilePending(pubkey)) {
+    // 取得中
+    if (this.inProgress.has(pubkey)) {
       return;
     }
 
@@ -48,14 +54,12 @@ class ProfileFetcher {
 
     // キューから取得対象を取り出し
     const pubkeys = Array.from(this.queue).slice(0, this.maxBatchSize);
-    pubkeys.forEach(pk => this.queue.delete(pk));
+    this.queue.clear();
 
-    // 3. 取得開始マークを付ける (DataStore側)
-    if (window.dataStore) {
-        pubkeys.forEach(pk => window.dataStore.setProfilePending(pk, true));
-    }
+    // 取得中マークを付ける
+    pubkeys.forEach(pk => this.inProgress.add(pk));
 
-    console.log(`👤 プロファイルをバッチ取得開始: ${pubkeys.length}件`);
+    console.log(`👤 プロファイルをバッチ取得: ${pubkeys.length}件`);
 
     // 購読ID
     const subId = 'profiles-' + Date.now();
@@ -65,55 +69,38 @@ class ProfileFetcher {
       if (type === 'EVENT' && event.kind === 0) {
         try {
           const profile = JSON.parse(event.content);
-          if (window.dataStore && typeof window.dataStore.addProfile === 'function') {
-            // ここで addProfile を呼ぶと、DataStore内で自動的に Pending が解除されます
-            window.dataStore.addProfile(event.pubkey, {
-              ...profile,
-              created_at: event.created_at
-            });
-          }
+          window.dataStore.addProfile(event.pubkey, {
+            ...profile,
+            created_at: event.created_at
+          });
+
+          // 取得完了マーク
+          this.inProgress.delete(event.pubkey);
+
         } catch (err) {
           console.error('❌ プロファイルパースエラー:', err);
-          // エラー時も一応フラグを解除しておかないと次が取れなくなるためケア
-          if (window.dataStore) window.dataStore.setProfilePending(event.pubkey, false);
         }
-
       } else if (type === 'EOSE') {
-        // 購読解除
+        // 購読終了
         window.relayManager.unsubscribe(subId);
-        
-        // 4. EOSEが来た時点で、データが返ってこなかったpubkeyの Pending を解除
-        if (window.dataStore) {
-            pubkeys.forEach(pk => {
-                // まだ profiles に入っていない ＝ 見つからなかった人
-                if (!window.dataStore.getProfile(pk)) {
-                    window.dataStore.setProfilePending(pk, false);
-                }
-            });
-        }
 
-        // 更新判定
-        const hasNewData = pubkeys.some(pk => 
-          window.dataStore && window.dataStore.getProfile(pk)
-        );
+        // 取得できなかったものを除外
+        pubkeys.forEach(pk => this.inProgress.delete(pk));
 
-        if (hasNewData) {
-          console.log(`✅ 新規プロファイルを取得したため、更新通知を送ります`);
-          document.dispatchEvent(new CustomEvent('profiles_updated'));
-          if (window.timeline && typeof window.timeline.refresh === 'function') {
-            window.timeline.refresh();
-          }
+        console.log(`✅ プロファイル取得完了: ${window.dataStore.profiles.size}件`);
+
+        // タイムライン再描画
+        if (window.timeline) {
+          window.timeline.refresh();
         }
       }
     };
 
-    // 購読開始
-    if (window.relayManager && typeof window.relayManager.subscribe === 'function') {
-      window.relayManager.subscribe(subId, {
-        kinds: [0],
-        authors: pubkeys
-      }, handler);
-    }
+    // 購読
+    window.relayManager.subscribe(subId, {
+      kinds: [0],
+      authors: pubkeys
+    }, handler);
   }
 
   /**
@@ -125,4 +112,5 @@ class ProfileFetcher {
   }
 }
 
+// グローバルインスタンス
 window.profileFetcher = new ProfileFetcher();
