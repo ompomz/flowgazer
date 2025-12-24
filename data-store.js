@@ -234,6 +234,30 @@ class DataStore {
   getProfile(pubkey) {
     return this.profiles.get(pubkey);
   }
+  
+    /**
+   * 指定した pubkey の最新の kind:X イベントを返す
+   * @param {string} pubkey
+   * @param {number} kind
+   * @returns {Object|null}
+   */
+  getLatestEventByKind(pubkey, kind) {
+    const eventIds = this.eventsByAuthor.get(pubkey);
+    if (!eventIds) return null;
+
+    let latest = null;
+
+    for (const id of eventIds) {
+      const ev = this.events.get(id);
+      if (ev && ev.kind === kind) {
+        if (!latest || ev.created_at > latest.created_at) {
+          latest = ev;
+        }
+      }
+    }
+
+    return latest;
+  }
 
   // ========================================
   // フォロー管理
