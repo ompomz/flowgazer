@@ -193,7 +193,7 @@ class Timeline {
       const cwLink = document.createElement('a');
       cwLink.href = '#';
       cwLink.className = 'nostr-ref';
-      cwLink.textContent = `[ content-warning${reason} なので隠してます。表示する？]`;
+      cwLink.textContent = `content-warning${reason} [内容を表示]`;
 
       cwLink.onclick = (e) => {
         e.preventDefault();  // URLに飛ばないようにする
@@ -246,9 +246,15 @@ class Timeline {
         const authorLink = this.createAuthorLink(originalEvent.pubkey);
         li.appendChild(authorLink);
 
-        const content = document.createElement('span');
-        content.textContent = ' > ' + originalEvent.content;
-        li.appendChild(content);
+        const contentWrapper = document.createElement('span');
+        contentWrapper.className = 'repost-content';
+        contentWrapper.appendChild(document.createTextNode(' > '));
+
+        // createContent を使うことで、リンク化やCW判定が自動で適用されます
+        const richContent = this.createContent(originalEvent);
+        
+        contentWrapper.appendChild(richContent);
+        li.appendChild(contentWrapper);
       } else {
         // 元の投稿が見つからない場合はリンクを表示
         const link = this.createEventLink(targetId);
@@ -415,8 +421,8 @@ class Timeline {
     link.rel = 'noreferrer';
 
     let truncatedName = displayName;
-    if (lenb(displayName) >= 19) {
-      truncatedName = truncateByLenb(displayName, 18);
+    if (lenb(displayName) >= 21) {
+      truncatedName = truncateByLenb(displayName, 20);
     }
     link.textContent = truncatedName;
 
@@ -462,12 +468,25 @@ class Timeline {
 
   createUrlLink(url) {
     const isImage = /\.(jpeg|jpg|gif|png|webp|avif)$/i.test(url);
+    const isVideo = /\.(mp4|webm|ogv|mov)$/i.test(url);
 
     if (isImage) {
       const link = document.createElement('a');
       link.href = '#';
       link.className = 'nostr-ref';
       link.textContent = '[画像を表示]';
+      link.onclick = (e) => {
+        e.preventDefault();
+        if (window.openModal) window.openModal(url);
+      };
+      return link;
+    }
+
+    if (isVideo) {
+      const link = document.createElement('a');
+      link.href = '#';
+      link.className = 'nostr-ref';
+      link.textContent = '[動画を表示]';
       link.onclick = (e) => {
         e.preventDefault();
         if (window.openModal) window.openModal(url);
