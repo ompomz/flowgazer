@@ -193,7 +193,7 @@ class Timeline {
       const cwLink = document.createElement('a');
       cwLink.href = '#';
       cwLink.className = 'nostr-ref';
-      cwLink.textContent = `content-warning${reason} [内容を表示]`;
+      cwLink.textContent = `⚠️${reason} [内容を表示]`;
 
       cwLink.onclick = (e) => {
         e.preventDefault();  // URLに飛ばないようにする
