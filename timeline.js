@@ -3,6 +3,35 @@
  * 【責務】: DOM要素の生成とレンダリング・適切なクリーンアップ
  */
 
+// ===== ユーティリティ（表示名用） =====
+
+function lenb(str) {
+  let length = 0;
+  for (const char of str) {
+    length += /[^\x01-\x7E]/.test(char) ? 2 : 1;
+  }
+  return length;
+}
+
+function truncateByLenb(str, maxLenb) {
+  let result = '';
+  let currentLenb = 0;
+
+  for (const char of str) {
+    const charLen = /[^\x01-\x7E]/.test(char) ? 2 : 1;
+
+    if (currentLenb + charLen + 1 > maxLenb) {
+      return result + '…';
+    }
+
+    result += char;
+    currentLenb += charLen;
+  }
+  return result;
+}
+
+// ===== Timeline クラス =====
+
 class Timeline {
   constructor(containerElement) {
     this.container = containerElement;
@@ -386,10 +415,8 @@ class Timeline {
     link.rel = 'noreferrer';
 
     let truncatedName = displayName;
-    // 12文字「より大きい（13文字以上）」ときに省略する
-    if (displayName.length > 12) {
-      // 10文字まで出して「…」をつける
-      truncatedName = displayName.substring(0, 10) + '…';
+    if (lenb(displayName) >= 19) {
+      truncatedName = truncateByLenb(displayName, 18);
     }
     link.textContent = truncatedName;
 
