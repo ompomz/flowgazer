@@ -155,7 +155,29 @@ class Timeline {
     li.appendChild(this.createMetadata(event));
 
     // 本文
-    li.appendChild(this.createContent(event));
+    const cwTag = event.tags.find(tag => tag[0] === "content-warning");
+
+    if (cwTag) {
+      const reason = cwTag[1] ? `：${cwTag[1]}` : "";
+
+      // ボタンではなく <a> タグで作る
+      const cwLink = document.createElement('a');
+      cwLink.href = '#';
+      cwLink.className = 'nostr-ref';
+      cwLink.textContent = `[content-warning${reason} なので隠してます。表示する？]`;
+
+      cwLink.onclick = (e) => {
+        e.preventDefault();  // URLに飛ばないようにする
+        e.stopPropagation(); // 他のイベントと重ならないようにする
+
+        const content = this.createContent(event);
+        cwLink.replaceWith(content);
+      };
+
+      li.appendChild(cwLink);
+    } else {
+      li.appendChild(this.createContent(event));
+    }
 
     // リアクションバッジ
     if (this.currentTab === 'myposts') {
