@@ -164,7 +164,7 @@ class Timeline {
       const cwLink = document.createElement('a');
       cwLink.href = '#';
       cwLink.className = 'nostr-ref';
-      cwLink.textContent = `[content-warning${reason} なので隠してます。表示する？]`;
+      cwLink.textContent = `[ content-warning${reason} なので隠してます。表示する？]`;
 
       cwLink.onclick = (e) => {
         e.preventDefault();  // URLに飛ばないようにする
