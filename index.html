@@ -302,10 +302,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ふぁぼマークの変更イベント
   const favInput = document.getElementById('kind-7-content-input');
   if (favInput) {
-    favInput.addEventListener('input', (e) => {
+    favInput.addEventListener('change', (e) => {
       saveFavMark(e.target.value);
     });
   }
+  
   // 保存されたふぁぼマークを復元
   loadFavMark();
 
@@ -341,11 +342,15 @@ function generateAndLoginWithNewKeypair() {
 
 // ふぁぼマーク保存・読み込み関数
 function saveFavMark(val) {
-  const chars = Array.from(val); 
-  const singleChar = chars.length > 0 ? chars[0] : "⭐";
-  localStorage.setItem('favMark', singleChar);  
-  const input = document.getElementById('kind-7-content-input');
-  if (input) input.value = singleChar;
+  const chars = Array.from(val);
+  if (chars.length > 0) {
+    const singleChar = chars[0];
+    localStorage.setItem('favMark', singleChar);
+    const input = document.getElementById('kind-7-content-input');
+    if (input) input.value = singleChar;
+  } else {
+    localStorage.setItem('favMark', "+"); 
+  }
 }
 
 function loadFavMark() {
