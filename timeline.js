@@ -386,8 +386,9 @@ class Timeline {
     link.rel = 'noreferrer';
 
     let truncatedName = displayName;
-    if (displayName.length > 11) {
-      // 最初の10文字だけ切り取って、後ろに「…」をつける
+    // 12文字「より大きい（13文字以上）」ときに省略する
+    if (displayName.length > 12) {
+      // 10文字まで出して「…」をつける
       truncatedName = displayName.substring(0, 10) + '…';
     }
     link.textContent = truncatedName;
