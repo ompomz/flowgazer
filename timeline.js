@@ -421,7 +421,7 @@ class Timeline {
     link.rel = 'noreferrer';
 
     let truncatedName = displayName;
-    if (lenb(displayName) >= 21) {
+    if (lenb(displayName) >= 23) {
       truncatedName = truncateByLenb(displayName, 20);
     }
     link.textContent = truncatedName;
