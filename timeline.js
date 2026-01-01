@@ -30,6 +30,34 @@ function truncateByLenb(str, maxLenb) {
   return result;
 }
 
+function hexToHue(hex6) {
+  const r = parseInt(hex6.slice(0, 2), 16) / 255;
+  const g = parseInt(hex6.slice(2, 4), 16) / 255;
+  const b = parseInt(hex6.slice(4, 6), 16) / 255;
+
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+
+  let h = 0;
+  if (d !== 0) {
+    switch (max) {
+      case r:
+        h = ((g - b) / d) % 6;
+        break;
+      case g:
+        h = (b - r) / d + 2;
+        break;
+      case b:
+        h = (r - g) / d + 4;
+        break;
+    }
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  return Math.round(h);
+}
+
 // ===== Timeline クラス =====
 
 class Timeline {
@@ -426,7 +454,9 @@ class Timeline {
     }
     link.textContent = truncatedName;
 
-    const hue = parseInt(pubkey.substring(0, 2), 16) * 360 / 256;
+    const hex6 = pubkey.substring(0, 6);
+    const hue = hexToHue(hex6);
+
     const lightness = (hue >= 50 && hue <= 190) ? 45 : 60;
     link.style.color = `hsl(${hue}, 95%, ${lightness}%)`;
 
