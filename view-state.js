@@ -9,19 +9,23 @@ class ViewState {
     this.tabs = {
       global: {
         visibleEventIds: new Set(),
-        cursor: null
+        cursor: null,
+        timeRange: { oldest: null, newest: null }
       },
       following: {
         visibleEventIds: new Set(),
-        cursor: null
+        cursor: null,
+        timeRange: { oldest: null, newest: null }
       },
       myposts: {
         visibleEventIds: new Set(),
-        cursor: null
+        cursor: null,
+        timeRange: { oldest: null, newest: null }
       },
       likes: {
         visibleEventIds: new Set(),
-        cursor: null
+        cursor: null,
+        timeRange: { oldest: null, newest: null }
       }
     };
 
@@ -30,7 +34,7 @@ class ViewState {
     this.renderTimer = null;
     this.renderDelay = 300;
 
-    console.log('✅ ViewState初期化完了（リアルタイム計算方式）');
+    console.log('✅ ViewState初期化完了（時間範囲管理方式）');
   }
 
   // ========================================
@@ -110,6 +114,7 @@ class ViewState {
 
     tabState.visibleEventIds.add(event.id);
     this._updateCursor(tabState, event.created_at);
+    this._updateTimeRange(tabState, event.created_at);
 
     return true;
   }
@@ -129,6 +134,19 @@ class ViewState {
     }
     if (created_at > tabState.cursor.since) {
       tabState.cursor.since = created_at;
+    }
+  }
+
+  /**
+   * 時間範囲を更新
+   * @private
+   */
+  _updateTimeRange(tabState, created_at) {
+    if (!tabState.timeRange.oldest || created_at < tabState.timeRange.oldest) {
+      tabState.timeRange.oldest = created_at;
+    }
+    if (!tabState.timeRange.newest || created_at > tabState.timeRange.newest) {
+      tabState.timeRange.newest = created_at;
     }
   }
 
@@ -215,24 +233,35 @@ class ViewState {
 
   /**
    * 指定タブの表示イベントを取得 (フィルタリング済み・ソート済み)
-   * 毎回 dataStore から全イベントを取得して計算
+   * 🔧 修正: タブの時間範囲内のイベントのみを取得
    * @param {string} tab
    * @param {Object} filterOptions - { flowgazerOnly, authors, showKind42 }
    * @returns {Object[]}
    */
   getVisibleEvents(tab, filterOptions = {}) {
     const myPubkey = window.nostrAuth?.pubkey;
+    const tabState = this.tabs[tab];
 
     // 1. 全イベントを取得
     let events = window.dataStore.getAllEvents();
 
-    // 2. タブに応じたフィルタリング
+    // 2. タブの時間範囲内のイベントのみに絞り込む
+    if (tabState.timeRange.oldest && tabState.timeRange.newest) {
+      events = events.filter(event => 
+        event.created_at >= tabState.timeRange.oldest &&
+        event.created_at <= tabState.timeRange.newest
+      );
+      
+      console.log(`⏰ ${tab}タブ: 時間範囲フィルタ適用 (${new Date(tabState.timeRange.oldest * 1000).toLocaleTimeString()} 〜 ${new Date(tabState.timeRange.newest * 1000).toLocaleTimeString()})`);
+    }
+
+    // 3. タブに応じたフィルタリング
     events = events.filter(event => this._shouldShowInTab(event, tab, myPubkey));
 
-    // 3. 追加フィルタを適用
+    // 4. 追加フィルタを適用
     events = this._applyFilters(events, tab, filterOptions);
 
-    // 4. ソート
+    // 5. ソート
     return events.sort((a, b) => {
       const dateDiff = b.created_at - a.created_at;
       if (dateDiff !== 0) return dateDiff;
@@ -305,7 +334,7 @@ class ViewState {
     if (tab === 'global' && authors?.length > 0) {
       const authorSet = new Set(authors);
       events = events.filter(ev => authorSet.has(ev.pubkey));
-      console.log(`🔍 globalタブ: 投稿者絞り込み適用（${authors.length}人）`);
+      console.log(`🔍 globalタブ: 投稿者絞り込み適用(${authors.length}人)`);
     }
 
     // 5. kind:1基準のフィルタリング
@@ -343,7 +372,7 @@ class ViewState {
   }
 
   /**
-   * タブのカーソルを更新（LoadMore用）
+   * タブのカーソルを更新(LoadMore用)
    * @param {string} tab
    * @param {number} newUntil
    */
@@ -351,6 +380,8 @@ class ViewState {
     const tabState = this.tabs[tab];
     if (tabState?.cursor) {
       tabState.cursor.until = newUntil;
+      // 時間範囲も拡張
+      this._updateTimeRange(tabState, newUntil);
       console.log(`⏰ ${tab}タブ cursor.until更新: ${new Date(newUntil * 1000).toLocaleString()}`);
     }
   }
@@ -396,6 +427,7 @@ class ViewState {
     if (tabState) {
       tabState.visibleEventIds.clear();
       tabState.cursor = null;
+      tabState.timeRange = { oldest: null, newest: null };
       console.log(`🗑️ タブ "${tab}" の状態をクリアしました。`);
     }
   }
