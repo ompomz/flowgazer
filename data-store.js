@@ -220,9 +220,26 @@ class DataStore {
    */
   getDisplayName(pubkey) {
     const profile = this.profiles.get(pubkey);
+
+    // 1. nameがあればそれを使用
     if (profile?.name) {
       return profile.name;
     }
+
+    // 2. display_nameがあればそれを使用
+    if (profile?.display_name) {
+      return profile.display_name;
+    }
+
+    // 3. nip05があればドメイン部分を使用
+    if (profile?.nip05) {
+      const atIndex = profile.nip05.indexOf('@');
+      if (atIndex !== -1) {
+        return profile.nip05.substring(atIndex + 1);
+      }
+    }
+
+    // 4. どれもない場合はhexpubkeyを短縮
     return pubkey.substring(0, 8);
   }
 
