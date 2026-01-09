@@ -1,7 +1,6 @@
 /**
  * view-state.js
  * 【責務】: タブ状態管理、表示判定、フィルタリング
- * Baseline方式対応版（Cutoffロジック廃止）
  */
 
 class ViewState {
@@ -10,23 +9,19 @@ class ViewState {
     this.tabs = {
       global: {
         visibleEventIds: new Set(),
-        cursor: null,
-        filter: { kinds: [1, 6] }
+        cursor: null
       },
       following: {
         visibleEventIds: new Set(),
-        cursor: null,
-        filter: { kinds: [1, 6] }
+        cursor: null
       },
       myposts: {
         visibleEventIds: new Set(),
-        cursor: null,
-        filter: { kinds: [1, 42] }
+        cursor: null
       },
       likes: {
         visibleEventIds: new Set(),
-        cursor: null,
-        filter: { kinds: [7, 6, 1, 42] }
+        cursor: null
       }
     };
 
@@ -35,7 +30,7 @@ class ViewState {
     this.renderTimer = null;
     this.renderDelay = 300;
 
-    console.log('✅ ViewState初期化完了');
+    console.log('✅ ViewState初期化完了（リアルタイム計算方式）');
   }
 
   // ========================================
@@ -55,7 +50,7 @@ class ViewState {
 
     let addedToCurrentTab = false;
     tabs.forEach(tab => {
-      const added = this._addEventToTab(event, tab, myPubkey);
+      const added = this._addEventToTab(event, tab);
       if (added && tab === this.currentTab) {
         addedToCurrentTab = true;
       }
@@ -88,7 +83,7 @@ class ViewState {
       }
     }
 
-    // likes タブの判定（厳格化）
+    // likes タブの判定
     if (myPubkey) {
       const targetPubkey = event.tags.find(t => t[0] === 'p')?.[1];
       
@@ -102,10 +97,10 @@ class ViewState {
   }
 
   /**
-   * イベントを指定タブに追加
+   * イベントを指定タブに追加（追跡とカーソル更新のみ）
    * @private
    */
-  _addEventToTab(event, tab, myPubkey) {
+  _addEventToTab(event, tab) {
     const tabState = this.tabs[tab];
     if (!tabState) return false;
 
@@ -148,8 +143,7 @@ class ViewState {
    * @returns {boolean}
    */
   addHistoryEventToTab(event, tab) {
-    const myPubkey = window.nostrAuth?.pubkey;
-    const added = this._addEventToTab(event, tab, myPubkey);
+    const added = this._addEventToTab(event, tab);
 
     if (added && tab === this.currentTab) {
       this.scheduleRender();
@@ -176,33 +170,7 @@ class ViewState {
     console.log(`📑 ViewState: タブ切り替え ${oldTab} → ${newTab}`);
 
     this.currentTab = newTab;
-    this._repopulateTab(newTab);
     this.renderNow();
-  }
-
-  /**
-   * タブの表示内容を全イベントから再構築
-   * @private
-   */
-  _repopulateTab(tab) {
-    const tabState = this.tabs[tab];
-    if (!tabState) return;
-
-    console.log(`🔄 タブ "${tab}" を再構築中...`);
-
-    tabState.visibleEventIds.clear();
-    tabState.cursor = null;
-
-    const allEvents = window.dataStore.getAllEvents();
-    const myPubkey = window.nostrAuth?.pubkey;
-
-    allEvents.forEach(event => {
-      if (this._shouldShowInTab(event, tab, myPubkey)) {
-        this._addEventToTab(event, tab, myPubkey);
-      }
-    });
-
-    console.log(`✅ タブ "${tab}" 再構築完了: ${tabState.visibleEventIds.size}件`);
   }
 
   /**
@@ -210,21 +178,24 @@ class ViewState {
    * @private
    */
   _shouldShowInTab(event, tab, myPubkey) {
-    const tabState = this.tabs[tab];
+    // kind別の基本フィルタ
+    const kindFilters = {
+      global: [1, 6, 42],
+      following: [1, 6, 42],
+      myposts: [1, 42],
+      likes: [7, 6, 1, 42]
+    };
 
-    if (!tabState.filter.kinds.includes(event.kind)) {
+    if (!kindFilters[tab]?.includes(event.kind)) {
       return false;
     }
 
     switch (tab) {
       case 'global':
-      case 'following':
-        if (tab === 'following') {
-          if (!window.dataStore.isFollowing(event.pubkey)) {
-            return false;
-          }
-        }
         return true;
+
+      case 'following':
+        return window.dataStore.isFollowing(event.pubkey);
 
       case 'myposts':
         return event.pubkey === myPubkey;
@@ -239,25 +210,29 @@ class ViewState {
   }
 
   // ========================================
-  // 表示用イベント取得
+  // 表示用イベント取得（リアルタイム計算）
   // ========================================
 
   /**
    * 指定タブの表示イベントを取得 (フィルタリング済み・ソート済み)
+   * 毎回 dataStore から全イベントを取得して計算
    * @param {string} tab
    * @param {Object} filterOptions - { flowgazerOnly, authors, showKind42 }
    * @returns {Object[]}
    */
   getVisibleEvents(tab, filterOptions = {}) {
-    const tabState = this.tabs[tab];
-    if (!tabState) return [];
+    const myPubkey = window.nostrAuth?.pubkey;
 
-    let events = Array.from(tabState.visibleEventIds)
-      .map(id => window.dataStore.getEvent(id))
-      .filter(Boolean);
+    // 1. 全イベントを取得
+    let events = window.dataStore.getAllEvents();
 
+    // 2. タブに応じたフィルタリング
+    events = events.filter(event => this._shouldShowInTab(event, tab, myPubkey));
+
+    // 3. 追加フィルタを適用
     events = this._applyFilters(events, tab, filterOptions);
 
+    // 4. ソート
     return events.sort((a, b) => {
       const dateDiff = b.created_at - a.created_at;
       if (dateDiff !== 0) return dateDiff;
