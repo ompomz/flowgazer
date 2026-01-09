@@ -1,6 +1,7 @@
 /**
  * app.js
  * 【責務】: アプリケーション制御、リレー接続、ユーザーアクション処理
+ * Baseline方式対応版
  */
 
 class FlowgazerApp {
@@ -11,7 +12,7 @@ class FlowgazerApp {
     this.filterAuthors = null;
     this.flowgazerOnly = false;
     this.forbiddenWords = [];
-    this.showKind42 = false; // デフォルトは非表示
+    this.showKind42 = false;
     
     // ===== データ取得済みフラグ =====
     this.tabDataFetched = {
@@ -20,6 +21,10 @@ class FlowgazerApp {
       myposts: false,
       likes: false
     };
+    
+    // ===== Baseline方式用 =====
+    this.isInitializing = false;
+    this.cursorSince = null; // Anchor Phaseで確定した基準時刻
   }
 
   // ========================================
@@ -27,6 +32,7 @@ class FlowgazerApp {
   // ========================================
 
   async init() {
+
     console.log('🚀 flowgazer起動中...');
     
     // ログインUI更新
@@ -34,7 +40,7 @@ class FlowgazerApp {
 
     // リレー接続
     const savedRelay = localStorage.getItem('relayUrl');
-    const defaultRelay = 'wss://r.kojira.io/';
+    const defaultRelay = 'wss://nos.lol/';
     const relay = savedRelay || defaultRelay;
     await this.connectRelay(relay);
 
@@ -46,7 +52,207 @@ class FlowgazerApp {
       this.fetchInitialData();
     }
 
+    // Baseline方式でタイムライン初期化
+    await this.initializeTimelineBaseline();
+
     console.log('✅ flowgazer起動完了');
+  }
+
+  // ========================================
+  // Baseline方式タイムライン初期化
+  // ========================================
+
+  /**
+   * Baseline方式でタイムラインを初期化（2段階処理）
+   */
+  async initializeTimelineBaseline() {
+    if (this.isInitializing) {
+      console.warn('⚠️ すでに初期化中です');
+      return;
+    }
+
+    this.isInitializing = true;
+    console.log('📡 Baseline方式: Anchor Phase開始');
+
+    // ===== 第1段階: Anchor Phase =====
+    const anchorResult = await this.executeAnchorPhase();
+    
+    if (!anchorResult.success) {
+      this.isInitializing = false;
+      if (anchorResult.isEmpty) {
+        alert('これで全部です');
+      }
+      return;
+    }
+
+    this.cursorSince = anchorResult.oldestTimestamp;
+    console.log(`✅ Anchor Phase完了: cursor_since=${new Date(this.cursorSince * 1000).toLocaleString()}`);
+
+    // ===== 第2段階: Stream Phase =====
+    this.executeStreamPhase();
+    
+    this.isInitializing = false;
+  }
+
+  /**
+   * Anchor Phase: kind:1のみを150件取得
+   * @returns {Object} { success, oldestTimestamp, isEmpty }
+   */
+  async executeAnchorPhase() {
+    return new Promise((resolve) => {
+      const events = [];
+      let resolved = false;
+      const TIMEOUT_MS = 10000; // 10秒
+
+      const resolveOnce = (result) => {
+        if (resolved) return;
+        resolved = true;
+        window.relayManager.unsubscribe('anchor-phase');
+        resolve(result);
+      };
+
+      // タイムアウト設定
+      const timeoutId = setTimeout(() => {
+        console.log('⏱️ Anchor Phase: タイムアウト');
+        if (events.length === 0) {
+          resolveOnce({ success: false, isEmpty: true });
+        } else {
+          const oldest = Math.min(...events.map(e => e.created_at));
+          resolveOnce({ success: true, oldestTimestamp: oldest });
+        }
+      }, TIMEOUT_MS);
+
+      // 購読開始
+      window.relayManager.subscribe('anchor-phase', {
+        kinds: [1],
+        limit: 150
+      }, (type, event) => {
+        if (type === 'EVENT') {
+          const added = window.dataStore.addEvent(event);
+          if (added) {
+            events.push(event);
+            window.viewState.onEventReceived(event);
+            window.profileFetcher.request(event.pubkey);
+
+            // 150件到達で終了
+            if (events.length >= 150) {
+              clearTimeout(timeoutId);
+              const oldest = Math.min(...events.map(e => e.created_at));
+              resolveOnce({ success: true, oldestTimestamp: oldest });
+            }
+          }
+        } else if (type === 'EOSE') {
+          clearTimeout(timeoutId);
+          console.log(`📡 Anchor Phase EOSE: ${events.length}件取得`);
+          
+          if (events.length === 0) {
+            resolveOnce({ success: false, isEmpty: true });
+          } else {
+            const oldest = Math.min(...events.map(e => e.created_at));
+            resolveOnce({ success: true, oldestTimestamp: oldest });
+          }
+        }
+      });
+    });
+  }
+
+  /**
+   * Stream Phase: since指定でリアルタイム購読
+   */
+  executeStreamPhase() {
+    console.log('📡 Stream Phase開始');
+
+    const filters = this._buildStreamPhaseFilters();
+
+    window.relayManager.subscribe('stream-phase', filters, (type, event) => {
+      if (type === 'EVENT') {
+        const added = window.dataStore.addEvent(event);
+        if (added) {
+          window.viewState.onEventReceived(event);
+          window.profileFetcher.request(event.pubkey);
+        }
+      } else if (type === 'EOSE') {
+        console.log('📡 Stream Phase EOSE受信');
+        window.profileFetcher.flushNow();
+      }
+    });
+  }
+
+  /**
+   * Stream Phase用フィルタ構築
+   * @private
+   */
+  _buildStreamPhaseFilters() {
+    const filters = [];
+    const myPubkey = window.nostrAuth.isLoggedIn() ? window.nostrAuth.pubkey : null;
+
+    // === Global フィルタ ===
+    const globalFilter = {
+      kinds: this.showKind42 ? [1, 6, 42] : [1, 6],
+      since: this.cursorSince
+    };
+
+    if (this.filterAuthors && this.filterAuthors.length > 0) {
+      globalFilter.authors = this.filterAuthors;
+    }
+
+    filters.push(globalFilter);
+
+    // === Following フィルタ ===
+    if (window.dataStore.followingPubkeys.size > 0) {
+      const followingAuthors = Array.from(window.dataStore.followingPubkeys);
+      let filteredFollowing;
+      
+      if (myPubkey) {
+        if (window.dataStore.isFollowing(myPubkey)) {
+          filteredFollowing = followingAuthors;
+        } else {
+          filteredFollowing = followingAuthors.filter(pk => pk !== myPubkey);
+        }
+      } else {
+        filteredFollowing = followingAuthors;
+      }
+
+      if (filteredFollowing.length > 0) {
+        filters.push({
+          kinds: this.showKind42 ? [1, 6, 42] : [1, 6],
+          authors: filteredFollowing,
+          since: this.cursorSince
+        });
+      }
+    }
+
+    // === Likes フィルタ (自分宛のリアクション等) ===
+    if (myPubkey) {
+      filters.push({
+        kinds: [7],
+        '#p': [myPubkey],
+        since: this.cursorSince
+      });
+
+      filters.push({
+        kinds: [6],
+        '#p': [myPubkey],
+        since: this.cursorSince
+      });
+
+      filters.push({
+        kinds: [1],
+        '#p': [myPubkey],
+        since: this.cursorSince
+      });
+
+      const myPostIds = Array.from(window.dataStore.getEventIdsByAuthor(myPubkey));
+      if (myPostIds.length > 0) {
+        filters.push({
+          kinds: [6, 7],
+          '#e': myPostIds.slice(0, 100),
+          since: this.cursorSince
+        });
+      }
+    }
+
+    return filters;
   }
 
   // ========================================
@@ -61,154 +267,10 @@ class FlowgazerApp {
     try {
       document.getElementById('relay-url').value = url;
       await window.relayManager.connect(url);
-      
-      // メインタイムライン購読
-      this.subscribeMainTimeline();
-      
-      // URL保存
       localStorage.setItem('relayUrl', url);
     } catch (err) {
       console.error('❌ リレー接続失敗:', err);
       alert('リレーに接続できませんでした: ' + url);
-    }
-  }
-
-  /**
-   * メインタイムライン購読
-   */
-  subscribeMainTimeline() {
-    const filters = this._buildMainTimelineFilters();
-
-    if (filters.length > 0) {
-      window.relayManager.unsubscribe('main-timeline');
-      window.relayManager.subscribe('main-timeline', filters, (type, event) => {
-        this.handleTimelineEvent(type, event);
-      });
-    }
-  }
-
-  /**
-   * メインタイムライン用フィルタ構築
-   * @private
-   */
-  _buildMainTimelineFilters() {
-    const filters = [];
-    const myPubkey = window.nostrAuth.isLoggedIn() ? window.nostrAuth.pubkey : null;
-
-    // === Global フィルタ ===
-    const globalFilter = {
-      kinds: this.showKind42 ? [1, 6, 42] : [1, 6], // ← 変更
-      limit: 150
-    };
-
-    if (this.filterAuthors && this.filterAuthors.length > 0) {
-      globalFilter.authors = this.filterAuthors;
-    }
-
-    filters.push(globalFilter);
-
-    // === Following フィルタ ===
-    if (window.dataStore.followingPubkeys.size > 0) {
-        const followingAuthors = Array.from(window.dataStore.followingPubkeys);
-
-        let filteredFollowing;
-        if (myPubkey) {
-            // 自分が自分をフォローしているなら除外しない
-            if (window.dataStore.isFollowing(myPubkey)) {
-                filteredFollowing = followingAuthors;
-            } else {
-                filteredFollowing = followingAuthors.filter(pk => pk !== myPubkey);
-                }
-        } else {
-            filteredFollowing = followingAuthors;
-        }
-
-        if (filteredFollowing.length > 0) {
-        filters.push({
-            kinds: this.showKind42 ? [1, 6, 42] : [1, 6],
-            authors: filteredFollowing,
-            limit: 150
-        });
-    }
-}
-
-    // === Likes フィルタ (自分宛のリアクション等) ===
-    if (myPubkey) {
-      // kind:7 (リアクション)
-      filters.push({
-        kinds: [7],
-        '#p': [myPubkey],
-        limit: 50
-      });
-
-      // kind:6 (リポスト)
-      filters.push({
-        kinds: [6],
-        '#p': [myPubkey],
-        limit: 50
-      });
-
-      // kind:1 (メンション)
-      filters.push({
-        kinds: [1],
-        '#p': [myPubkey],
-        limit: 50
-      });
-
-      // 自分の投稿へのリアクション
-      const myPostIds = Array.from(window.dataStore.getEventIdsByAuthor(myPubkey));
-      if (myPostIds.length > 0) {
-        filters.push({
-          kinds: [6, 7],
-          '#e': myPostIds.slice(0, 100) // 最新100件のみ
-        });
-      }
-    }
-
-    return filters;
-  }
-
-  /**
-   * タイムラインイベントハンドラー
-   * @param {string} type - 'EVENT' or 'EOSE'
-   * @param {Object} event
-   */
-  handleTimelineEvent(type, event) {
-    if (type === 'EVENT') {
-      // kind:0 (プロフィール) の処理
-      if (event.kind === 0) {
-        try {
-          const profile = JSON.parse(event.content);
-          const updated = window.dataStore.addProfile(event.pubkey, {
-            ...profile,
-            created_at: event.created_at
-          });
-          
-          if (updated && window.timeline) {
-            window.timeline.refresh();
-          }
-        } catch (err) {
-          console.error('プロフィールパースエラー:', err);
-        }
-        return;
-      }
-
-      // イベントをDataStoreに保存
-      const added = window.dataStore.addEvent(event);
-      
-      if (added) {
-        // ViewStateに通知 (ライブストリーム)
-        window.viewState.onEventReceived(event);
-        
-        // プロフィール取得リクエスト
-        window.profileFetcher.request(event.pubkey);
-      }
-      
-    } else if (type === 'EOSE') {
-      console.log('📡 EOSE受信');
-      
-      // プロフィールを一括取得
-      window.profileFetcher.flushNow();
     }
   }
 
@@ -245,7 +307,6 @@ class FlowgazerApp {
         window.viewState.onEventReceived(event);
       }
     });
-
   }
 
   /**
@@ -280,7 +341,6 @@ class FlowgazerApp {
     const myPubkey = window.nostrAuth.pubkey;
     console.log('📥 受け取ったリアクションを取得中...');
 
-    // kind:7 (リアクション)
     window.relayManager.subscribe('received-reactions', {
       kinds: [7],
       '#p': [myPubkey],
@@ -297,7 +357,6 @@ class FlowgazerApp {
       }
     });
 
-    // kind:6 (リポスト)
     window.relayManager.subscribe('received-reposts', {
       kinds: [6],
       '#p': [myPubkey],
@@ -314,7 +373,6 @@ class FlowgazerApp {
       }
     });
 
-    // kind:1 (メンション)
     window.relayManager.subscribe('received-mentions', {
       kinds: [1],
       '#p': [myPubkey],
@@ -345,15 +403,12 @@ class FlowgazerApp {
     this.currentTab = tab;
     console.log('🔀 タブ切り替え:', tab);
 
-    // タブボタンのアクティブ状態更新
     document.querySelectorAll('.tab-button').forEach(btn => {
       btn.classList.toggle('active', btn.id === `tab-${tab}`);
     });
 
-    // ViewStateに通知
     window.viewState.switchTab(tab);
 
-    // 初回データ取得
     if (!this.tabDataFetched[tab] && window.nostrAuth.isLoggedIn()) {
       if (tab === 'myposts') {
         this.fetchMyPostsHistory();
@@ -364,7 +419,6 @@ class FlowgazerApp {
       }
     }
 
-    // Timelineに通知
     if (window.timeline) {
       window.timeline.switchTab(tab);
     }
@@ -381,14 +435,13 @@ class FlowgazerApp {
   applyFilter(authors) {
     this.filterAuthors = authors;
     
-    // Timelineに通知
     if (window.timeline) {
       window.timeline.setFilter({ authors });
     }
     
-    // 購読を再開
-    window.relayManager.unsubscribe('main-timeline');
-    this.subscribeMainTimeline();
+    // Stream Phaseを再開
+    window.relayManager.unsubscribe('stream-phase');
+    this.executeStreamPhase();
   }
 
   /**
@@ -398,42 +451,37 @@ class FlowgazerApp {
   toggleFlowgazerFilter(enabled) {
     this.flowgazerOnly = enabled;
     
-    // Timelineに通知
     if (window.timeline) {
       window.timeline.setFilter({ flowgazerOnly: enabled });
     }
   }
 
   /**
-  * kind:42表示切り替え
-  * @param {boolean} enabled
-  */
+   * kind:42表示切り替え
+   * @param {boolean} enabled
+   */
   toggleKind42Display(enabled) {
     this.showKind42 = enabled;
-  
-    // localStorageに保存
     localStorage.setItem('showKind42', enabled.toString());
-  
     console.log(`📺 kind:42表示: ${enabled ? 'ON' : 'OFF'}`);
-  
-    // Timelineに通知
+
     if (window.timeline) {
       window.timeline.setFilter({ showKind42: enabled });
     }
-  
-    // 購読を再開（kind:42の取得を制御）
-    window.relayManager.unsubscribe('main-timeline');
-    this.subscribeMainTimeline();
+
+    // Stream Phaseを再開
+    window.relayManager.unsubscribe('stream-phase');
+    this.executeStreamPhase();
   }
 
   // ========================================
-  // もっと見る (LoadMore)
+  // もっと見る (LoadMore - 連鎖リクエスト方式)
   // ========================================
 
   /**
-   * もっと見るボタンの処理
+   * もっと見るボタンの処理（連鎖リクエスト方式）
    */
-  loadMore() {
+  async loadMore() {
     if (this.isLoadingMore) {
       console.warn('ロード中のため、重複処理をスキップ');
       return;
@@ -445,34 +493,206 @@ class FlowgazerApp {
     
     console.log(`📥 もっと見る: ${tab}タブ, until=${new Date(oldestTimestamp * 1000).toLocaleString()}`);
 
-    // ViewStateからフィルタを構築
-    const filter = window.viewState.buildLoadMoreFilter(tab, oldestTimestamp);
-    
-    if (!filter) {
-      console.warn('フィルタ構築に失敗しました');
-      this.isLoadingMore = false;
-      return;
-    }
-
-    // ローディング表示
     document.getElementById('load-more').classList.add('loading');
 
-    // 購読
-    window.relayManager.subscribe('load-more', filter, (type, event) => {
-      if (type === 'EVENT') {
-        const added = window.dataStore.addEvent(event);
-        if (added) {
-          window.viewState.addHistoryEventToTab(event, tab);
-          window.profileFetcher.request(event.pubkey);
-        }
-      } else if (type === 'EOSE') {
-        window.relayManager.unsubscribe('load-more');
-        document.getElementById('load-more').classList.remove('loading');
-        console.log(`✅ もっと見る完了 (${tab})`);
-        window.viewState.renderNow();
-        this.isLoadingMore = false;
+    try {
+      // Step 1: kind:1を50件取得
+      const step1Result = await this.loadMoreStep1(tab, oldestTimestamp);
+      
+      if (!step1Result.success) {
+        alert('これ以上ありません');
+        return;
       }
+
+      const oldestKind1 = step1Result.oldestTimestamp;
+      console.log(`✅ Step1完了: ${step1Result.count}件取得, oldest=${new Date(oldestKind1 * 1000).toLocaleString()}`);
+
+      // Step 2: その期間のkind:6,42を全件取得
+      await this.loadMoreStep2(tab, oldestTimestamp, oldestKind1);
+      
+      // カーソル更新
+      window.viewState.updateTabCursor(tab, oldestKind1);
+      
+      console.log('✅ もっと見る完了');
+      window.viewState.renderNow();
+      
+    } catch (err) {
+      console.error('❌ もっと見る失敗:', err);
+      alert('データの取得に失敗しました');
+    } finally {
+      document.getElementById('load-more').classList.remove('loading');
+      this.isLoadingMore = false;
+    }
+  }
+
+  /**
+   * LoadMore Step1: kind:1を50件取得
+   * @private
+   */
+  async loadMoreStep1(tab, untilTimestamp) {
+    return new Promise((resolve) => {
+      const events = [];
+      
+      const filter = this._buildLoadMoreStep1Filter(tab, untilTimestamp);
+      if (!filter) {
+        resolve({ success: false });
+        return;
+      }
+
+      window.relayManager.subscribe('load-more-step1', filter, (type, event) => {
+        if (type === 'EVENT') {
+          const added = window.dataStore.addEvent(event);
+          if (added) {
+            events.push(event);
+            window.viewState.addHistoryEventToTab(event, tab);
+            window.profileFetcher.request(event.pubkey);
+          }
+        } else if (type === 'EOSE') {
+          window.relayManager.unsubscribe('load-more-step1');
+          
+          if (events.length === 0) {
+            resolve({ success: false });
+          } else {
+            const oldest = Math.min(...events.map(e => e.created_at));
+            resolve({ success: true, count: events.length, oldestTimestamp: oldest });
+          }
+        }
+      });
     });
+  }
+
+  /**
+   * LoadMore Step2: kind:6,42を期間指定で全件取得
+   * @private
+   */
+  async loadMoreStep2(tab, untilTimestamp, sinceTimestamp) {
+    return new Promise((resolve) => {
+      const filter = this._buildLoadMoreStep2Filter(tab, untilTimestamp, sinceTimestamp);
+      if (!filter) {
+        resolve();
+        return;
+      }
+
+      window.relayManager.subscribe('load-more-step2', filter, (type, event) => {
+        if (type === 'EVENT') {
+          const added = window.dataStore.addEvent(event);
+          if (added) {
+            window.viewState.addHistoryEventToTab(event, tab);
+            window.profileFetcher.request(event.pubkey);
+          }
+        } else if (type === 'EOSE') {
+          window.relayManager.unsubscribe('load-more-step2');
+          console.log('✅ Step2完了');
+          resolve();
+        }
+      });
+    });
+  }
+
+  /**
+   * LoadMore Step1用フィルタ構築 (kind:1のみ)
+   * @private
+   */
+  _buildLoadMoreStep1Filter(tab, untilTimestamp) {
+    const myPubkey = window.nostrAuth?.pubkey;
+    const filter = {
+      kinds: [1],
+      until: untilTimestamp - 1,
+      limit: 50
+    };
+
+    switch (tab) {
+      case 'global':
+        if (this.filterAuthors && this.filterAuthors.length > 0) {
+          filter.authors = this.filterAuthors;
+        }
+        break;
+        
+      case 'following':
+        if (window.dataStore.followingPubkeys.size === 0) {
+          console.warn('フォローリストが空です');
+          return null;
+        }
+        const followingAuthors = Array.from(window.dataStore.followingPubkeys);
+        if (myPubkey) {
+          if (window.dataStore.isFollowing(myPubkey)) {
+            filter.authors = followingAuthors;
+          } else {
+            filter.authors = followingAuthors.filter(pk => pk !== myPubkey);
+          }
+        } else {
+          filter.authors = followingAuthors;
+        }
+        break;
+
+      case 'myposts':
+        if (!myPubkey) return null;
+        filter.authors = [myPubkey];
+        break;
+
+      case 'likes':
+        // likesタブではkind:7を取得
+        filter.kinds = [7];
+        if (!myPubkey) return null;
+        filter['#p'] = [myPubkey];
+        break;
+
+      default:
+        return null;
+    }
+
+    return filter;
+  }
+
+  /**
+   * LoadMore Step2用フィルタ構築 (kind:6,42)
+   * @private
+   */
+  _buildLoadMoreStep2Filter(tab, untilTimestamp, sinceTimestamp) {
+    const myPubkey = window.nostrAuth?.pubkey;
+    
+    // likesタブではStep2不要
+    if (tab === 'likes') {
+      return null;
+    }
+
+    const filter = {
+      kinds: this.showKind42 ? [6, 42] : [6],
+      until: untilTimestamp - 1,
+      since: sinceTimestamp
+    };
+
+    switch (tab) {
+      case 'global':
+        if (this.filterAuthors && this.filterAuthors.length > 0) {
+          filter.authors = this.filterAuthors;
+        }
+        break;
+        
+      case 'following':
+        if (window.dataStore.followingPubkeys.size === 0) return null;
+        const followingAuthors = Array.from(window.dataStore.followingPubkeys);
+        if (myPubkey) {
+          if (window.dataStore.isFollowing(myPubkey)) {
+            filter.authors = followingAuthors;
+          } else {
+            filter.authors = followingAuthors.filter(pk => pk !== myPubkey);
+          }
+        } else {
+          filter.authors = followingAuthors;
+        }
+        break;
+
+      case 'myposts':
+        if (!myPubkey) return null;
+        filter.authors = [myPubkey];
+        break;
+
+      default:
+        return null;
+    }
+
+    return filter;
   }
 
   // ========================================
@@ -500,29 +720,20 @@ class FlowgazerApp {
         ]
       };
 
-      // 署名
       const signed = await window.nostrAuth.signEvent(event);
-      
-      // 送信
       window.relayManager.publish(signed);
-      
-      // DataStoreに追加
       window.dataStore.addEvent(signed);
       
-      // ViewStateに通知
       window.viewState.addHistoryEventToTab(signed, 'myposts');
       window.viewState.addHistoryEventToTab(signed, 'global');
 
-      // 自分が自分をフォローしているなら following にも追加
       const myPubkey = window.nostrAuth?.pubkey;
       if (window.dataStore.isFollowing(myPubkey)) {
         window.viewState.addHistoryEventToTab(signed, 'following');
-        }
+      }
     
-      // 即座に再描画
       window.viewState.renderNow();
-      
-      alert('投稿しました！');
+      alert('投稿しました!');
       document.getElementById('new-post-content').value = '';
       
     } catch (err) {
@@ -556,22 +767,13 @@ class FlowgazerApp {
         ]
       };
 
-      // 署名
       const signed = await window.nostrAuth.signEvent(event);
-      
-      // 送信
       window.relayManager.publish(signed);
-      
-      // DataStoreに追加
       window.dataStore.addEvent(signed);
-      
-      // ViewStateに通知
       window.viewState.onEventReceived(signed);
-      
-      // 再描画
       window.viewState.renderNow();
       
-      alert('ふぁぼった！');
+      alert('ふぁぼった!');
       
     } catch (err) {
       console.error('失敗:', err);
@@ -634,7 +836,6 @@ class FlowgazerApp {
 window.app = new FlowgazerApp();
 console.log('✅ FlowgazerApp初期化完了');
 
-// グローバル関数 (長押しふぁぼ用)
 window.sendLikeEvent = (eventId, pubkey) => window.app.sendLike(eventId, pubkey);
 
 window.addEventListener('beforeunload', () => {
