@@ -68,21 +68,30 @@ class ViewState {
   }
 
   /**
-   * イベントがどのタブに属するかを判定
-   * @private
-   */
+  * イベントがどのタブに属するかを判定
+  * @private
+  */
   _determineTargetTabs(event, myPubkey) {
     const tabs = [];
 
-    // global, following, myposts の判定
+    // global, following の判定
     if ([1, 6, 42].includes(event.kind)) {
       tabs.push('global');
 
       if (window.dataStore.isFollowing(event.pubkey)) {
         tabs.push('following');
       }
+    }
 
+    // myposts タブの判定
+    if (myPubkey) {
+      // 自分の投稿（kind:1, 42）
       if ([1, 42].includes(event.kind) && event.pubkey === myPubkey) {
+        tabs.push('myposts');
+      }
+
+      // 自分のリポスト（kind:6）
+      if (event.kind === 6 && event.pubkey === myPubkey) {
         tabs.push('myposts');
       }
     }
@@ -90,7 +99,7 @@ class ViewState {
     // likes タブの判定
     if (myPubkey) {
       const targetPubkey = event.tags.find(t => t[0] === 'p')?.[1];
-      
+
       // kind:7, 6, 1, 42 で自分宛のイベント
       if ([7, 6, 1, 42].includes(event.kind) && targetPubkey === myPubkey) {
         tabs.push('likes');
@@ -200,7 +209,7 @@ class ViewState {
     const kindFilters = {
       global: [1, 6, 42],
       following: [1, 6, 42],
-      myposts: [1, 42],
+      myposts: [1, 6, 42],
       likes: [7, 6, 1, 42]
     };
 
@@ -293,18 +302,18 @@ class ViewState {
 
       // 3. すべてのイベントをこの基準でフィルタ
       events = events.filter(e => e.created_at >= likesBaseline);
-      
+
       return events;
     }
 
-    // ===== 以下、他のタブの既存フィルタ処理 =====
+    // ===== 以下、他のタブの必要最小限のフィルタ処理 =====
 
-    // 0. kind:42 フィルタ
+    // 1. kind:42 フィルタ
     if ((tab === 'global' || tab === 'following') && !showKind42) {
       events = events.filter(ev => ev.kind !== 42);
     }
 
-    // 1. 禁止ワードフィルタ
+    // 2. 禁止ワードフィルタ（kind:1のみ対象）
     const forbiddenWords = window.app?.forbiddenWords || [];
     if ((tab === 'global' || tab === 'following') && forbiddenWords.length > 0) {
       events = events.filter(ev => {
@@ -314,7 +323,7 @@ class ViewState {
       });
     }
 
-    // 2. 短い投稿の制限
+    // 3. 短い投稿の制限（kind:1のみ対象）
     if (tab === 'global' || tab === 'following') {
       events = events.filter(ev => {
         if (ev.kind !== 1) return true;
@@ -322,7 +331,7 @@ class ViewState {
       });
     }
 
-    // 3. flowgazerしぼりこみ
+    // 4. flowgazerしぼりこみ
     if (flowgazerOnly && tab !== 'likes') {
       events = events.filter(ev =>
         ev.kind === 1 &&
@@ -330,29 +339,15 @@ class ViewState {
       );
     }
 
-    // 4. 投稿者しぼりこみ
+    // 5. 投稿者しぼりこみ
     if (tab === 'global' && authors?.length > 0) {
       const authorSet = new Set(authors);
       events = events.filter(ev => authorSet.has(ev.pubkey));
       console.log(`🔍 globalタブ: 投稿者絞り込み適用(${authors.length}人)`);
     }
 
-    // 5. kind:1基準のフィルタリング
-    if (tab === 'global' || tab === 'following') {
-      const kind1Events = events.filter(e => e.kind === 1);
-      
-      if (kind1Events.length > 0) {
-        const kind1Oldest = kind1Events[Math.min(149, kind1Events.length - 1)]?.created_at || 0;
-        
-        events = events.filter(e => {
-          if (e.kind === 1) return true;
-          if ([6, 42].includes(e.kind)) {
-            return e.created_at >= kind1Oldest;
-          }
-          return true;
-        });
-      }
-    }
+    // 注意: Baseline方式により取得範囲は制御されているため、
+    // kind:1の件数や時刻に基づく追加フィルタは不要
 
     return events;
   }
