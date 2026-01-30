@@ -31,7 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   openBtn.addEventListener('click', () => {
     openTutorial();
-    showImage(0); // チュートリアルを開く際に最初の画像に戻す
+    showImage(0);
   });
 
   dots.forEach(dot => {
@@ -41,5 +41,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  images.forEach((img, index) => {
+  img.addEventListener('click', () => {
+    const nextIndex = (index + 1) % images.length;
+    showImage(nextIndex);
+    });
+  });
+  
   showImage(currentIndex);
 });
