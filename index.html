@@ -56,6 +56,9 @@ ul,li{font-size:.9rem;-webkit-text-size-adjust:none;text-size-adjust:none}
 .close-button{color:#fff;font-size:40px;font-weight:700;cursor:pointer;transition:0.3s}
 .close-button:hover,.close-button:focus{color:#eee;text-decoration:none;cursor:pointer}
 textarea{font-weight:400;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Helvetica Neue",Arial,sans-serif}
+.post-options{ display:flex; gap:0.5rem; align-items:center; margin:0.5rem 0; }
+.post-options label{ font-size:0.85rem; color:#666; margin-right:0.3rem; }
+.post-options select{transition:background-color 0.3s,color 0.3s;cursor:pointer;font-size:.9rem;padding:.5rem;border:1px solid #ddd;border-radius:4px;color:#666;background-color:#fff}
 </style>
 </head>
 <body>
@@ -101,6 +104,17 @@ textarea{font-weight:400;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI"
    </datalist>
    <button id="subscribe-relay">接続</button>
   </div>
+
+<label>投稿モード</label>
+<div class="post-options">
+  <select id="post-kind-selector">
+    <option value="1">通常の投稿(kind:1)</option>
+    <option value="42">チャンネルへの投稿(kind:42)</option>
+  </select>
+  <select id="channel-list-selector" style="display:none;">
+    <option value="">チャンネルを選択</option>
+  </select>
+</div>
   
   <div style="display: flex; align-items: center; gap: 0.5rem; margin-left: 0.25rem; flex-wrap: wrap;">
     <label for="auto-update-toggle">自動更新ON</label>
@@ -141,9 +155,15 @@ textarea{font-weight:400;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI"
 <!-- 既存JS -->
 <script src="https://ompomz.github.io/header/loadHeader.js"></script>
 <script src="https://ompomz.github.io/modal.js"></script>
-<script src="https://ompomz.github.io/flowgazer/tutorial.js"></script>
 <script src="https://ompomz.github.io/flowgazer/auth.js"></script>
 <script src="https://ompomz.github.io/flowgazer/auth-ui.js"></script>
+
+<!-- 
+Based on motherfucking-nostr-client by かすてらふぃ
+Some parts generated or modified with AI assistance  
+Uses nostr-tools (MIT License)
+Licensed under WTFPL
+-->
 <script src="https://unpkg.com/nostr-tools@2.17.0/lib/nostr.bundle.js"></script>
 
 <!-- 新設計JS -->
@@ -180,12 +200,35 @@ document.addEventListener('DOMContentLoaded', async () => {
   await window.app.init();
   
   // UI イベントリスナー
-  
-  // 投稿ボタン
+  // 投稿ボタンのクリックイベント
   document.getElementById('send-new-post').addEventListener('click', () => {
-    const content = document.getElementById('new-post-content').value;
-    if (content) {
-      window.app.sendPost(content);
+  const content = document.getElementById('new-post-content').value;
+  // 選択されたKindを取得
+  const kind = parseInt(document.getElementById('post-kind-selector').value);
+  // 選択されたチャンネルIDを取得
+  const channelId = document.getElementById('channel-list-selector').value;
+
+  if (content) {
+    // チャンネル投稿なのにIDがない場合は止める
+    if (kind === 42 && !channelId) {
+      alert("投稿先のチャンネルを選んでください！");
+      return;
+    }
+    // sendPostに情報を渡す
+    window.app.sendPost(content, kind, channelId);
+    }
+  });
+
+  // Kindのプルダウンが変わった時の表示切り替え
+  document.getElementById('post-kind-selector').addEventListener('change', (e) => {
+  const channelSelector = document.getElementById('channel-list-selector');
+  
+  if (e.target.value === "42") {
+    channelSelector.style.display = "inline";
+    // 📢 ここでKind 10005を取りに行く！
+    fetchMyChannels();
+    } else {
+    channelSelector.style.display = "none";
     }
   });
   
