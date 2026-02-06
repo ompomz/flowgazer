@@ -40,7 +40,7 @@ class FlowgazerApp {
 
     // リレー接続
     const savedRelay = localStorage.getItem('relayUrl');
-    const defaultRelay = 'wss://r.kojira.io/';
+    const defaultRelay = 'wss://nos.lol/';
     const relay = savedRelay || defaultRelay;
     await this.connectRelay(relay);
 
@@ -703,7 +703,7 @@ class FlowgazerApp {
    * 投稿を送信
    * @param {string} content
    */
-  async sendPost(content, kind = 1, channelId = null) { // 引数を追加
+  async sendPost(content, kind = 1, channelId = null) {
     if (!window.nostrAuth.canWrite()) {
       alert('投稿するには秘密鍵でのサインインが必要です。');
       showAuthUI();
@@ -712,7 +712,7 @@ class FlowgazerApp {
 
     try {
       const event = {
-        kind: kind, // 指定されたKindを使う
+        kind: kind,
         content: content,
         created_at: Math.floor(Date.now() / 1000),
         tags: [
@@ -720,30 +720,21 @@ class FlowgazerApp {
         ]
       };
 
-      // --- ここからKindごとの個別処理 ---
-
-      if (kind === 42 && channelId) {
-        // チャンネル投稿: eタグ（root）が必須
-        event.tags.push(['e', channelId, window.appConfig.mainRelay || '', 'root']);
-      }
-      else if (kind === 40) {
-        // チャンネル作成: contentは通常、名前や説明のJSON
-        // もしUI側でJSONを作って渡してないなら、ここで整形が必要
-        try {
-          JSON.parse(content); // すでにJSONかチェック
-        } catch {
-          event.content = JSON.stringify({ name: content, about: "" });
+      // --- Kindごとの処理（kind:42） ---
+      if (kind === 42) {
+        if (!channelId) {
+          alert('投稿先のチャンネルを選んでください！');
+          return;
         }
-      }
 
+        // チャンネル投稿: eタグ（root）は必須
+        event.tags.push(['e', channelId, '', 'root']);
+      }
       // --- ここまで ---
 
       const signed = await window.nostrAuth.signEvent(event);
       window.relayManager.publish(signed);
-
-      // 以降、画面更新などの既存処理
       window.dataStore.addEvent(signed);
-      // ... (以下略) ...
 
       alert('送信完了！');
       document.getElementById('new-post-content').value = '';
@@ -889,90 +880,131 @@ async function fetchMyChannels() {
 
 /**
  * チャンネルID配列から名前を解決してプルダウンを更新
- * @param {string[]} channelIds - チャンネルIDの配列
+ * 優先順位: kind:41 → kind:40 → デフォルト名
+ * @param {string[]} channelIds
  */
 async function resolveChannelNames(channelIds) {
   return new Promise((resolve) => {
     const channels = [];
-    const subId = 'channel-names-' + Date.now();
-    let processedCount = 0;
-    
-    console.log('🔍 チャンネル名を解決中...');
-    
-    // kind:40 または kind:41 を検索
-    window.relayManager.subscribe(subId, {
-      kinds: [40, 41],
-      '#e': channelIds
-    }, (type, event) => {
-      if (type === 'EVENT') {
-        // このイベントが参照しているチャンネルIDを取得
-        const channelId = event.tags.find(t => t[0] === 'e')?.[1];
-        
-        if (channelId && channelIds.includes(channelId)) {
+    const resolved = new Set(); // 名前が確定した channelId
+    const subId41 = 'channel-meta-41-' + Date.now();
+
+    console.log('🔍 チャンネル名解決開始（kind:41 優先）');
+
+    // --- Step 1: kind:41（metadata update）を取得 ---
+    window.relayManager.subscribe(
+      subId41,
+      {
+        kinds: [41],
+        '#e': channelIds
+      },
+      (type, event) => {
+        if (type === 'EVENT') {
+          const channelId = event.tags.find(t => t[0] === 'e')?.[1];
+          if (!channelId || !channelIds.includes(channelId)) return;
+
           try {
-            // content から name を抽出
             const metadata = JSON.parse(event.content);
-            const channelName = metadata.name || `Channel ${channelId.substring(0, 8)}`;
-            
-            // 重複チェック（同じチャンネルIDで複数のイベントがある場合）
+            const name = metadata.name || `Channel ${channelId.substring(0, 8)}`;
+
             const existing = channels.find(c => c.id === channelId);
-            if (!existing) {
-              channels.push({
-                id: channelId,
-                name: channelName
-              });
-              console.log(`✅ チャンネル名解決: ${channelName} (${channelId.substring(0, 8)})`);
-            } else if (event.created_at > existing.created_at) {
-              // より新しいイベントで名前を更新
-              existing.name = channelName;
-              existing.created_at = event.created_at;
-              console.log(`🔄 チャンネル名更新: ${channelName}`);
+            if (!existing || event.created_at > existing.created_at) {
+              if (existing) {
+                existing.name = name;
+                existing.created_at = event.created_at;
+                existing.source = '41';
+              } else {
+                channels.push({
+                  id: channelId,
+                  name,
+                  created_at: event.created_at,
+                  source: '41'
+                });
+              }
+              resolved.add(channelId);
+              console.log(`✅ kind:41 から解決: ${name}`);
             }
           } catch (err) {
-            console.error('❌ チャンネルメタデータのパースエラー:', err);
+            console.error('❌ kind:41 パース失敗:', err);
           }
         }
+
+        if (type === 'EOSE') {
+          window.relayManager.unsubscribe(subId41);
+          fetchKind40Fallback();
+        }
       }
-      
-      if (type === 'EOSE') {
-        console.log(`📊 ${channels.length}/${channelIds.length} のチャンネル名を解決しました`);
-        
-        // 名前が解決できなかったチャンネルにはデフォルト名を付ける
-        channelIds.forEach(id => {
-          if (!channels.find(c => c.id === id)) {
-            channels.push({
-              id: id,
-              name: `Channel ${id.substring(0, 8)}...`
-            });
-            console.log(`⚠️ 名前未解決: ${id.substring(0, 8)} (デフォルト名使用)`);
+    );
+
+    // --- Step 2: kind:40（channel create）で補完 ---
+    function fetchKind40Fallback() {
+      const unresolvedIds = channelIds.filter(id => !resolved.has(id));
+
+      if (unresolvedIds.length === 0) {
+        finish();
+        return;
+      }
+
+      console.log(`🔁 kind:40 で補完 (${unresolvedIds.length} 件)`);
+
+      const subId40 = 'channel-meta-40-' + Date.now();
+
+      window.relayManager.subscribe(
+        subId40,
+        {
+          kinds: [40],
+          ids: unresolvedIds
+        },
+        (type, event) => {
+          if (type === 'EVENT' && unresolvedIds.includes(event.id)) {
+            try {
+              const metadata = JSON.parse(event.content);
+              const name = metadata.name || `Channel ${event.id.substring(0, 8)}`;
+
+              channels.push({
+                id: event.id,
+                name,
+                created_at: event.created_at,
+                source: '40'
+              });
+
+              resolved.add(event.id);
+              console.log(`✅ kind:40 から解決: ${name}`);
+            } catch (err) {
+              console.error('❌ kind:40 パース失敗:', err);
+            }
           }
-        });
-        
-        // プルダウンを更新
-        updateChannelDropdown(channels);
-        
-        window.relayManager.unsubscribe(subId);
-        resolve();
-      }
-    });
-    
-    // タイムアウト設定（10秒）
-    setTimeout(() => {
-      console.log('⏱️ チャンネル名解決タイムアウト');
-      
-      // 未解決のチャンネルにデフォルト名を付与
+
+          if (type === 'EOSE') {
+            window.relayManager.unsubscribe(subId40);
+            finish();
+          }
+        }
+      );
+    }
+
+    // --- Step 3: それでも未解決ならデフォルト名 ---
+    function finish() {
       channelIds.forEach(id => {
-        if (!channels.find(c => c.id === id)) {
+        if (!resolved.has(id)) {
           channels.push({
-            id: id,
-            name: `Channel ${id.substring(0, 8)}...`
+            id,
+            name: `Channel ${id.substring(0, 8)}...`,
+            created_at: 0,
+            source: 'default'
           });
+          console.log(`⚠️ デフォルト名使用: ${id.substring(0, 8)}`);
         }
       });
-      
+
       updateChannelDropdown(channels);
-      window.relayManager.unsubscribe(subId);
       resolve();
+    }
+
+    // 保険のタイムアウト（10秒）
+    setTimeout(() => {
+      console.log('⏱️ チャンネル名解決タイムアウト');
+      finish();
     }, 10000);
   });
 }
