@@ -105,8 +105,8 @@ textarea{font-weight:400;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI"
    <button id="subscribe-relay">接続</button>
   </div>
 
-<div class="post-options" style="display:none;">
-<label>投稿モード</label>
+<div class="post-options">
+<label style="margin-left: 0.25rem;">投稿モード</label>
   <select id="post-kind-selector">
     <option value="1">通常の投稿(kind:1)</option>
     <option value="42">チャンネルへの投稿(kind:42)</option>
@@ -131,7 +131,7 @@ textarea{font-weight:400;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI"
   </div>
   
   <div class="flex-container">
-    <textarea id="hex-filter" rows="4" placeholder="投稿者しぼりこみ(npub1…,hex…)"></textarea>
+    <textarea id="hex-filter" rows="3" placeholder="投稿者しぼりこみ(npub1…,hex…)"></textarea>
     <div style="display: flex; flex-direction: column; gap: 0.25rem;">
       <button id="apply-filter" style="width: 4rem;">適用</button>
       <button id="clear-filter" style="width: 4rem;">クリア</button>

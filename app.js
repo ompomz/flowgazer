@@ -715,9 +715,7 @@ class FlowgazerApp {
         kind: kind,
         content: content,
         created_at: Math.floor(Date.now() / 1000),
-        tags: [
-          ['client', 'flowgazer', '31990:a19caaa8404721584746fb0e174cf971a94e0f51baaf4c4e8c6e54fa88985eaf:1755917022711', 'wss://relay.nostr.band/']
-        ]
+        tags: []
       };
 
       // --- Kindごとの処理（kind:42） ---
@@ -727,10 +725,12 @@ class FlowgazerApp {
           return;
         }
 
-        // チャンネル投稿: eタグ（root）は必須
+        // eタグ（root）は先に追加
         event.tags.push(['e', channelId, '', 'root']);
       }
-      // --- ここまで ---
+
+      // clientタグは最後に追加
+      event.tags.push(['client', 'flowgazer', '31990:a19caaa8404721584746fb0e174cf971a94e0f51baaf4c4e8c6e54fa88985eaf:1755917022711', 'wss://relay.nostr.band/']);
 
       const signed = await window.nostrAuth.signEvent(event);
       window.relayManager.publish(signed);
@@ -906,6 +906,7 @@ async function resolveChannelNames(channelIds) {
           try {
             const metadata = JSON.parse(event.content);
             const name = metadata.name || `Channel ${channelId.substring(0, 8)}`;
+            window.channelNameMap.set(channelId, name);
 
             const existing = channels.find(c => c.id === channelId);
             if (!existing || event.created_at > existing.created_at) {
@@ -960,6 +961,7 @@ async function resolveChannelNames(channelIds) {
             try {
               const metadata = JSON.parse(event.content);
               const name = metadata.name || `Channel ${event.id.substring(0, 8)}`;
+              window.channelNameMap.set(event.id, name);
 
               channels.push({
                 id: event.id,
@@ -1017,6 +1019,9 @@ function updateChannelDropdown(channels) {
   const channelSelect = document.getElementById('channel-list-selector');
   if (!channelSelect) return;
 
+  // 現在選択中の値を保持
+  const currentValue = channelSelect.value;
+
   // 初期化
   channelSelect.innerHTML = '<option value="">-- チャンネルを選択 --</option>';
 
@@ -1038,6 +1043,10 @@ function updateChannelDropdown(channels) {
     const option = document.createElement('option');
     option.value = channel.id;
     option.textContent = channel.name;
+    // 前回選択していた値と一致するなら selected にする
+    if (channel.id === currentValue) {
+      option.selected = true;
+    }
     channelSelect.appendChild(option);
   });
 
@@ -1047,6 +1056,8 @@ function updateChannelDropdown(channels) {
 // ========================================
 // グローバル初期化
 // ========================================
+
+window.channelNameMap = new Map();
 
 window.app = new FlowgazerApp();
 console.log('✅ FlowgazerApp初期化完了');

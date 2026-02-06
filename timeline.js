@@ -64,10 +64,10 @@ class Timeline {
   constructor(containerElement) {
     this.container = containerElement;
     this.currentTab = 'global';
-    
     // DOM要素の追跡用
     this.activeElements = new Set();
-    
+    // ★ 追加：チャンネル名キャッシュ
+    this.channelNameMap = window.channelNameMap || new Map();
     // フィルターオプション
     this.filterOptions = {
       flowgazerOnly: false,
@@ -176,7 +176,19 @@ class Timeline {
 
     // チャンネルマーク
     const badge = document.createElement('span');
-    badge.textContent = '*kind:42 ';
+
+    // channelId（取れなければ null）
+    const channelId = event.tags?.find(t => t[0] === 'e')?.[1];
+
+    // チャンネル名が取得できている場合だけ置き換える
+    if (channelId && this.channelNameMap instanceof Map && this.channelNameMap.has(channelId)) {
+      const channelName = this.channelNameMap.get(channelId);
+      badge.textContent = `#${channelName} `;
+    } else {
+      // 今まで通り
+      badge.textContent = '*kind:42 ';
+    }
+
     badge.style.cssText = 'color: #B3A1FF; font-weight: normal;';
     li.appendChild(badge);
 
