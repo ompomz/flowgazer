@@ -183,7 +183,7 @@ class Timeline {
     // チャンネル名が取得できている場合だけ置き換える
     if (channelId && this.channelNameMap instanceof Map && this.channelNameMap.has(channelId)) {
       const channelName = this.channelNameMap.get(channelId);
-      badge.textContent = `#${channelName} `;
+      badge.textContent = `*${channelName} `;
     } else {
       // 今まで通り
       badge.textContent = '*kind:42 ';
