@@ -278,8 +278,8 @@ class Timeline {
     const targetId = event.tags.find(t => t[0] === 'e')?.[1];
     if (targetId) {
       const originalEvent = window.dataStore.getEvent(targetId);
+
       if (originalEvent) {
-        // 元の投稿が存在する場合
         const ts = this.createTimestamp(originalEvent);
         li.appendChild(ts);
         li.appendChild(document.createTextNode(' '));
@@ -290,13 +290,56 @@ class Timeline {
         contentWrapper.className = 'repost-content';
         contentWrapper.appendChild(document.createTextNode(' > '));
 
-        // createContent を使うことで、リンク化やCW判定が自動で適用されます
-        const richContent = this.createContent(originalEvent);
-        
-        contentWrapper.appendChild(richContent);
+        const fullContent = originalEvent.content;
+
+        const parts = this.parseContent(fullContent, originalEvent.tags);
+        const textOnly = parts
+          .filter(p => p.nodeType === Node.TEXT_NODE)
+          .map(p => p.textContent)
+          .join('');
+
+        const shortContent = textOnly.length > 100
+          ? fullContent.slice(0, 100) + '…'
+          : fullContent;
+
+        let isExpanded = false;
+
+        const makeFakeEvent = (content) => ({
+          ...originalEvent,
+          content
+        });
+
+        let currentContentNode = this.createContent(makeFakeEvent(shortContent));
+        contentWrapper.appendChild(currentContentNode);
+
+        if (textOnly.length > 100) {
+          const toggleLink = document.createElement('span');
+          toggleLink.textContent = '[全文を表示]';
+          toggleLink.className = 'npub-link';
+          toggleLink.style.cursor = 'pointer';
+          toggleLink.style.marginLeft = '0.5rem';
+
+          toggleLink.addEventListener('click', () => {
+            currentContentNode.remove();
+
+            if (isExpanded) {
+              currentContentNode = this.createContent(makeFakeEvent(shortContent));
+              toggleLink.textContent = '[全文を表示]';
+            } else {
+              currentContentNode = this.createContent(makeFakeEvent(fullContent));
+              toggleLink.textContent = '[とじる]';
+            }
+
+            isExpanded = !isExpanded;
+            contentWrapper.insertBefore(currentContentNode, toggleLink);
+          });
+
+          contentWrapper.appendChild(toggleLink);
+        }
+
         li.appendChild(contentWrapper);
+
       } else {
-        // 元の投稿が見つからない場合はリンクを表示
         const link = this.createEventLink(targetId);
         li.appendChild(link);
       }
