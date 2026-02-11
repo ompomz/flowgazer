@@ -81,7 +81,7 @@ class Timeline {
 
   switchTab(tab) {
     this.currentTab = tab;
-    this.refresh();
+    this.refresh(true);
   }
 
   setFilter(options) {
@@ -92,9 +92,9 @@ class Timeline {
   // ========================================
   // レンダリング
   // ========================================
-
-  refresh() {
-    if (!window.app?.isAutoUpdate) {
+  
+  refresh(force = false) {
+    if (!force && !window.app?.isAutoUpdate) {
       console.log('⏸️ 自動更新OFF: 描画スキップ');
       return;
     }

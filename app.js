@@ -34,7 +34,7 @@ class FlowgazerApp {
   async init() {
 
     console.log('🚀 flowgazer起動中...');
-    
+
     // ログインUI更新
     this.updateLoginUI();
 
@@ -43,6 +43,20 @@ class FlowgazerApp {
     const defaultRelay = 'wss://r.kojira.io/';
     const relay = savedRelay || defaultRelay;
     await this.connectRelay(relay);
+
+    const savedChannels = localStorage.getItem('myChannels');
+    if (savedChannels) {
+      try {
+        updateChannelDropdown(JSON.parse(savedChannels));
+        console.log('📁 保存されたチャンネルリストを復元しました');
+      } catch (e) {
+        console.error('❌ チャンネル復元失敗:', e);
+      }
+    }
+
+    if (window.nostrAuth.isLoggedIn()) {
+      fetchMyChannels();
+    }
 
     // 禁止ワード取得
     await this.fetchForbiddenWords();
@@ -186,27 +200,33 @@ class FlowgazerApp {
     const filters = [];
     const myPubkey = window.nostrAuth.isLoggedIn() ? window.nostrAuth.pubkey : null;
 
-    // === Global フィルタ ===
+    // === 1. グローバルフィルタ ===
     const globalFilter = {
       kinds: this.showKind42 ? [1, 6, 42] : [1, 6],
       since: this.cursorSince
     };
 
+    // authors が指定されている場合は、それを優先
     if (this.filterAuthors && this.filterAuthors.length > 0) {
       globalFilter.authors = this.filterAuthors;
     }
 
     filters.push(globalFilter);
 
-    // === Following フィルタ ===
+    // === 2. フォローしている人の投稿フィルタ ===
     if (window.dataStore.followingPubkeys.size > 0) {
       const followingAuthors = Array.from(window.dataStore.followingPubkeys);
+
       let filteredFollowing;
-      
+
       if (myPubkey) {
-        if (window.dataStore.isFollowing(myPubkey)) {
+        const iFollowMyself = window.dataStore.isFollowing(myPubkey);
+
+        if (iFollowMyself) {
+          // 自分をフォローしている → 自分を除外しない
           filteredFollowing = followingAuthors;
         } else {
+          // 自分をフォローしていない → 自分を除外する（従来通り）
           filteredFollowing = followingAuthors.filter(pk => pk !== myPubkey);
         }
       } else {
@@ -222,7 +242,7 @@ class FlowgazerApp {
       }
     }
 
-    // === Likes フィルタ (自分宛のリアクション等) ===
+    // === 3. 自分宛のリアクション（従来通り） ===
     if (myPubkey) {
       filters.push({
         kinds: [7],
@@ -250,6 +270,16 @@ class FlowgazerApp {
           since: this.cursorSince
         });
       }
+    }
+
+    // === 4. ★ 新規追加：自分の投稿専用フィルタ ===
+    // これにより、myposts がリアルタイムで更新される
+    if (myPubkey) {
+      filters.push({
+        kinds: [1, 42],
+        authors: [myPubkey],
+        since: this.cursorSince
+      });
     }
 
     return filters;
@@ -735,6 +765,8 @@ class FlowgazerApp {
       const signed = await window.nostrAuth.signEvent(event);
       window.relayManager.publish(signed);
       window.dataStore.addEvent(signed);
+      window.viewState.onEventReceived(signed);
+      window.timeline.refresh();
 
       alert('送信完了！');
       document.getElementById('new-post-content').value = '';
@@ -995,9 +1027,10 @@ async function resolveChannelNames(channelIds) {
             created_at: 0,
             source: 'default'
           });
-          console.log(`⚠️ デフォルト名使用: ${id.substring(0, 8)}`);
         }
       });
+
+      localStorage.setItem('myChannels', JSON.stringify(channels));
 
       updateChannelDropdown(channels);
       resolve();
