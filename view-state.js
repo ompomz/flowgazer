@@ -118,10 +118,13 @@ class ViewState {
     if (!tabState) return false;
 
     if (tabState.visibleEventIds.has(event.id)) {
+      this._updateCursor(tabState, event.created_at);
+      this._updateTimeRange(tabState, event.created_at);
       return false;
     }
 
     tabState.visibleEventIds.add(event.id);
+
     this._updateCursor(tabState, event.created_at);
     this._updateTimeRange(tabState, event.created_at);
 

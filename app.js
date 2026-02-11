@@ -12,7 +12,6 @@ class FlowgazerApp {
     this.filterAuthors = null;
     this.flowgazerOnly = false;
     this.forbiddenWords = [];
-    this.showKind42 = false;
     
     // ===== データ取得済みフラグ =====
     this.tabDataFetched = {
