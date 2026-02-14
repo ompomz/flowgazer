@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>viewer</title>
+<style>
+:root{
+  --primary:#0078D4;
+  --primary-hover:#106EBE;
+  --bg:#F3F2F1;
+  --surface:#FFFFFF;
+  --border:#E1DFDD;
+  --text:#999;
+  --text-soft:#aaa;
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+
+body{
+  font-weight:400;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Helvetica Neue",Arial,sans-serif;
+  padding:.5rem;
+  line-height:1.3;
+  background-color:var(--bg);
+  color:var(--text);
+  font-size:.9rem;
+}
+
+.container{
+  max-width:600px;
+  margin-left:.5rem;
+  margin-right:auto;
+  padding:.5rem;
+}
+
+a{
+  color:var(--primary);
+  text-decoration:none;
+}
+
+h1{
+  font-size:1.2rem;
+  margin-bottom:.5rem;
+  color:var(--text);
+}
+
+input,textarea{
+  transition:border-color 0.3s,background-color 0.3s;
+  cursor:pointer;
+  font-size:.9rem;
+  padding:.5rem;
+  border:1px solid var(--border);
+  border-radius:4px;
+  color:var(--text);
+  background-color:var(--surface);
+}
+
+input:focus,textarea:focus{
+  outline:none;
+  border-color:var(--primary);
+}
+
+input[type="checkbox"]{
+  padding:0;
+  margin:0;
+  vertical-align:middle;
+  appearance:checkbox;
+  -webkit-appearance:checkbox;
+}
+
+textarea{
+  resize:none;
+  overflow: hidden;
+  font-weight:400;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Helvetica Neue",Arial,sans-serif;
+}
+
+.container button{
+  white-space:nowrap;
+  font-size:.8rem;
+  font-weight:600;
+  padding:4px 16px;
+  border:none;
+  border-radius:999px;
+  cursor:pointer;
+  background-color:var(--border);
+  color:var(--text);
+}
+
+.primary-button{
+  background-color:var(--primary);
+  color:#fff;
+  border:1px solid var(--primary);
+}
+
+.primary-button:hover{
+  background-color:var(--primary-hover);
+}
+
+.full-width{width:100%}
+
+.flex-container{
+  display:flex;
+  align-items:center;
+  gap:.5rem;
+  margin:.5rem 0;
+}
+
+.flex-container input,
+.flex-container textarea{
+  flex-grow:1;
+  margin:0;
+}
+
+.flex-container button{margin:0}
+
+ul{
+  list-style:none;
+  padding:0;
+  margin:.5rem 0;
+}
+
+li.event{
+  word-break:break-all;
+  padding:.5rem .25rem;
+  border-top:1px solid var(--border);
+}
+
+ul,li{
+  font-size:.9rem;
+  -webkit-text-size-adjust:none;
+  text-size-adjust:none;
+}
+
+.post-content{display:inline}
+
+.event-liked{
+  border-right:.3rem solid var(--primary);
+}
+
+.npub-link,.nostr-ref,.pubkey-ref{
+  color:var(--primary);
+}
+
+.custom-emoji{
+  height:1.2rem;
+  vertical-align:bottom;
+}
+
+#tab-buttons {
+  width: 100%;
+  max-width: none;
+  margin-left: 0;
+  margin-right: 0;
+  display: flex;
+  gap: 0;
+  margin: 0 0 -6px 0;
+  justify-content: center;
+}
+
+#tab-buttons .tab-button {
+  flex: 1;
+  border: none;
+  background: var(--border);
+  cursor: pointer;
+  border-radius: 0;
+  color: var(--text-soft);
+  margin-bottom: 0;
+}
+
+#tab-buttons .tab-button + .tab-button {
+  border-left: none;
+}
+
+#tab-buttons .tab-button.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+#load-more{
+  background:var(--primary);
+  color:#fff;
+  margin-top:0.5rem;
+  margin-bottom:env(safe-area-inset-bottom);
+  margin-bottom:calc(env(safe-area-inset-bottom) + 3rem);
+  border:1px solid var(--primary);
+}
+
+#load-more.loading::before {
+  content: "";
+  display: inline-block;
+  width: 0.9rem;
+  height: 0.9rem;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23aaa' stroke-width='2'><path d='M12 2a10 10 0 1 1-10 10' /></svg>");
+  background-size: contain;
+  animation: spin 1s linear infinite;
+  align-items: center;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+#subscribe-relay,
+#apply-filter,
+#clear-filter,
+#load-follows,
+#send-new-post,
+#show-settings,
+#hide-settings{
+  text-align:center;
+  padding:4px 0;
+  width:5rem;
+}
+
+.hidden{display:none}
+
+@media (max-width:767px){
+  .container{
+    max-width:100%;
+    padding:4px;
+    margin:0;
+  }
+}
+
+/* Tutorial Overlay */
+
+#tutorial-overlay{
+  position:fixed;
+  top:0;
+  left:0;
+  width:100%;
+  height:100%;
+  justify-content:center;
+  align-items:center;
+  z-index:9999;
+  background-color:rgba(243,242,241,.7);
+  display:none;
+  backdrop-filter:blur(3px);
+  transition:all 0.3s ease-in-out;
+}
+
+#tutorial-modal{
+  background-color:var(--surface);
+  padding:1.2rem 1.2rem .5rem 1.2rem;
+  border-radius:.6rem;
+  max-width:600px;
+  width:80%;
+  max-height:90vh;
+  overflow-y:auto;
+  position:relative;
+}
+
+#image-container{
+  text-align:center;
+  margin-bottom:.5rem;
+}
+
+.tutorial-image{
+  display:none;
+  max-width:100%;
+  height:auto;
+}
+
+.tutorial-image.active{display:block}
+
+#tutorial-navigation{
+  display:flex;
+  justify-content:space-between;
+  margin:.5rem 0 0 0;
+}
+
+#prev-button,#next-button{
+  width:2rem;
+  height:2rem;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-size:1rem;
+  font-weight:600;
+  color:#fff;
+  background-color:var(--primary);
+  border:1px solid var(--primary);
+  border-radius:50%;
+  cursor:pointer;
+}
+
+#prev-button:hover,#next-button:hover{
+  background-color:var(--primary-hover);
+}
+
+#tutorial-close-button{
+  position:absolute;
+  top:.5rem;
+  right:.5rem;
+  font-size:.8rem;
+  font-weight:600;
+  color:#fff;
+  background-color:var(--primary);
+  padding:.25rem .6rem;
+  border-radius:999px;
+  cursor:pointer;
+  border:1px solid var(--primary);
+  white-space:nowrap;
+}
+
+.dot-navigation{text-align:center}
+
+.dot{
+  height:1rem;
+  width:1rem;
+  background-color:var(--border);
+  border-radius:50%;
+  display:inline-block;
+  margin:0 5px;
+  cursor:pointer;
+}
+
+.dot.active{
+  background-color:var(--primary);
+}
+
+.modal{
+  display:none;
+  position:fixed;
+  z-index:1;
+  left:0;
+  top:0;
+  width:100%;
+  height:100%;
+  overflow:auto;
+  background-color:rgba(0,0,0,.2);
+  backdrop-filter:blur(3px);
+  -webkit-backdrop-filter:blur(3px);
+}
+
+.modal-content{
+  margin:auto;
+  display:block;
+  max-width:80%;
+  max-height:80vh;
+  width:80%;
+}
+
+.modal-image{
+  width:auto;
+  height:auto;
+  max-width:100%;
+  max-height:100%;
+  object-fit:contain;
+  display:block;
+  margin:auto;
+}
+
+.close-button{
+  color:#fff;
+  font-size:40px;
+  font-weight:700;
+  cursor:pointer;
+}
+
+.post-options {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.5rem 0;
+}
+
+/* select 共通スタイル */
+.post-options select {
+  height: 2.25rem;
+  padding: 0 0.5rem;
+  font-size: 0.9rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 4px;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+
+</style>
+</head>
+<body>
+<div id="modal-placeholder"></div>
+
+<div class="container">
+
+<div class="flex-container">
+ <button onclick="showAuthUI()" >🔑</button>
+ <input id="relay-url" type="text" list="relay-suggestions" style="flex-grow: 1; height: 2.25rem;">
+   <datalist id="relay-suggestions">
+    <option value="wss://r.kojira.io/">
+    <option value="wss://yabu.me/">
+    <option value="wss://nostr.compile-error.net/">
+    <option value="wss://relay-jp.nostr.wirednet.jp/">
+    <option value="wss://relay.damus.io/">
+    <option value="wss://nos.lol/">
+    <option value="wss://relay.nostr.band/">
+   </datalist>
+ <button id="subscribe-relay">connect</button></div>
+<div class="flex-container" style="justify-content: space-between;">
+ <a id="npub-link" class="npub-link" target="_blank" style="display: none;"></a><span id="not-logged-in">ROM</span>
+ <button id="show-settings" style="width: 6rem;">option</button>
+ <button id="hide-settings" class="hidden" style="width: 6rem;">option</button>
+</div>
+<button id="generate-trial-keypair" class="full-width" onclick="generateAndLoginWithNewKeypair()" style="display: none;">
+  新しい鍵ペアを生成して試す！
+</button>
+
+<div id="advanced-settings" class="hidden">
+  
+  <div style="display: flex; align-items: center; gap: 0.5rem; margin-left: 0.25rem; flex-wrap: wrap;">
+    <label for="auto-update-toggle">autoload</label>
+    <input type="checkbox" id="auto-update-toggle" checked>
+    
+    <label for="filter-flowgazer-only" style="margin-left: 1rem; display: none;">via flowgazer しぼりこみ</label>
+    <input type="checkbox" id="filter-flowgazer-only" style="display: none;">
+    
+    <label for="toggle-kind42" style="margin-left: 1rem;">view kind:42</label>
+    <input type="checkbox" id="toggle-kind42">
+    
+    <label for="kind-7-content-input" style="margin-left: 1rem;">kind:7 content</label>
+    <input id="kind-7-content-input" type="text" maxlength="10" value="⭐" style="width: 2.5rem; height: 1.5rem; text-align: center; font-size: 0.9rem; vertical-align: middle; border: 1px solid #ccc; border-radius: 4px; display: inline-block;">
+  </div>
+  
+  <div class="flex-container">
+    <textarea id="hex-filter" rows="2" placeholder="(npub1…,hex…)"></textarea>
+    <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+      <button id="apply-filter">apply</button>
+      <button id="clear-filter">clear</button>
+      <button id="load-follows" style="display: none;">kind:3</button>
+    </div>
+  </div>
+
+  <div class="post-options">
+  <select id="post-kind-selector">
+    <option value="1">kind:1</option>
+    <option value="42">kind:42</option>
+  </select>
+  <select id="channel-list-selector" class="hidden">
+    <option value="">select</option>
+  </select>
+  </div>  
+
+</div>
+
+<div class="flex-container">
+<input type="text" name="username" autocomplete="username" style="display: none;">
+<form onsubmit="return false;" style="display: inline;">
+<input type="password" id="temp-nsec-input" autocomplete="nsec" placeholder="nsec" style="display: none; width: 3.5rem;"></form>
+<textarea id="new-post-content" placeholder="" style="height: 2.25rem;"></textarea>
+<button id="send-new-post">send</button></div>
+
+<div id="tab-buttons">
+  <button id="tab-global" class="tab-button">global</button>
+  <button id="tab-following" class="tab-button active">kind:3</button>
+  <button id="tab-myposts" class="tab-button">me</button>
+  <button id="tab-likes" class="tab-button">befaved</button>
+</div>
+
+<ul id="timeline"></ul>
+
+<button id="load-more" class="full-width">loadmore</button>
+<p style="text-align: center; margin-top: -2.5rem;"><a href="https://github.com/ompomz/flowgazer">view on github</a></p>
+</div>
+
+<!-- 既存JS -->
+<script src="https://ompomz.github.io/modal.js"></script>
+<script src="./auth.js"></script>
+<script src="https://ompomz.github.io/flowgazer/auth-ui.js"></script>
+
+<!-- 
+Based on motherfucking-nostr-client by かすてらふぃ（jiftechnify）
+Some parts generated or modified with AI assistance  
+Uses nostr-tools (MIT License)
+Licensed under WTFPL
+-->
+
+<script src="https://unpkg.com/nostr-tools@2.17.0/lib/nostr.bundle.js"></script>
+
+<!-- 新設計JS -->
+<script src="https://ompomz.github.io/flowgazer/relay-manager.js"></script>
+<script src="https://ompomz.github.io/flowgazer/data-store.js"></script>
+<script src="./view-state.js"></script>
+<script src="https://ompomz.github.io/flowgazer/profile-fetcher.js"></script>
+<script src="./timeline.js"></script>
+<script src="./app.js"></script>
+
+<script>
+// 初期化確認
+console.log('✅ スクリプト読み込み完了');
+console.log('dataStore:', typeof window.dataStore);
+console.log('relayManager:', typeof window.relayManager);
+console.log('viewState:', typeof window.viewState);
+console.log('profileFetcher:', typeof window.profileFetcher);
+console.log('Timeline:', typeof window.Timeline);
+console.log('app:', typeof window.app);
+
+// DOMContentLoaded
+document.addEventListener('DOMContentLoaded', async () => {
+    // インスタンスの存在確認
+    if (!window.dataStore || !window.viewState) {
+        console.error('❌ 初期化エラー');
+        alert('初期化エラー: ページを再読み込みしてください');
+        return;
+    }
+
+    // タイムラインインスタンス作成
+    window.timeline = new Timeline(document.getElementById('timeline'));
+
+    // アプリ初期化
+    await window.app.init();
+
+    // UI イベントリスナー
+    // 投稿ボタンのクリックイベント
+    document.getElementById('send-new-post').addEventListener('click', () => {
+        const content = document.getElementById('new-post-content').value;
+        const tempNsec = document.getElementById('temp-nsec-input')?.value;
+        // 選択されたKindを取得
+        const kind = parseInt(document.getElementById('post-kind-selector').value);
+        // 選択されたチャンネルIDを取得
+        const channelId = document.getElementById('channel-list-selector').value;
+
+        if (content) {
+            // チャンネル投稿なのにIDがない場合は止める
+            if (kind === 42 && !channelId) {
+                alert("投稿先のチャンネルを選んでください！");
+                return;
+            }
+            // sendPostに情報を渡す
+            window.app.sendPost(content, kind, channelId, tempNsec);
+        }
+    });
+
+    // Kindのプルダウンが変わった時の表示切り替え
+    document.getElementById('post-kind-selector').addEventListener('change', (e) => {
+        const channelSelector = document.getElementById('channel-list-selector');
+
+        if (e.target.value === "42") {
+            channelSelector.style.display = "inline";
+            // 📢 ここでKind 10005を取りに行く！
+            fetchMyChannels();
+        } else {
+            channelSelector.style.display = "none";
+        }
+    });
+
+    // Ctrl+Enter で投稿
+    document.getElementById('new-post-content').addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+            e.preventDefault();
+            document.getElementById('send-new-post').click();
+        }
+    });
+
+    // リレー接続ボタン
+    document.getElementById('subscribe-relay').addEventListener('click', () => {
+        const url = document.getElementById('relay-url').value;
+        window.app.connectRelay(url);
+    });
+
+    // タブボタン
+    document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const tab = e.target.id.replace('tab-', '');
+            window.app.switchTab(tab);
+        });
+    });
+
+    // フィルター適用
+    document.getElementById('apply-filter').addEventListener('click', () => {
+        const input = document.getElementById('hex-filter').value;
+        const authors = input.split(/[ ,\n]/)
+            .map(s => s.trim())
+            .filter(s => s.length === 64 || s.startsWith('npub'))
+            .map(s => {
+                if (s.startsWith('npub')) {
+                    try {
+                        const decoded = NostrTools.nip19.decode(s);
+                        return decoded.data;
+                    } catch (e) {
+                        return null;
+                    }
+                }
+                return s;
+            })
+            .filter(Boolean);
+
+        window.app.applyFilter(authors);
+        localStorage.setItem('hexFilterValue', input);
+    });
+
+    // フィルタークリア
+    document.getElementById('clear-filter').addEventListener('click', () => {
+        document.getElementById('hex-filter').value = '';
+        window.app.applyFilter(null);
+        localStorage.removeItem('hexFilterValue');
+    });
+
+    // フォローリスト読み込み
+    document.getElementById('load-follows').addEventListener('click', () => {
+        if (!window.nostrAuth.isLoggedIn()) {
+            alert('鍵の入力が必要です');
+            showAuthUI();
+            return;
+        }
+
+        const pubkeys = Array.from(window.dataStore.followingPubkeys);
+        if (pubkeys.length === 0) {
+            alert('フォローリストが取得できていません');
+            return;
+        }
+
+        document.getElementById('hex-filter').value = pubkeys.join('\n');
+        alert(`${pubkeys.length}人のフォローを読み込みました`);
+    });
+
+    // flowgazerしぼりこみ
+    document.getElementById('filter-flowgazer-only').addEventListener('change', (e) => {
+        window.app.toggleFlowgazerFilter(e.target.checked);
+    });
+
+    // kind:42表示切り替え
+    document.getElementById('toggle-kind42').addEventListener('change', (e) => {
+        window.app.toggleKind42Display(e.target.checked);
+    });
+
+    // 自動更新トグル
+    document.getElementById('auto-update-toggle').addEventListener('change', (e) => {
+        window.app.isAutoUpdate = e.target.checked;
+        console.log(`🔄 自動更新: ${e.target.checked ? 'ON' : 'OFF'}`);
+
+        // OFFからONにした時は即座に描画
+        if (e.target.checked) {
+            window.viewState.renderNow();
+        }
+    });
+
+    // もっと見る
+    document.getElementById('load-more').addEventListener('click', function () {
+        this.classList.add('loading');
+        window.app.loadMore();
+    });
+
+    // 詳細設定トグル
+    document.getElementById('show-settings').addEventListener('click', () => {
+        document.getElementById('advanced-settings').classList.remove('hidden');
+        document.getElementById('show-settings').classList.add('hidden');
+        document.getElementById('hide-settings').classList.remove('hidden');
+    });
+
+    document.getElementById('hide-settings').addEventListener('click', () => {
+        document.getElementById('advanced-settings').classList.add('hidden');
+        document.getElementById('hide-settings').classList.add('hidden');
+        document.getElementById('show-settings').classList.remove('hidden');
+    });
+
+    // ふぁぼマークの変更イベント
+    const favInput = document.getElementById('kind-7-content-input');
+    if (favInput) {
+        favInput.addEventListener('change', (e) => {
+            saveFavMark(e.target.value);
+        });
+    }
+
+    // 保存されたふぁぼマークを復元
+    loadFavMark();
+
+    // 保存されたフィルターを復元
+    const savedFilter = localStorage.getItem('hexFilterValue');
+    if (savedFilter) {
+        document.getElementById('hex-filter').value = savedFilter;
+    }
+
+    const kind42Checkbox = document.getElementById('toggle-kind42');
+    const savedKind42State = localStorage.getItem('showKind42');
+
+    let showKind42;
+
+    if (savedKind42State !== null) {
+        showKind42 = savedKind42State === 'true';
+    } else {
+        showKind42 = kind42Checkbox.checked;
+    }
+
+    // UI と内部状態を同期
+    kind42Checkbox.checked = showKind42;
+    window.app.showKind42 = showKind42;
+    window.app.toggleKind42Display(showKind42);
+
+    // チェック変更時の保存
+    kind42Checkbox.addEventListener('change', (e) => {
+        const newValue = e.target.checked;
+        window.app.toggleKind42Display(newValue);
+        localStorage.setItem('showKind42', newValue);
+    });
+
+});
+
+// 新規鍵ペア生成
+function generateAndLoginWithNewKeypair() {
+    const confirmed = confirm(
+        '新しい鍵ペアを生成します。\n' +
+        '生成された秘密鍵（nsec）は失くすと見つからないので\n' +
+        '大事に持っておいてね。'
+    );
+
+    if (!confirmed) return;
+
+    const seckey = window.NostrTools.generateSecretKey();
+    const nsec = window.NostrTools.nip19.nsecEncode(seckey);
+
+    window.nostrAuth.loginWithNsec(nsec);
+    location.reload();
+}
+
+// ふぁぼマーク保存・読み込み関数
+function saveFavMark(val) {
+    const chars = Array.from(val);
+    if (chars.length > 0) {
+        const singleChar = chars[0];
+        localStorage.setItem('favMark', singleChar);
+        const input = document.getElementById('kind-7-content-input');
+        if (input) input.value = singleChar;
+    } else {
+        localStorage.setItem('favMark', "+");
+    }
+}
+
+function loadFavMark() {
+    const savedMark = localStorage.getItem('favMark');
+    if (savedMark) {
+        const input = document.getElementById('kind-7-content-input');
+        if (input) input.value = savedMark;
+    }
+}
+</script>
+</body>
+</html>
