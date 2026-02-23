@@ -186,7 +186,16 @@ input:checked + .slider:before {
 
   <div class="flex-container">
     <input type="text" id="eventId" placeholder="nevent...">
-    <input type="text" id="relay" placeholder="wss://...">
+    <input type="text" id="relay" list="relay-suggestions" placeholder="wss://...">
+    <datalist id="relay-suggestions">
+        <option value="wss://r.kojira.io/">
+        <option value="wss://yabu.me/">
+        <option value="wss://nostr.compile-error.net/">
+        <option value="wss://relay-jp.nostr.wirednet.jp/">
+        <option value="wss://relay.damus.io/">
+        <option value="wss://nos.lol/">
+        <option value="wss://relay.nostr.band/">
+    </datalist>
     <input type="text" id="pubkey" placeholder="npub...">
     <button id="load">取得</button>
   </div>
