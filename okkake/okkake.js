@@ -99,7 +99,7 @@ async function resolveToHex(input) {
 
   // NIP-19 (npub, note, nevent, nprofile)
   if (str.startsWith("npub1") || str.startsWith("note1") ||
-      str.startsWith("nevent1") || str.startsWith("nprofile1")) {
+    str.startsWith("nevent1") || str.startsWith("nprofile1")) {
     try {
       const decoded = NostrTools.nip19.decode(str);
       if (decoded.type === 'nprofile' || decoded.type === 'nevent') {
@@ -146,7 +146,7 @@ Timeline.prototype.loadOrigin = async function (pubkey, eventId) {
   if (eventId) {
     console.log("🔍 起点イベントから情報を探します...");
     origin = await this.fetchEvent(eventId);
-    
+
     if (origin) {
       // イベントが見つかったら、そこから本当の作者(pubkey)を特定
       if (!targetPubkey) {
@@ -273,7 +273,7 @@ Timeline.prototype.fetchRange = function (filter) {
 Timeline.prototype.render = function () {
   console.log("🖼 render timeline (Order: " + this.sortOrder + ")");
   var el = document.getElementById("timeline");
-  el.innerHTML = ""; 
+  el.innerHTML = "";
 
   var events = Array.from(dataStore.events.values());
 
@@ -290,26 +290,35 @@ Timeline.prototype.render = function () {
     var ev = events[i];
     var li = document.createElement("li");
     li.className = "event" + (ev.id === this.originId ? " origin" : "");
-    
+
     // sendfav.js 用のデータ属性
     li.setAttribute('data-id', ev.id);
     li.setAttribute('data-pubkey', ev.pubkey);
 
-    // プロフィール取得
-    var prof = dataStore.profiles.get(ev.pubkey);
-    var name = ev.pubkey.slice(0, 8);
-    if (prof && prof.name) name = prof.name;
+    // 1. ダークモードかどうか判定（色の明るさを自動調整するため）
+    const isDark = document.body.classList.contains('dark-mode');
 
-    // 1. メタデータ部分 (時間 + 名前)
-    var timeStr = '[' + new Date(ev.created_at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ']';
-    
-    // 2. 構造を組み立て ([time] name > content)
-    li.innerHTML = 
-      '<span class="time">' + (ev.id === this.originId ? "▶ " : "") + timeStr + '</span> ' +
-      '<span class="author">' + name + '</span>' +
-      ' <span class="separator">></span> ' +
-      '<span class="post-content">' + this.escapeHtml(ev.content) + '</span>';
+    // 2. プロフィール情報を取得
+    const prof = dataStore.profiles.get(ev.pubkey);
 
+    // 3. 【最強ポイント】名前解決と色生成を MyNostrUtils に任せる！
+    const name = MyNostrUtils.getDisplayName(prof, ev.pubkey);
+    const color = MyNostrUtils.getHslColor(ev.pubkey, isDark);
+    const timeStr = new Date(ev.created_at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    // 1. まずは安全のためにHTMLエスケープする
+    const escapedContent = MyNostrUtils.escapeHtml(ev.content);
+
+    // 2. 【最強ポイント】エスケープ済みのテキスト内のURLをリンクや画像に変換！
+    const linkedContent = MyNostrUtils.linkify(escapedContent);
+
+    // 4. HTML組み立て（色を style="color: ..." で指定）
+    li.innerHTML = `
+  <span class="time">${ev.id === this.originId ? "▶ " : ""}[${timeStr}]</span> 
+  <span class="author" style="color: ${color}; font-weight: normal;">${name}</span>
+  <span class="separator">></span> 
+  <span class="post-content">${linkedContent}</span>
+  `;
     el.appendChild(li);
   }
 
@@ -367,7 +376,7 @@ window.onload = function () {
 
       // 【Pubkeyの補完】★ここが今回の肝です
       // pubkey欄が空、かつ nevent から作者情報(pubkey)が取れた場合
-      console.log("デコード結果:", eventRes); 
+      console.log("デコード結果:", eventRes);
       if (!pubkeyInput.value && eventRes && eventRes.pubkey) {
         pubkeyInput.value = eventRes.pubkey; // nevent1... 内の作者をセット
         complemented = true;
@@ -376,7 +385,7 @@ window.onload = function () {
       // 補完が発生した場合は一旦停止（ユーザーへの確認ステップ）
       if (complemented) {
         btn.textContent = "情報を抽出しました。再度 [取得] で開始";
-        btn.style.backgroundColor = "#ffcc66"; 
+        btn.style.backgroundColor = "#ffcc66";
         return;
       }
 

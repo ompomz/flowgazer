@@ -99,7 +99,7 @@ class Timeline {
   // ========================================
   // レンダリング
   // ========================================
-  
+
   refresh(force = false) {
     if (!force && !window.app?.isAutoUpdate) {
       console.log('⏸️ 自動更新OFF: 描画スキップ');
@@ -134,7 +134,7 @@ class Timeline {
       }
     });
     this.activeElements.clear();
-    
+
     // コンテナをクリア
     while (this.container.firstChild) {
       this.container.removeChild(this.container.firstChild);
@@ -383,7 +383,7 @@ class Timeline {
     const span = document.createElement('span');
     span.className = 'inline-rt';
 
-    // "RT: "
+    // ""RT: ""
     const prefix = document.createElement('span');
     prefix.textContent = 'RT: ';
     prefix.className = 'repost-prefix';
@@ -393,7 +393,7 @@ class Timeline {
     const author = this.createAuthorLink(originalEvent.pubkey);
     span.appendChild(author);
 
-    // " > "
+    // "" > ""
     span.appendChild(document.createTextNode(' > '));
 
     // content（折りたたみ対応）
@@ -471,30 +471,47 @@ class Timeline {
 
     // カスタム絵文字処理
     const content = event.content || '+';
-    const isCustomEmoji = content.startsWith(':') && content.endsWith(':') && content.length > 2;
+    const isCustomEmoji =
+      content.startsWith(':') &&
+      content.endsWith(':') &&
+      content.length > 2;
 
     if (isCustomEmoji) {
-      const emojiElement = this.createCustomEmoji(content, event.tags);
-      emojiElement.style.cssText = 'height: 1.5rem; vertical-align: middle; margin: 0 0.25rem;';
+      const wrapper = document.createElement('span');
+      wrapper.style.cssText =
+        'display: inline-block; height: 1.5rem; vertical-align: middle; margin: 0 0.25rem;';
+
+      const emojiElement =
+        this.createCustomEmoji(content, event.tags || []);
+
+      wrapper.appendChild(emojiElement);
+
       li.appendChild(document.createTextNode(' '));
-      li.appendChild(emojiElement);
+      li.appendChild(wrapper);
       li.appendChild(document.createTextNode(' '));
     } else {
       const emoji = document.createElement('span');
-      const displayContent = (content && content !== '+') ? content : '⭐';
+      const displayContent =
+        (content && content !== '+') ? content : '⭐';
+
       emoji.textContent = ' ' + displayContent + ' ';
-      emoji.style.cssText = 'font-size: 1rem; margin: 0 0.25rem;';
+      emoji.style.cssText =
+        'font-size: 1rem; margin: 0 0.25rem;';
+
       li.appendChild(emoji);
     }
 
     // 対象投稿へのリンク
-    const targetId = event.tags.find(t => t[0] === 'e')?.[1];
+    const targetId =
+      event.tags?.find(t => t[0] === 'e')?.[1];
+
     if (targetId) {
       const link = this.createEventLink(targetId);
       link.textContent = '→ 投稿を見る';
       li.appendChild(link);
 
-      const preview = this.createOriginalPostPreview(targetId);
+      const preview =
+        this.createOriginalPostPreview(targetId);
       li.appendChild(preview);
     }
 
@@ -533,7 +550,7 @@ class Timeline {
         element.addEventListener('touchstart', start, { passive: true });
         element.addEventListener('touchend', cancel);
         element.addEventListener('touchcancel', cancel);
-        
+
         // ハンドラー参照を保存（detach用）
         element._longPressHandlers = { start, cancel };
       },
@@ -541,7 +558,7 @@ class Timeline {
       detach() {
         const element = this.element;
         if (!element || !element._longPressHandlers) return;
-        
+
         const { start, cancel } = element._longPressHandlers;
         element.removeEventListener('mousedown', start);
         element.removeEventListener('mouseup', cancel);
@@ -549,11 +566,11 @@ class Timeline {
         element.removeEventListener('touchstart', start);
         element.removeEventListener('touchend', cancel);
         element.removeEventListener('touchcancel', cancel);
-        
+
         delete element._longPressHandlers;
         clearTimeout(timer);
       },
-      
+
       // 後で detach するために element を保持
       element: null
     };
@@ -577,8 +594,8 @@ class Timeline {
   createTimestamp(event) {
     const date = new Date(event.created_at * 1000);
     const timeStr = String(date.getHours()).padStart(2, '0') + ':' +
-                    String(date.getMinutes()).padStart(2, '0') + ':' +
-                    String(date.getSeconds()).padStart(2, '0');
+      String(date.getMinutes()).padStart(2, '0') + ':' +
+      String(date.getSeconds()).padStart(2, '0');
 
     const nevent = window.NostrTools.nip19.neventEncode({
       id: event.id,
@@ -653,7 +670,7 @@ class Timeline {
 
       // --- nostr:xxx 埋め込み ---
       if (s.startsWith('nostr:')) {
-        const code = s.substring(6); // "nostr:" を除去
+        const code = s.substring(6); // ""nostr:"" を除去
 
         try {
           const decoded = NostrTools.nip19.decode(code);

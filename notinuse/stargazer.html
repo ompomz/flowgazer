@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>stargazer</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif,"Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol","Noto Color Emoji"; padding: 0.5rem; line-height: 1.3; font-weight: normal; background-color: #f7f7f7; color: #666; font-size:0.9rem;}
+h1 { font-size: 1.2rem; color: #666; margin: 0rem 0rem 0.5rem 0rem; }
+p { font-size: .9rem; color: #666; margin: 0; }
+a { color: #66b3ff; text-decoration: none; }
+a:hover { text-decoration: none; }
+.container { max-width: 600px; margin-left: 0.5rem; margin-right: auto; padding: 0.5rem 0.5rem 0rem 0.5rem; }
+@media (max-width: 767px) { .container { max-width: 100%; padding: 8px 8px 0px 8px; margin: 0; } }
+label { font-size: .9rem; color: #666; }
+input, textarea { font-size: 0.9rem; padding: 0.5rem 0.3rem; border: 1px solid #ddd; border-radius: 4px; color: #666; background-color: #fff; transition: background-color 0.3s, color 0.3s; }
+.container button { font-size: 0.8rem; font-weight: bold; padding: 0.25rem 1rem; margin: 0.5rem 0rem; border: 0px solid #ddd; border-radius: 999px; color: #fff; background-color: #666; white-space: nowrap; cursor: pointer; transition: background-color 0.3s, color 0.3s; }
+#apply-pubkey-for-reactions { background-color: #ff99cc; }
+#apply-pubkey-for-reactions:hover { background-color: #ff66b2; }
+#connect-relay { background-color: #ffd700; color:#fff; }
+#connect-relay:hover { background-color: #ffc400; }
+button#load-more { width: 100%; font-size: 0.8rem; font-weight: bold; padding: 0.25rem 1rem; margin: 0.5rem 0rem; border: 0px solid #ddd; border-radius: 999px; color: #fff; background-color: #66b3ff; white-space: nowrap; cursor: pointer; transition: background-color 0.3s, color 0.3s; }
+button#load-more:hover { background-color: #4da6ff; }
+button#load-more.loading { font-size: 0; pointer-events: none; }
+button#load-more.loading::before { content: "読み込み中..."; font-size: 0.8rem; }
+ul#timeline { list-style: none; padding: 0; margin: 0.5rem 0rem 0rem 0rem; }
+#timeline li { list-style: none !important; }
+li.event { word-break: break-all; padding: 0.5rem; border-top: 1px dashed #ddd; }
+li.event-reaction { background-color: #f7f7f7; }
+.original-post-preview { margin: 0.25rem 0.5rem 0rem 0.5rem; background-color: #f7f7f7; font-size: 0.9em; color: #888; font-style: normal; max-height: 100px; overflow: hidden; text-overflow: ellipsis; }
+.original-post-preview.loading { color: #999; }
+.nostr-ref { background-color: #f7f7f7; padding: 1px 2px; border-radius: 4px; color: #66b3ff; }
+a.pubkey-ref { font-weight: normal; color: #66b3ff; text-decoration: none; }
+a.pubkey-ref:hover { text-decoration: none; }
+.flex-container { display: flex; align-items: center; gap: 0.5rem; margin:0.5rem 0rem;}
+.flex-container input { flex-grow: 1; margin: 0; }
+.flex-container button { margin: 0; min-width: 3rem; }
+</style>
+</head>
+<body>
+<div id="header-placeholder"></div>
+<div class="container">
+<h1>stargazer</h1>
+<p>このページでは、特定の公開鍵が受け取ったリアクション（☆）を見ることができるよ。</p>
+<div class="flex-container">
+<label for="target-hex-pubkey" style="white-space:nowrap;">公開鍵</label>
+<input id="target-hex-pubkey" type="text" placeholder="npub or hex or NIP-05">
+<button id="apply-pubkey-for-reactions">見る</button></div>
+<div class="flex-container">
+<label for="relay-url" style="white-space:nowrap;">リレーURL</label>
+<input id="relay-url" type="text" placeholder="wss://relay.nostr.band,wss://relay.damus.io,wss://r.kojira.io">
+<button id="connect-relay">接続</button></div>
+</div>
+<ul id="timeline"></ul>
+<div style="display:flex; justify-content:center;">
+<button type="button" id="load-more" class="loading">もっと見る</button>
+</div>
+<script src="https://unpkg.com/nostr-tools/lib/nostr.bundle.js"></script>
+<script>
+function getLanguage() {
+    return (window.navigator.language || window.navigator.browserLanguage || window.navigator.userLanguage).substring(0, 2);
+}
+
+function formatTimestamp(date) {
+    return String(date.getHours()).padStart(2, "0") + ":" +
+           String(date.getMinutes()).padStart(2, "0") + ":" +
+           String(date.getSeconds()).padStart(2, "0");
+}
+
+function findTagWithValue(tags, name, value, extraPred) {
+    for (const tag of tags) {
+        if (tag[0] === name && tag[1] === value && (extraPred ? extraPred(tag) : true)) {
+            return tag;
+        }
+    }
+    return undefined;
+}
+
+function baseEventView() {
+    const li = document.createElement("li");
+    li.classList.add("event");
+    return li;
+}
+
+function externalLink(url, text) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noreferrer";
+    a.textContent = text;
+    return a;
+}
+
+function timestampView(unixtime) {
+    const ts = new Date(unixtime * 1000);
+    const timeElem = document.createElement("time");
+    timeElem.setAttribute("datetime", ts.toISOString());
+    timeElem.textContent = "[" + formatTimestamp(ts) + "]";
+    return timeElem;
+}
+
+const profileCache = {};
+const pubkeyElements = {};
+
+function getDisplayName(pubkey) {
+    if (profileCache[pubkey] && profileCache[pubkey].name) {
+        return profileCache[pubkey].name;
+    }
+    return pubkey.substring(0, 8);
+}
+
+function updatePubkeyView(pubkey) {
+    const displayName = getDisplayName(pubkey);
+    if (pubkeyElements[pubkey]) {
+        pubkeyElements[pubkey].forEach(elem => {
+            elem.textContent = displayName;
+        });
+    }
+}
+
+function pubkeyView(pubkey) {
+    const npub = window.NostrTools.nip19.npubEncode(pubkey);
+    const displayName = getDisplayName(pubkey);
+    const a = externalLink("https://ompomz.github.io/tweetsrecap/tweet?id=" + npub, displayName);
+    a.classList.add("pubkey-ref");
+
+    if (!pubkeyElements[pubkey]) {
+        pubkeyElements[pubkey] = [];
+    }
+    pubkeyElements[pubkey].push(a);
+    return a;
+}
+
+function metadataView(nostrEv) {
+    const view = document.createElement("span");
+    view.appendChild(timestampView(nostrEv.created_at));
+    view.appendChild(document.createTextNode(" "));
+    view.appendChild(pubkeyView(nostrEv.pubkey));
+    view.appendChild(document.createTextNode(" > "));
+    return view;
+}
+
+const eventCache = {};
+const eventsToFetch = new Set();
+let eventFetchTimeout = null;
+
+function fetchAndDisplayOriginalPost(reactedEventId) {
+    if (eventCache[reactedEventId]) {
+        updateOriginalPostView(reactedEventId);
+        return;
+    }
+    if (!eventsToFetch.has(reactedEventId)) {
+        eventsToFetch.add(reactedEventId);
+        scheduleEventFetch();
+    }
+}
+
+function updateOriginalPostView(reactedEventId) {
+    const elementsToUpdate = document.querySelectorAll(`.original-post-preview[data-event-id="${reactedEventId}"]`);
+    elementsToUpdate.forEach(elem => {
+        const originalEvent = eventCache[reactedEventId];
+        if (originalEvent) {
+            elem.textContent = originalEvent.content.substring(0, 150) + (originalEvent.content.length > 150 ? '...' : '');
+            elem.classList.remove('loading');
+            elem.classList.remove('nostr-ref');
+        }
+    });
+}
+
+function scheduleEventFetch() {
+    if (eventFetchTimeout) {
+        clearTimeout(eventFetchTimeout);
+    }
+    eventFetchTimeout = setTimeout(() => {
+        if (eventsToFetch.size > 0 && reactionWSs.length > 0) {
+            const eventIds = Array.from(eventsToFetch);
+            const subId = "FETCH_ORIGINAL_EVENTS_" + Date.now();
+            for (const ws of reactionWSs) {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify(["REQ", subId, { kinds: [1, 6], ids: eventIds, limit: eventIds.length }]));
+                }
+            }
+        }
+        eventFetchTimeout = null;
+    }, 300);
+}
+
+function reactionEventView(nostrEv) {
+    const view = baseEventView();
+    view.id = nostrEv.id;
+    view.classList.add("event-reaction");
+    view.appendChild(metadataView(nostrEv));
+
+    let reactionContent = nostrEv.content;
+    if (reactionContent === "+") {
+        reactionContent = "☆";
+    } else if (reactionContent === "" || reactionContent === undefined) {
+        reactionContent = "👍";
+    }
+
+    const contentSpan = document.createElement("span");
+    contentSpan.textContent = " " + reactionContent + " ";
+    view.appendChild(contentSpan);
+
+    let reactedEventId;
+    for (const tag of nostrEv.tags) {
+        if (tag[0] === "e" && typeof tag[1] === "string") {
+            reactedEventId = tag[1];
+            break;
+        }
+    }
+
+    if (reactedEventId) {
+        const nevent = window.NostrTools.nip19.neventEncode({ id: reactedEventId, relays: ["wss://relay.nostr.band"] });
+        const link = externalLink(`https://ompomz.github.io/tweetsrecap/tweet?id=${nevent}`, `元の投稿を見る`);
+        view.appendChild(document.createTextNode(" "));
+        view.appendChild(link);
+    }
+
+    const originalPostContainer = document.createElement('div');
+    originalPostContainer.classList.add('original-post-preview');
+    originalPostContainer.id = `original-post-${nostrEv.id}`;
+    originalPostContainer.setAttribute('data-event-id', reactedEventId);
+    view.appendChild(document.createElement('br'));
+    view.appendChild(originalPostContainer);
+
+    if (reactedEventId) {
+        originalPostContainer.textContent = `元の投稿を取得中... (nostr:${reactedEventId.substring(0, 8)}...)`;
+        originalPostContainer.classList.add('loading');
+        originalPostContainer.classList.add('nostr-ref');
+        fetchAndDisplayOriginalPost(reactedEventId);
+    } else {
+        originalPostContainer.textContent = "元の投稿が見つかりません。";
+        originalPostContainer.classList.add('nostr-ref');
+    }
+
+    return view;
+}
+
+const timeline = document.getElementById("timeline");
+if (timeline === null) {
+    throw new Error("no #timeline");
+}
+
+const targetHexPubkeyInput = document.getElementById("target-hex-pubkey");
+const applyPubkeyForReactionsButton = document.getElementById("apply-pubkey-for-reactions");
+const relayUrlInput = document.getElementById("relay-url");
+const connectRelayButton = document.getElementById("connect-relay");
+const reactionWSs = [];
+const seenEventIds = new Set();
+let oldestCreatedAt = Number.MAX_VALUE;
+let currentTargetPubkeyForReactions = undefined;
+
+const REACTION_SUB_ID = "motherfucking-reaction-sub";
+const PROFILE_SUB_ID_REACTIONS = "motherfucking-profile-sub-reactions";
+const MORE_REACTIONS_SUB_ID = "motherfucking-more-reactions-sub";
+
+const pubkeysToFetchProfile = new Set();
+let profileFetchTimeout = null;
+
+function clearTimeline() {
+    while (timeline.firstChild) {
+        timeline.removeChild(timeline.firstChild);
+    }
+    oldestCreatedAt = Number.MAX_VALUE;
+    seenEventIds.clear();
+}
+
+function onEvent(nostrEv) {
+    if (nostrEv.kind === 0) {
+        try {
+            const metadata = JSON.parse(nostrEv.content);
+            profileCache[nostrEv.pubkey] = {
+                name: metadata.name || nostrEv.pubkey.substring(0, 8),
+                picture: metadata.picture,
+                about: metadata.about
+            };
+            updatePubkeyView(nostrEv.pubkey);
+            pubkeysToFetchProfile.delete(nostrEv.pubkey);
+        } catch (e) {
+            console.error("Failed to parse kind 0 content:", e);
+        }
+        return;
+    }
+
+    if (nostrEv.kind === 1 || nostrEv.kind === 6) {
+        eventCache[nostrEv.id] = nostrEv;
+        eventsToFetch.delete(nostrEv.id);
+        updateOriginalPostView(nostrEv.id);
+        return;
+    }
+
+    if (nostrEv.kind === 7) {
+        if (seenEventIds.has(nostrEv.id)) {
+            return;
+        }
+        seenEventIds.add(nostrEv.id);
+        const newReactionView = reactionEventView(nostrEv);
+        timeline.appendChild(newReactionView);
+        oldestCreatedAt = Math.min(oldestCreatedAt, nostrEv.created_at);
+
+        if (!profileCache[nostrEv.pubkey] && !pubkeysToFetchProfile.has(nostrEv.pubkey)) {
+            pubkeysToFetchProfile.add(nostrEv.pubkey);
+            scheduleProfileFetch();
+        }
+    }
+}
+
+function scheduleProfileFetch() {
+    if (profileFetchTimeout) {
+        clearTimeout(profileFetchTimeout);
+    }
+    profileFetchTimeout = setTimeout(() => {
+        for (const ws of reactionWSs) {
+            if (pubkeysToFetchProfile.size > 0 && ws && ws.readyState === WebSocket.OPEN) {
+                const pubkeys = Array.from(pubkeysToFetchProfile);
+                const subId = "PROFILE_SUB_ID_REACTIONS_" + Date.now();
+                ws.send(JSON.stringify(["REQ", subId, { kinds: [0], authors: pubkeys, limit: pubkeys.length }]));
+            }
+        }
+        profileFetchTimeout = null;
+    }, 300);
+}
+
+function subscribeToReactionRelay() {
+    reactionWSs.forEach(ws => {
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+            ws.close();
+        }
+    });
+    reactionWSs.length = 0;
+    clearTimeline();
+
+    const relayUrls = relayUrlInput.value.split(',').map(url => url.trim()).filter(url => url.length > 0);
+    if (relayUrls.length === 0) {
+        alert("リレーURLが入力されていません。");
+        return;
+    }
+
+    for (const relayUrl of relayUrls) {
+        let reactionWS;
+        try {
+            reactionWS = new WebSocket(relayUrl);
+            reactionWSs.push(reactionWS);
+        } catch (err) {
+            console.error("Failed to create WebSocket for relay:", err);
+            alert("Failed to create WebSocket for relay: " + relayUrl);
+            continue;
+        }
+
+        reactionWS.addEventListener("open", function() {
+            console.log("Connected to relay:", relayUrl);
+            if (currentTargetPubkeyForReactions) {
+                reactionWS.send(JSON.stringify(["REQ", REACTION_SUB_ID, { kinds: [7], "#p": [currentTargetPubkeyForReactions], limit: 50 }]));
+            } else {
+                loadMoreButton.classList.remove("loading");
+            }
+        });
+
+        reactionWS.addEventListener("message", function(ev) {
+            try {
+                const r2cMsg = JSON.parse(ev.data);
+                switch (r2cMsg[0]) {
+                    case "EVENT":
+                        const nostrEv = r2cMsg[2];
+                        if (!window.NostrTools.verifyEvent(nostrEv)) {
+                            console.error("nostr event with invalid signature:", nostrEv);
+                            return;
+                        }
+                        onEvent(nostrEv);
+                        break;
+                    case "EOSE":
+                        if (r2cMsg[1] === REACTION_SUB_ID || r2cMsg[1] === MORE_REACTIONS_SUB_ID) {
+                            loadMoreButton.classList.remove("loading");
+                        }
+                        break;
+                    case "OK":
+                        break;
+                    case "NOTICE":
+                        console.warn("Relay Notice:", r2cMsg[1]);
+                        break;
+                    default:
+                        console.log(r2cMsg);
+                        break;
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        });
+
+        reactionWS.addEventListener("close", function() {
+            console.log("Relay connection closed:", relayUrl);
+        });
+    }
+}
+
+async function fetchPubkeyFromNip05(nip05) {
+    const [user, domain] = nip05.split('@');
+    if (!user || !domain) {
+        throw new Error("Invalid NIP-05 address format.");
+    }
+
+    const url = `https://${domain}/.well-known/nostr.json?name=${user}`;
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch NIP-05 data: ${response.statusText}`);
+        }
+        const data = await response.json();
+        const pubkey = data.names[user];
+        if (!pubkey) {
+            throw new Error(`User "${user}" not found in NIP-05 data.`);
+        }
+        return pubkey;
+    } catch (e) {
+        console.error("NIP-05 verification failed:", e);
+        throw e;
+    }
+}
+
+applyPubkeyForReactionsButton.addEventListener("click", async function() {
+    const inputVal = targetHexPubkeyInput.value.trim();
+    let hexPubkey;
+
+    if (inputVal.startsWith("npub1")) {
+        try {
+            const { type, data } = window.NostrTools.nip19.decode(inputVal);
+            if (type === "npub") {
+                hexPubkey = data;
+            } else {
+                throw new Error("Invalid npub key.");
+            }
+        } catch (e) {
+            console.error("Failed to decode npub:", e);
+            alert("有効なnpub公開鍵ではありません。");
+            currentTargetPubkeyForReactions = undefined;
+            clearTimeline();
+            return;
+        }
+    } else if (inputVal.includes("@")) {
+        try {
+            hexPubkey = await fetchPubkeyFromNip05(inputVal);
+        } catch (e) {
+            alert("有効なNIP-05アドレスではありません。");
+            currentTargetPubkeyForReactions = undefined;
+            clearTimeline();
+            return;
+        }
+    } else if (inputVal.length === 64 && /^[0-9a-fA-F]+$/.test(inputVal)) {
+        hexPubkey = inputVal;
+    } else {
+        alert("有効なhex、npub、またはNIP-05公開鍵を入力してください。");
+        currentTargetPubkeyForReactions = undefined;
+        clearTimeline();
+        return;
+    }
+
+    currentTargetPubkeyForReactions = hexPubkey;
+    console.log("Subscribing reactions for pubkey:", currentTargetPubkeyForReactions);
+    subscribeToReactionRelay();
+});
+
+const loadMoreButton = document.getElementById("load-more");
+
+function fetchMoreReactions() {
+    const hasOpenRelay = reactionWSs.some(ws => ws && ws.readyState === WebSocket.OPEN);
+    if (!hasOpenRelay || !currentTargetPubkeyForReactions) {
+        console.warn("Relay not connected or no target pubkey set.");
+        return;
+    }
+
+    loadMoreButton.classList.add("loading");
+
+    const filter = {
+        kinds: [7],
+        limit: 50,
+        until: oldestCreatedAt - 1,
+        "#p": [currentTargetPubkeyForReactions]
+    };
+
+    for (const ws of reactionWSs) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(["REQ", MORE_REACTIONS_SUB_ID, filter]));
+        }
+    }
+}
+
+loadMoreButton.addEventListener("click", fetchMoreReactions);
+
+document.addEventListener("DOMContentLoaded", function() {
+    connectRelayButton.addEventListener("click", subscribeToReactionRelay);
+    const savedRelayUrls = localStorage.getItem('relayUrls');
+    if (savedRelayUrls) {
+        relayUrlInput.value = savedRelayUrls;
+    }
+    if (!savedRelayUrls) {
+        relayUrlInput.value = relayUrlInput.placeholder;
+    }
+});
+</script>  
+<script src="https://ompomz.github.io/header/loadHeader.js"></script>
+</body>
+</html>

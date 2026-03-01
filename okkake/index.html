@@ -68,8 +68,8 @@
       border-radius: 999px;
       cursor: pointer;
       background-color: var(--accent);
-      color: #f7f7f7;
-      margin: 2px;
+      color: #fff;
+      margin: 0.25rem 0rem 0.25rem 0rem;
     }
 
     .event {
@@ -120,8 +120,6 @@
     }
 
     /* 未来ボタンが下 */
-
-
     #older::before {
       content: "▲ ";
     }
@@ -132,7 +130,6 @@
     }
 
     /* 未来は下向き */
-
 
     /* --- 降順（新しい順）のとき --- */
     .magicalcontainer.is-desc #newer {
@@ -167,13 +164,11 @@
       height: 26px;
     }
 
-
     .switch input {
       opacity: 0;
       width: 0;
       height: 0;
     }
-
 
     .slider {
       position: absolute;
@@ -183,7 +178,6 @@
       border-radius: 26px;
       transition: 0.3s;
     }
-
 
     .slider:before {
       content: "";
@@ -203,12 +197,10 @@
       transition: 0.3s;
     }
 
-
     /* ON */
     input:checked+.slider {
       background: var(--link);
     }
-
 
     input:checked+.slider:before {
       transform: translateX(24px);
@@ -226,9 +218,8 @@
       flex-direction: column;
       gap: 0.5rem;
       z-index: 100;
-
-      opacity: 0;
-      pointer-events: none;
+      opacity: 0.1;
+      pointer-events: auto;
       transition: opacity 0.3s;
     }
 
@@ -260,8 +251,10 @@
       opacity: 1;
     }
 
-    /* モーダルの背景（黒い半透明） */
-    .modal {
+    /* --- モーダル全体の共通設定（utility側のクラス名と被らないように調整） --- */
+
+    /* 1. 設定モーダル本体 (IDで詳細度を高くする) */
+    #settings-modal {
       position: fixed;
       top: 0;
       left: 0;
@@ -276,8 +269,8 @@
       /* ボタンより前に出す */
     }
 
-    /* モーダルの中身 */
-    .modal-content {
+    /* 2. 設定モーダルの中身 */
+    #settings-modal .settings-body {
       background: var(--panel);
       color: var(--txt);
       padding: 1.5rem;
@@ -286,33 +279,28 @@
       max-width: 400px;
     }
 
-    /* 閉じるボタン */
-    .close-btn {
+    /* 3. 閉じるボタン */
+    #settings-modal .close-btn {
       margin-top: 1rem;
       padding: 0.5rem 1rem;
-      font-size: 0.9rem;
-      /* 継承されますが明示 */
+      background-color: var(--accent);
+      color: #fff;
     }
 
     /* 画面幅が600px以下のとき（スマホ向け設定） */
     @media (max-width: 600px) {
       body {
-        padding: 0.3rem;
-        /* 外側の余白を最小限に */
+        padding: 0.5rem;
       }
 
       .container {
         margin: 0;
-        /* コンテナの余白を消して横幅いっぱい使う */
         max-width: 100%;
       }
 
       .event {
         padding: 0.6rem 0.4rem;
-        /* タップしやすいように上下の余白を少し増やす */
         font-size: 0.9rem;
-        /* 1remから変更 */
-        /* 文字を少し大きくして読みやすく */
       }
 
       input,
@@ -320,8 +308,6 @@
       textarea {
         width: 100%;
         font-size: 0.9rem;
-        /* 明示 */
-        /* 入力フォームを横いっぱいに広げる（押しやすさUP） */
         margin: 4px 0;
       }
     }
@@ -359,14 +345,19 @@
     <button id="open-settings" class="floating-btn settings-btn">⚙️</button>
   </div>
 
-  <div id="settings-modal" class="modal">
-    <div class="modal-content">
+  <div id="settings-modal">
+    <div class="settings-body">
       <h4>settings</h4>
       <span>表示順</span>
       <select id="sort-order">
         <option value="asc">↑過去/現在↓</option>
         <option value="desc">↑現在/過去↓</option>
-      </select><br>
+      </select>
+
+      <span>ふぁぼマーク</span>
+      <input id="kind-7-content-input" type="text" maxlength="10" value="⭐"
+        style="width: 2.5rem; height: 1.5rem; text-align: center; font-size: 0.9rem; vertical-align: middle; border: 1px solid #ccc; border-radius: 4px; display: inline-block;">
+
       <span>ダークモード</span>
       <div class="switch-container">
         <label class="switch">
@@ -374,9 +365,6 @@
           <span class="slider"></span>
         </label>
       </div>
-      <span>ふぁぼマーク</span>
-      <input id="kind-7-content-input" type="text" maxlength="10" value="⭐"
-        style="width: 2.5rem; height: 1.5rem; text-align: center; font-size: 0.9rem; vertical-align: middle; border: 1px solid #ccc; border-radius: 4px; display: inline-block;"><br>
       <button id="close-settings" class="close-btn">とじる</button>
     </div>
   </div>
@@ -439,6 +427,7 @@
   <script src="https://ompomz.github.io/flowgazer/relay-manager.js"></script>
   <script src="./okkake.js"></script>
   <script src="./sendfav.js"></script>
+  <script src="https://ompomz.github.io/tweetsrecap/utility.js"></script>
 </body>
 
 </html>
