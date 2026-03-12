@@ -127,8 +127,8 @@ function Timeline() {
   this.sortOrder = 'asc'; // ★初期状態を昇順に設定
 }
 
-Timeline.prototype.loadOrigin = async function (pubkey, eventId) {
-  console.log("▶ loadOrigin starting...", { pubkey, eventId });
+Timeline.prototype.loadOrigin = async function (pubkey, eventId, isAutoLoad) {
+  console.log("▶ loadOrigin starting...", { pubkey, eventId, isAutoLoad });
 
   dataStore.events.clear();
   this.oldest = null;
@@ -179,11 +179,13 @@ Timeline.prototype.loadOrigin = async function (pubkey, eventId) {
   this.newest = origin.created_at;
 
   // 起点の前後を取得
+  // isAutoLoad が true なら、since を origin.created_at（起点ちょうど）にする
   await this.fetchRange({
-    since: origin.created_at - 300,
+    since: isAutoLoad ? origin.created_at : origin.created_at - 300,
     until: origin.created_at + 300,
     limit: 100
   });
+
   document.querySelector(".floating-btn-container").classList.add("is-visible");
 };
 
@@ -343,13 +345,31 @@ Timeline.prototype.escapeHtml = function (str) {
 window.timeline = new Timeline();
 
 /* ---------- UI Binding ---------- */
-window.onload = function () {
-  document.getElementById("load").onclick = async function () {
-    const btn = document.getElementById("load");
-    const pubkeyInput = document.getElementById("pubkey");
-    const eventIdInput = document.getElementById("eventId");
-    const relayInput = document.getElementById("relay");
+window.onload = async function () {
+  const btn = document.getElementById("load");
+  const eventIdInput = document.getElementById("eventId");
+  const pubkeyInput = document.getElementById("pubkey");
+  const relayInput = document.getElementById("relay");
+  const themeToggle = document.getElementById('theme-toggle');
 
+  // --- URLパラメータ解析ロジック ---
+  const params = new URLSearchParams(window.location.search);
+  const queryId = params.get('id');
+  let isAutoLoad = false; // 自動実行中フラグ
+
+  if (queryId) {
+    eventIdInput.value = queryId;
+    console.log("🔗 URL parameter found:", queryId);
+    isAutoLoad = true; // フラグを立てる
+
+    // 少し待ってから自動クリック（DOMの準備を確実にするため）
+    setTimeout(() => {
+      btn.click();
+    }, 100);
+  }
+
+  // 取得ボタンの処理
+  btn.onclick = async function () {
     document.querySelector(".floating-btn-container").classList.remove("is-visible");
 
     btn.disabled = true;
@@ -374,19 +394,31 @@ window.onload = function () {
         }
       }
 
-      // 【Pubkeyの補完】★ここが今回の肝です
-      // pubkey欄が空、かつ nevent から作者情報(pubkey)が取れた場合
-      console.log("デコード結果:", eventRes);
+      // 【Pubkeyの補完】
       if (!pubkeyInput.value && eventRes && eventRes.pubkey) {
-        pubkeyInput.value = eventRes.pubkey; // nevent1... 内の作者をセット
+        pubkeyInput.value = eventRes.pubkey;
         complemented = true;
       }
 
-      // 補完が発生した場合は一旦停止（ユーザーへの確認ステップ）
+      // --- 自動ロード時の判定ロジック ---
       if (complemented) {
-        btn.textContent = "情報を抽出しました。再度 [取得] で開始";
-        btn.style.backgroundColor = "#ffcc66";
-        return;
+        // 自動実行中であっても、リレーがまだ空なら入力を促す必要がある
+        if (isAutoLoad && !relayInput.value) {
+          btn.textContent = "リレーを入力してください";
+          btn.style.backgroundColor = "#ffcc66";
+          isAutoLoad = false; // ユーザー入力を待つため解除
+          return;
+        }
+
+        // 手動操作（URLからではない）の場合は、確認のために一旦止める
+        if (!isAutoLoad) {
+          btn.textContent = "情報を抽出しました。再度 [取得] で開始";
+          btn.style.backgroundColor = "#ffcc66";
+          return;
+        }
+
+        // isAutoLoad が true で、かつリレーが埋まっているなら、止まらずに続行！
+        console.log("🚀 Auto-loading with complemented info...");
       }
 
       // 2. 実際の取得
@@ -394,14 +426,9 @@ window.onload = function () {
       const hexPubkey = finalPubkeyRes ? finalPubkeyRes.hex : "";
       const hexEventId = eventRes ? eventRes.hex : "";
 
-      // 【修正箇所】「イベントIDさえあれば、パブキーがなくても進む」というルールへ
       if (!hexEventId) {
         alert("event ID を入力してください。");
-        return;
-      }
-      // eventId がなくて pubkey だけある場合は、起点がないので動けない
-      if (!hexEventId && hexPubkey) {
-        alert("タイムラインを表示するには event ID（note/nevent）が必要です。");
+        isAutoLoad = false;
         return;
       }
 
@@ -409,20 +436,27 @@ window.onload = function () {
       btn.style.backgroundColor = "";
       [pubkeyInput, eventIdInput, relayInput].forEach(el => el.style.backgroundColor = "");
 
-      await timeline.loadOrigin(hexPubkey, hexEventId);
+      // ★ここを追加：読み込みが確定したら入力エリアを隠す
+      if (isAutoLoad) {
+        document.querySelector(".flex-container").classList.add("is-hidden");
+      }
+
+      await timeline.loadOrigin(hexPubkey, hexEventId, isAutoLoad);
 
     } catch (err) {
       alert("エラー: " + err.message);
     } finally {
       btn.disabled = false;
       if (!btn.textContent.includes("再度")) btn.textContent = "取得";
+      isAutoLoad = false; // 処理が終わったのでフラグを確実に下ろす
     }
   };
 
-  // older
-  document.getElementById("older").onclick = function () { timeline.fetchRange({ until: timeline.oldest - 1, limit: 50 }); };
+  // --- その他のボタン・イベント ---
+  document.getElementById("older").onclick = function () {
+    timeline.fetchRange({ until: timeline.oldest - 1, limit: 50 });
+  };
 
-  // newer
   document.getElementById("newer").onclick = async function () {
     const since = timeline.newest !== null ? timeline.newest + 1 : timeline.originCreated;
     for (let step of [900, 1800, 3600]) {
@@ -430,18 +464,16 @@ window.onload = function () {
     }
   };
 
-  // jump
   document.getElementById("go-to-origin").onclick = function () {
     const originEl = document.querySelector(".event.origin");
     if (originEl) {
-      // スムーズにスクロールさせる魔法の1行
       originEl.scrollIntoView({ behavior: "smooth", block: "center" });
     } else {
       alert("起点イベントが見つかりません。");
     }
   };
 
-  // ページ読み込み時に、現在のボディのクラスを見てスイッチの状態を合わせる？
+  // テーマスイッチの状態合わせ
   if (document.body.classList.contains('dark-mode')) {
     themeToggle.checked = true;
   }
