@@ -55,7 +55,7 @@
       border-radius: 4px;
       color: var(--txt);
       background-color: var(--panel);
-      margin: 2px;
+      margin: 2px 0;
     }
 
     button {
@@ -163,9 +163,8 @@
     .switch {
       position: relative;
       display: inline-block;
-      width: 50px;
-      /* ← 52px → 50px にすると比率が整う */
-      height: 26px;
+      width: 40px;
+      height: 20px;
     }
 
     .switch input {
@@ -179,35 +178,33 @@
       cursor: pointer;
       inset: 0;
       background: var(--border);
-      border-radius: 26px;
+      border-radius: 20px;
       transition: 0.3s;
     }
 
     .slider:before {
       content: "";
       position: absolute;
-      height: 20px;
-      width: 20px;
+      height: 14px;
+      width: 14px;
       left: 3px;
-      /* ← 余白はそのままでOK */
       bottom: 3px;
       background: var(--panel);
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 0.9rem;
-      /* 13pxから変更 */
+      font-size: 0.7rem;
       transition: 0.3s;
     }
 
-    /* ON */
+    /* ONの状態 */
     input:checked+.slider {
       background: var(--link);
     }
 
     input:checked+.slider:before {
-      transform: translateX(24px);
+      transform: translateX(20px);
       content: "";
     }
 
@@ -285,10 +282,14 @@
 
     /* 3. 閉じるボタン */
     #settings-modal .close-btn {
-      margin-top: 1rem;
       padding: 0.5rem 1rem;
       background-color: var(--accent);
       color: #fff;
+      display: inline;
+    }
+
+    #settings-modal a {
+      color: var(--accent);
     }
 
     /* 画面幅が600px以下のとき（スマホ向け設定） */
@@ -373,25 +374,29 @@
 
   <div id="settings-modal">
     <div class="settings-body">
-      <h4>settings</h4>
-      <span>表示順</span>
-      <select id="sort-order">
-        <option value="asc">↑過去/現在↓</option>
-        <option value="desc">↑現在/過去↓</option>
+      <h4 style="margin-bottom: 0.5rem;">settings</h4>
+      <select id="sort-order" style="margin-bottom: 0.125rem;">
+        <option value="asc">表示順：↑過去/現在↓</option>
+        <option value="desc">表示順：↑現在/過去↓</option>
       </select>
-
-      <span>ふぁぼマーク</span>
-      <input id="kind-7-content-input" type="text" maxlength="10" value="⭐"
-        style="width: 2.5rem; height: 1.5rem; text-align: center; font-size: 0.9rem; vertical-align: middle; border: 1px solid #ccc; border-radius: 4px; display: inline-block;">
-
-      <span>ダークモード</span>
-      <div class="switch-container">
-        <label class="switch">
-          <input type="checkbox" id="theme-toggle">
-          <span class="slider"></span>
-        </label>
+      <div class="button-row" style="align-items: center; margin:0.25rem 0rem 0.25rem 0rem;">
+        <span>ふぁぼマーク </span>
+        <input id="kind-7-content-input" type="text" maxlength="10" value="⭐"
+          style="width: 2.5rem; height: 1.5rem; text-align: center; font-size: 0.9rem; vertical-align: middle; border: 1px solid #ccc; border-radius: 4px; display: inline-block;">
       </div>
-      <button id="close-settings" class="close-btn">とじる</button>
+      <div class="button-row" style="align-items: center; margin:0.25rem 0rem 0.25rem 0rem;">
+        <span>ダークモード</span>
+        <div class="switch-container" style="display: inline;">
+          <label class="switch">
+            <input type="checkbox" id="theme-toggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+      <div class="button-row" style="align-items: center; justify-content: space-between; margin-top: -0.5rem;">
+        <span style="padding-top: 0.5rem;"><a href="https://ompomz.github.io/flowgazer/okkake/">okkake</a></span>
+        <button id="close-settings" class="close-btn">とじる</button>
+      </div>
     </div>
   </div>
 
