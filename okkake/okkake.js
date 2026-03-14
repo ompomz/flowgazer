@@ -187,6 +187,7 @@ Timeline.prototype.loadOrigin = async function (pubkey, eventId, isAutoLoad) {
   });
 
   document.querySelector(".floating-btn-container").classList.add("is-visible");
+  document.getElementById("share-link").classList.add("is-visible");
 };
 
 Timeline.prototype.fetchContacts = function (pubkey) {
@@ -279,48 +280,66 @@ Timeline.prototype.render = function () {
 
   var events = Array.from(dataStore.events.values());
 
-  // 並び替えロジック
   events.sort(function (a, b) {
     if (this.sortOrder === 'asc') {
-      return a.created_at - b.created_at; // 古い順
+      return a.created_at - b.created_at;
     } else {
-      return b.created_at - a.created_at; // 新しい順
+      return b.created_at - a.created_at;
     }
-  }.bind(this)); // thisを固定するために .bind(this) が必要です
+  }.bind(this));
 
   for (var i = 0; i < events.length; i++) {
     var ev = events[i];
     var li = document.createElement("li");
     li.className = "event" + (ev.id === this.originId ? " origin" : "");
 
-    // sendfav.js 用のデータ属性
+    // sendfav.js 用の属性を維持
     li.setAttribute('data-id', ev.id);
     li.setAttribute('data-pubkey', ev.pubkey);
 
-    // 1. ダークモードかどうか判定（色の明るさを自動調整するため）
     const isDark = document.body.classList.contains('dark-mode');
-
-    // 2. プロフィール情報を取得
     const prof = dataStore.profiles.get(ev.pubkey);
-
-    // 3. 【最強ポイント】名前解決と色生成を MyNostrUtils に任せる！
     const name = MyNostrUtils.getDisplayName(prof, ev.pubkey);
     const color = MyNostrUtils.getHslColor(ev.pubkey, isDark);
+
+    // --- 【ここからリンク化ロジック】 ---
+    // 1. タイムスタンプを詳細ページへのリンクにする
     const timeStr = new Date(ev.created_at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const nevent = NostrTools.nip19.neventEncode({
+      id: ev.id,
+      relays: [relayManager.url]
+    });
 
-    // 1. まずは安全のためにHTMLエスケープする
+    const timeSpan = document.createElement("span");
+    timeSpan.className = "time";
+    timeSpan.innerHTML = `<a href="https://ompomz.github.io/tweetsrecap/tweet?id=${nevent}" target="_blank" style="color: inherit; text-decoration: none;">${ev.id === this.originId ? "▶ " : ""}[${timeStr}]</a>`;
+
+    // 2. 著者名をプロフィールページへのリンクにする
+    const npub = NostrTools.nip19.npubEncode(ev.pubkey);
+    const authorSpan = document.createElement("span");
+    authorSpan.className = "author";
+    authorSpan.style.color = color;
+    authorSpan.style.fontWeight = "normal";
+    authorSpan.innerHTML = `<a href="https://ompomz.github.io/tweetsrecap/tweet?id=${npub}" target="_blank" style="color: inherit; text-decoration: none;">${name}</a>`;
+
+    // 3. コンテンツの処理（既存の linkify を利用）
+    const separator = document.createElement("span");
+    separator.className = "separator";
+    separator.textContent = " > ";
+
     const escapedContent = MyNostrUtils.escapeHtml(ev.content);
-
-    // 2. 【最強ポイント】エスケープ済みのテキスト内のURLをリンクや画像に変換！
     const linkedContent = MyNostrUtils.linkify(escapedContent);
+    const contentSpan = document.createElement("span");
+    contentSpan.className = "post-content";
+    contentSpan.innerHTML = linkedContent;
 
-    // 4. HTML組み立て（色を style="color: ..." で指定）
-    li.innerHTML = `
-  <span class="time">${ev.id === this.originId ? "▶ " : ""}[${timeStr}]</span> 
-  <span class="author" style="color: ${color}; font-weight: normal;">${name}</span>
-  <span class="separator">></span> 
-  <span class="post-content">${linkedContent}</span>
-  `;
+    // li に順番に追加
+    li.appendChild(timeSpan);
+    li.appendChild(document.createTextNode(" "));
+    li.appendChild(authorSpan);
+    li.appendChild(separator);
+    li.appendChild(contentSpan);
+
     el.appendChild(li);
   }
 
@@ -355,14 +374,21 @@ window.onload = async function () {
   // --- URLパラメータ解析ロジック ---
   const params = new URLSearchParams(window.location.search);
   const queryId = params.get('id');
-  let isAutoLoad = false; // 自動実行中フラグ
+  const queryFollow = params.get('follow'); // ★追加：フォローリスト指定のパラメータを取得
+  let isAutoLoad = false;
 
   if (queryId) {
     eventIdInput.value = queryId;
-    console.log("🔗 URL parameter found:", queryId);
-    isAutoLoad = true; // フラグを立てる
 
-    // 少し待ってから自動クリック（DOMの準備を確実にするため）
+    // ★追加：URLからフォローリストの指定があれば、pubkey入力欄にセットしておく
+    if (queryFollow) {
+      pubkeyInput.value = queryFollow;
+      console.log("👥 Follow list source from URL:", queryFollow);
+    }
+
+    console.log("🔗 URL parameter found:", queryId);
+    isAutoLoad = true;
+
     setTimeout(() => {
       btn.click();
     }, 100);
@@ -371,6 +397,7 @@ window.onload = async function () {
   // 取得ボタンの処理
   btn.onclick = async function () {
     document.querySelector(".floating-btn-container").classList.remove("is-visible");
+    document.getElementById("share-link").classList.remove("is-visible");
 
     btn.disabled = true;
     btn.textContent = "解決中...";
@@ -412,7 +439,7 @@ window.onload = async function () {
 
         // 手動操作（URLからではない）の場合は、確認のために一旦止める
         if (!isAutoLoad) {
-          btn.textContent = "情報を抽出しました。再度 [取得] で開始";
+          btn.textContent = "補完しました！もういちどクリック";
           btn.style.backgroundColor = "#ffcc66";
           return;
         }
@@ -477,4 +504,54 @@ window.onload = async function () {
   if (document.body.classList.contains('dark-mode')) {
     themeToggle.checked = true;
   }
+
+  // シェアボタンの処理
+  document.getElementById("share-link").onclick = async function () {
+    const eventInput = document.getElementById("eventId").value;
+    const relayInput = document.getElementById("relay").value;
+    const pubkeyInput = document.getElementById("pubkey").value;
+
+    if (!eventInput) {
+      alert("起点となる event ID を入力してください。");
+      return;
+    }
+
+    try {
+      // 1. 各入力を Hex に変換（既存の resolveToHex を活用）
+      const evRes = await resolveToHex(eventInput);
+      const pkRes = await resolveToHex(pubkeyInput);
+
+      // 2. nevent を生成（標準的な NIP-19）
+      const newNevent = NostrTools.nip19.neventEncode({
+        id: evRes.hex,
+        relays: relayInput ? [relayInput] : (evRes.relays && evRes.relays.length > 0 ? [evRes.relays[0]] : []),
+        author: evRes.pubkey // イベント本来の作者
+      });
+
+      // 3. ベースURLの構築
+      let shareUrl = window.location.origin + window.location.pathname + "?id=" + newNevent;
+
+      // 4. 追加オプション：フォローリスト取得対象が「イベント作者以外」なら付与
+      // 入力された pubkey があり、かつそれがイベント作者と違う場合にパラメータを足す
+      if (pkRes && pkRes.hex && pkRes.hex !== evRes.pubkey) {
+        const followNpub = NostrTools.nip19.npubEncode(pkRes.hex);
+        shareUrl += "&follow=" + followNpub;
+      }
+
+      // 5. クリップボードにコピー
+      await navigator.clipboard.writeText(shareUrl);
+      const btn = this;
+      const originalText = btn.textContent;
+      btn.textContent = "copied!";
+      setTimeout(() => {
+        btn.textContent = originalText;
+        btn.style.backgroundColor = "";
+      }, 2000);
+
+      console.log("🔗 Generated Share URL:", shareUrl);
+    } catch (err) {
+      console.error("Share error:", err);
+      alert("リンクの生成に失敗しました。");
+    }
+  };
 };
