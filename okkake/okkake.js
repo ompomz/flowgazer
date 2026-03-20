@@ -172,6 +172,14 @@ Timeline.prototype.loadOrigin = async function (pubkey, eventId, isAutoLoad) {
   this.authors = await this.fetchContacts(targetPubkey);
   console.log("👥 followees:", this.authors.length);
 
+  // 起点イベントが Kind 1 (通常の投稿) であれば、フォローリストの有無に関わらず
+  // 「この1件だけ」を特別にデータストアに登録して表示対象にする
+  if (origin && origin.kind === 1) {
+    dataStore.addEvent(origin);
+    profileFetcher.request(origin.pubkey);
+    console.log("📌 起点イベントを特例としてデータストアに登録しました");
+  }
+
   // 起点の情報をセット（fetchEventを2回やらないように工夫）
   this.originId = origin.id;
   this.originCreated = origin.created_at;
@@ -179,7 +187,8 @@ Timeline.prototype.loadOrigin = async function (pubkey, eventId, isAutoLoad) {
   this.newest = origin.created_at;
 
   // 起点の前後を取得
-  // isAutoLoad が true なら、since を origin.created_at（起点ちょうど）にする
+  // ここで渡す self.authors には起点作者が含まれていない（フォローしてない場合）ので、
+  // 他の余計な投稿は流れてきません。
   await this.fetchRange({
     since: isAutoLoad ? origin.created_at : origin.created_at - 300,
     until: origin.created_at + 300,
@@ -278,6 +287,14 @@ Timeline.prototype.render = function () {
   var el = document.getElementById("timeline");
   el.innerHTML = "";
 
+  // --- 【名前の幅制限用の準備】 ---
+  if (!this.measureCtx) {
+    const canvas = document.createElement('canvas');
+    this.measureCtx = canvas.getContext('2d');
+    this.measureCtx.font = "14px sans-serif";
+  }
+  const maxNameWidth = this.measureCtx.measureText("[00:00:00]").width;
+
   var events = Array.from(dataStore.events.values());
 
   events.sort(function (a, b) {
@@ -293,17 +310,31 @@ Timeline.prototype.render = function () {
     var li = document.createElement("li");
     li.className = "event" + (ev.id === this.originId ? " origin" : "");
 
-    // sendfav.js 用の属性を維持
     li.setAttribute('data-id', ev.id);
     li.setAttribute('data-pubkey', ev.pubkey);
 
     const isDark = document.body.classList.contains('dark-mode');
     const prof = dataStore.profiles.get(ev.pubkey);
-    const name = MyNostrUtils.getDisplayName(prof, ev.pubkey);
+    const fullName = MyNostrUtils.getDisplayName(prof, ev.pubkey); // 元の名前
     const color = MyNostrUtils.getHslColor(ev.pubkey, isDark);
 
-    // --- 【ここからリンク化ロジック】 ---
-    // 1. タイムスタンプを詳細ページへのリンクにする
+    // --- 【名前の短縮ロジック】 ---
+    let truncatedName = "";
+    let currentWidth = 0;
+    let isTruncated = false;
+
+    for (const char of fullName) {
+      const charWidth = this.measureCtx.measureText(char).width;
+      if (currentWidth + charWidth > maxNameWidth) {
+        isTruncated = true;
+        break;
+      }
+      truncatedName += char;
+      currentWidth += charWidth;
+    }
+    const finalDisplayName = isTruncated ? truncatedName + "…" : fullName;
+
+    // 1. タイムスタンプ
     const timeStr = new Date(ev.created_at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const nevent = NostrTools.nip19.neventEncode({
       id: ev.id,
@@ -314,15 +345,16 @@ Timeline.prototype.render = function () {
     timeSpan.className = "time";
     timeSpan.innerHTML = `<a href="https://ompomz.github.io/tweetsrecap/tweet?id=${nevent}" target="_blank" style="color: inherit; text-decoration: none;">${ev.id === this.originId ? "▶ " : ""}[${timeStr}]</a>`;
 
-    // 2. 著者名をプロフィールページへのリンクにする
+    // 2. 著者名（短縮済みを利用）
     const npub = NostrTools.nip19.npubEncode(ev.pubkey);
     const authorSpan = document.createElement("span");
     authorSpan.className = "author";
     authorSpan.style.color = color;
     authorSpan.style.fontWeight = "normal";
-    authorSpan.innerHTML = `<a href="https://ompomz.github.io/tweetsrecap/tweet?id=${npub}" target="_blank" style="color: inherit; text-decoration: none;">${name}</a>`;
+    // ここで finalDisplayName を使います
+    authorSpan.innerHTML = `<a href="https://ompomz.github.io/tweetsrecap/tweet?id=${npub}" target="_blank" style="color: inherit; text-decoration: none;">${finalDisplayName}</a>`;
 
-    // 3. コンテンツの処理（既存の linkify を利用）
+    // 3. コンテンツ
     const separator = document.createElement("span");
     separator.className = "separator";
     separator.textContent = " > ";
@@ -333,7 +365,6 @@ Timeline.prototype.render = function () {
     contentSpan.className = "post-content";
     contentSpan.innerHTML = linkedContent;
 
-    // li に順番に追加
     li.appendChild(timeSpan);
     li.appendChild(document.createTextNode(" "));
     li.appendChild(authorSpan);
@@ -343,7 +374,6 @@ Timeline.prototype.render = function () {
     el.appendChild(li);
   }
 
-  // sendfav.js へ通知
   document.dispatchEvent(new CustomEvent('timeline-rendered'));
 };
 
