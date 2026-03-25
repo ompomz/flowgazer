@@ -246,6 +246,7 @@ li.event {
     background-color: #ffcc66;
     text-align: center;
     padding: 4px 0;
+    max-width: 4rem;
     width: 4rem;
 }
 
