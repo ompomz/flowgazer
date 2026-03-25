@@ -88,6 +88,7 @@ class NostrAuth {
     this.sessionNsec = null;
     this.sessionPubkey = null;
     this.useNIP07 = false;
+    this.readOnly = false;
     localStorage.removeItem('nostr_auth');
   }
 

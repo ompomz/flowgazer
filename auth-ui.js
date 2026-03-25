@@ -86,73 +86,73 @@ function createAuthUI() {
  * 認証UIの表示を更新
  */
 function updateAuthUI() {
-  const loginDiv = document.getElementById('auth-login');
-  const infoDiv = document.getElementById('auth-info');
-  const npubSpan = document.getElementById('auth-npub');
-  const modeSpan = document.getElementById('auth-mode');
+    const loginDiv = document.getElementById('auth-login');
+    const infoDiv = document.getElementById('auth-info');
+    const npubSpan = document.getElementById('auth-npub');
+    const modeSpan = document.getElementById('auth-mode');
 
-  if (window.nostrAuth.isLoggedIn()) {
-    loginDiv.style.display = 'none';
-    infoDiv.style.display = 'block';
-    const npub = NostrTools.nip19.npubEncode(window.nostrAuth.pubkey);
-    npubSpan.textContent = npub.substring(0, 12) + '...' + npub.slice(-4);
-    
-    if (modeSpan) {
-      if (window.nostrAuth.readOnly) {
-        modeSpan.textContent = 'ROM';
-        modeSpan.style.color = '#999';
-      } else if (window.nostrAuth.useNIP07) {
-        modeSpan.textContent = 'NIP-07';
-        modeSpan.style.color = '#66b3ff';
-      } else {
-        modeSpan.textContent = 'nsec';
-        modeSpan.style.color = '#66b3ff';
-      }
-    }
+    if (window.nostrAuth.isLoggedIn()) {
+        loginDiv.style.display = 'none';
+        infoDiv.style.display = 'block';
+        const npub = NostrTools.nip19.npubEncode(window.nostrAuth.pubkey);
+        npubSpan.textContent = npub.substring(0, 12) + '...' + npub.slice(-4);
 
-    // 秘密鍵コピーボタンの処理
-    const existingNsecBtn = document.getElementById('copy-nsec-btn');
-    if (window.nostrAuth.nsec && !window.nostrAuth.useNIP07 && !existingNsecBtn) {
-        const nsecBtn = document.createElement('button');
-        nsecBtn.id = 'copy-nsec-btn';
-        nsecBtn.className = 'container-button full-width';
-        nsecBtn.textContent = '秘密鍵をコピー';
-        nsecBtn.style.backgroundColor = '#00796b';
-        nsecBtn.style.color = '#e0f2f1';
-        nsecBtn.style.margin = '1rem 0';
-        nsecBtn.style.borderRadius = '999px';
-        nsecBtn.style.padding = '0.25rem 1rem';
-        nsecBtn.style.border = 'none';
-        
-        const copyHandler = () => {
-            navigator.clipboard.writeText(window.nostrAuth.nsec)
-                .then(() => alert('秘密鍵をコピーしました！大事に持っておいてね。'))
-                .catch(err => alert('コピーに失敗しました: ' + err.message));
-        };
-        nsecBtn.addEventListener('click', copyHandler);
-        
-        // ハンドラー参照を保存
-        nsecBtn._copyHandler = copyHandler;
-        
-        const logoutBtn = document.getElementById('logout-btn');
-        infoDiv.insertBefore(nsecBtn, logoutBtn);
-        logoutBtn.style.marginTop = '0.5rem';
-    } else if (existingNsecBtn) {
-        document.getElementById('logout-btn').style.marginTop = '0.5rem';
-    }
-  } else {
-    loginDiv.style.display = 'block';
-    infoDiv.style.display = 'none';
-    const nsecBtn = document.getElementById('copy-nsec-btn');
-    if (nsecBtn) {
-        // イベントリスナーを解除
-        if (nsecBtn._copyHandler) {
-            nsecBtn.removeEventListener('click', nsecBtn._copyHandler);
-            delete nsecBtn._copyHandler;
+        if (modeSpan) {
+            if (window.nostrAuth.readOnly) {
+                modeSpan.textContent = 'ROM';
+                modeSpan.style.color = '#999';
+            } else if (window.nostrAuth.useNIP07) {
+                modeSpan.textContent = 'NIP-07';
+                modeSpan.style.color = '#66b3ff';
+            } else {
+                modeSpan.textContent = 'nsec';
+                modeSpan.style.color = '#66b3ff';
+            }
         }
-        nsecBtn.remove();
+
+        // 秘密鍵コピーボタンの処理
+        const existingNsecBtn = document.getElementById('copy-nsec-btn');
+        if (window.nostrAuth.nsec && !window.nostrAuth.useNIP07 && !existingNsecBtn) {
+            const nsecBtn = document.createElement('button');
+            nsecBtn.id = 'copy-nsec-btn';
+            nsecBtn.className = 'container-button full-width';
+            nsecBtn.textContent = '秘密鍵をコピー';
+            nsecBtn.style.backgroundColor = '#00796b';
+            nsecBtn.style.color = '#e0f2f1';
+            nsecBtn.style.margin = '1rem 0';
+            nsecBtn.style.borderRadius = '999px';
+            nsecBtn.style.padding = '0.25rem 1rem';
+            nsecBtn.style.border = 'none';
+
+            const copyHandler = () => {
+                navigator.clipboard.writeText(window.nostrAuth.nsec)
+                    .then(() => alert('秘密鍵をコピーしました！大事に持っておいてね。'))
+                    .catch(err => alert('コピーに失敗しました: ' + err.message));
+            };
+            nsecBtn.addEventListener('click', copyHandler);
+
+            // ハンドラー参照を保存
+            nsecBtn._copyHandler = copyHandler;
+
+            const logoutBtn = document.getElementById('logout-btn');
+            infoDiv.insertBefore(nsecBtn, logoutBtn);
+            logoutBtn.style.marginTop = '0.5rem';
+        } else if (existingNsecBtn) {
+            document.getElementById('logout-btn').style.marginTop = '0.5rem';
+        }
+    } else {
+        loginDiv.style.display = 'block';
+        infoDiv.style.display = 'none';
+        const nsecBtn = document.getElementById('copy-nsec-btn');
+        if (nsecBtn) {
+            // イベントリスナーを解除
+            if (nsecBtn._copyHandler) {
+                nsecBtn.removeEventListener('click', nsecBtn._copyHandler);
+                delete nsecBtn._copyHandler;
+            }
+            nsecBtn.remove();
+        }
     }
-  }
 }
 
 /**
@@ -242,7 +242,7 @@ function destroyAuthUI() {
     if (npubBtn) npubBtn.removeEventListener('click', authEventHandlers.npubLogin);
     if (logoutBtn) logoutBtn.removeEventListener('click', authEventHandlers.logout);
     if (closeBtn) closeBtn.removeEventListener('click', authEventHandlers.closeAuth);
-    
+
     if (copyNsecBtn && copyNsecBtn._copyHandler) {
         copyNsecBtn.removeEventListener('click', copyNsecBtn._copyHandler);
         delete copyNsecBtn._copyHandler;
@@ -262,7 +262,12 @@ function destroyAuthUI() {
  * 認証UIを表示
  */
 function showAuthUI() {
-    document.getElementById('auth-overlay').style.display = 'flex';
+    updateAuthUI();
+
+    const overlay = document.getElementById('auth-overlay');
+    if (overlay) {
+        overlay.style.display = 'flex';
+    }
 }
 
 // DOMContentLoaded後に初期化

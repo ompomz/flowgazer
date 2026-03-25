@@ -7,12 +7,13 @@
 class FlowgazerApp {
   constructor() {
     // ===== アプリケーション状態 =====
-    this.currentTab = 'following';
+    this.currentTab = 'following'; // デフォルトはフォロー中
     this.isAutoUpdate = true;
     this.filterAuthors = null;
     this.flowgazerOnly = false;
     this.forbiddenWords = [];
-    
+    this.lastActiveTime = Date.now();
+
     // ===== データ取得済みフラグ =====
     this.tabDataFetched = {
       global: false,
@@ -20,7 +21,7 @@ class FlowgazerApp {
       myposts: false,
       likes: false
     };
-    
+
     // ===== Baseline方式用 =====
     this.isInitializing = false;
     this.cursorSince = null; // Anchor Phaseで確定した基準時刻
@@ -87,31 +88,36 @@ class FlowgazerApp {
     this.isInitializing = true;
     console.log('📡 Baseline方式: Anchor Phase開始');
 
-    // ===== 第1段階: Anchor Phase =====
-    const anchorResult = await this.executeAnchorPhase();
-    
+    // ===== 第1段階: Anchor Phase (現在の cursorSince を渡す) =====
+    const anchorResult = await this.executeAnchorPhase(this.cursorSince);
+
     if (!anchorResult.success) {
       this.isInitializing = false;
-      if (anchorResult.isEmpty) {
-        alert('これで全部です');
+      // 初回起動（cursorSinceがない）かつ 0件のときだけアラートを出す
+      if (anchorResult.isEmpty && !this.cursorSince) {
+        alert('投稿が見つかりませんでした');
       }
       return;
     }
 
-    this.cursorSince = anchorResult.oldestTimestamp;
+    // 新しく取れた中で一番古い時刻、または以前の時刻を維持
+    this.cursorSince = anchorResult.oldestTimestamp || this.cursorSince;
     console.log(`✅ Anchor Phase完了: cursor_since=${new Date(this.cursorSince * 1000).toLocaleString()}`);
 
     // ===== 第2段階: Stream Phase =====
+    // すでに動いている場合は一度止めてから再開
+    window.relayManager.unsubscribe('stream-phase');
     this.executeStreamPhase();
-    
+
     this.isInitializing = false;
   }
 
   /**
-   * Anchor Phase: kind:1のみを150件取得
-   * @returns {Object} { success, oldestTimestamp, isEmpty }
-   */
-  async executeAnchorPhase() {
+     * Anchor Phase: kind:1を取得
+     * @param {number|null} since - 指定された場合、その時刻以降のみ取得
+     * @returns {Object} { success, oldestTimestamp, isEmpty }
+     */
+  async executeAnchorPhase(since = null) {
     return new Promise((resolve) => {
       const events = [];
       let resolved = false;
@@ -128,18 +134,28 @@ class FlowgazerApp {
       const timeoutId = setTimeout(() => {
         console.log('⏱️ Anchor Phase: タイムアウト');
         if (events.length === 0) {
-          resolveOnce({ success: false, isEmpty: true });
+          // since指定がある（復帰時）なら、0件でも「異常なし」として成功を返す
+          resolveOnce({ success: since ? true : false, isEmpty: since ? false : true, oldestTimestamp: since });
         } else {
           const oldest = Math.min(...events.map(e => e.created_at));
           resolveOnce({ success: true, oldestTimestamp: oldest });
         }
       }, TIMEOUT_MS);
 
-      // 購読開始
-      window.relayManager.subscribe('anchor-phase', {
+      // --- フィルタの構築 ---
+      const filter = {
         kinds: [1],
         limit: 150
-      }, (type, event) => {
+      };
+
+      // もし since があれば、その時刻 + 1秒 から取得を開始する
+      if (since) {
+        filter.since = since + 1;
+        console.log(`📡 復帰リクエスト: ${new Date((since + 1) * 1000).toLocaleString()} 以降を取得`);
+      }
+
+      // 購読開始
+      window.relayManager.subscribe('anchor-phase', filter, (type, event) => {
         if (type === 'EVENT') {
           const added = window.dataStore.addEvent(event);
           if (added) {
@@ -147,7 +163,7 @@ class FlowgazerApp {
             window.viewState.onEventReceived(event);
             window.profileFetcher.request(event.pubkey);
 
-            // 150件到達で終了
+            // 150件到達で一旦区切る
             if (events.length >= 150) {
               clearTimeout(timeoutId);
               const oldest = Math.min(...events.map(e => e.created_at));
@@ -157,9 +173,14 @@ class FlowgazerApp {
         } else if (type === 'EOSE') {
           clearTimeout(timeoutId);
           console.log(`📡 Anchor Phase EOSE: ${events.length}件取得`);
-          
+
+          // since指定がある復帰時は、0件でも「最新の状態」なので成功扱いにする
           if (events.length === 0) {
-            resolveOnce({ success: false, isEmpty: true });
+            resolveOnce({
+              success: since ? true : false,
+              isEmpty: since ? false : true,
+              oldestTimestamp: since || Math.floor(Date.now() / 1000)
+            });
           } else {
             const oldest = Math.min(...events.map(e => e.created_at));
             resolveOnce({ success: true, oldestTimestamp: oldest });
@@ -364,57 +385,30 @@ class FlowgazerApp {
   }
 
   /**
-   * 受け取ったリアクション等を取得 (likesタブ用)
+   * 受け取ったリアクション等を取得
    */
   fetchReceivedLikes() {
     const myPubkey = window.nostrAuth.pubkey;
-    console.log('📥 受け取ったリアクションを取得中...');
+    if (!myPubkey) return;
 
-    window.relayManager.subscribe('received-reactions', {
-      kinds: [7],
+    console.log('📥 通知（likesタブ用）を独立取得中...');
+
+    const filter = {
+      kinds: [1, 6, 7],
       '#p': [myPubkey],
       limit: 50
-    }, (type, event) => {
+    };
+
+    window.relayManager.subscribe('received-notifications-init', filter, (type, event) => {
       if (type === 'EVENT') {
         const added = window.dataStore.addEvent(event);
         if (added) {
+          // 第2引数にタブ名を指定して、そのタブの表示対象に入れる
           window.viewState.addHistoryEventToTab(event, 'likes');
           window.profileFetcher.request(event.pubkey);
         }
       } else if (type === 'EOSE') {
-        console.log('✅ リアクション取得完了');
-      }
-    });
-
-    window.relayManager.subscribe('received-reposts', {
-      kinds: [6],
-      '#p': [myPubkey],
-      limit: 50
-    }, (type, event) => {
-      if (type === 'EVENT') {
-        const added = window.dataStore.addEvent(event);
-        if (added) {
-          window.viewState.addHistoryEventToTab(event, 'likes');
-          window.profileFetcher.request(event.pubkey);
-        }
-      } else if (type === 'EOSE') {
-        console.log('✅ リポスト取得完了');
-      }
-    });
-
-    window.relayManager.subscribe('received-mentions', {
-      kinds: [1],
-      '#p': [myPubkey],
-      limit: 50
-    }, (type, event) => {
-      if (type === 'EVENT') {
-        const added = window.dataStore.addEvent(event);
-        if (added) {
-          window.viewState.addHistoryEventToTab(event, 'likes');
-          window.profileFetcher.request(event.pubkey);
-        }
-      } else if (type === 'EOSE') {
-        console.log('✅ メンション取得完了');
+        console.log('✅ 通知初期取得完了');
         window.viewState.renderNow();
       }
     });
@@ -463,11 +457,11 @@ class FlowgazerApp {
    */
   applyFilter(authors) {
     this.filterAuthors = authors;
-    
+
     if (window.timeline) {
       window.timeline.setFilter({ authors });
     }
-    
+
     // Stream Phaseを再開
     window.relayManager.unsubscribe('stream-phase');
     this.executeStreamPhase();
@@ -479,7 +473,7 @@ class FlowgazerApp {
    */
   toggleFlowgazerFilter(enabled) {
     this.flowgazerOnly = enabled;
-    
+
     if (window.timeline) {
       window.timeline.setFilter({ flowgazerOnly: enabled });
     }
@@ -519,7 +513,7 @@ class FlowgazerApp {
 
     const tab = this.currentTab;
     const oldestTimestamp = window.viewState.getOldestTimestamp(tab);
-    
+
     console.log(`📥 もっと見る: ${tab}タブ, until=${new Date(oldestTimestamp * 1000).toLocaleString()}`);
 
     document.getElementById('load-more').classList.add('loading');
@@ -527,7 +521,7 @@ class FlowgazerApp {
     try {
       // Step 1: kind:1を50件取得
       const step1Result = await this.loadMoreStep1(tab, oldestTimestamp);
-      
+
       if (!step1Result.success) {
         alert('これ以上ありません');
         return;
@@ -538,13 +532,25 @@ class FlowgazerApp {
 
       // Step 2: その期間のkind:6,42を全件取得
       await this.loadMoreStep2(tab, oldestTimestamp, oldestKind1);
-      
+
+      // app.js の loadMore 関数内、Step 2 完了後あたりに追加
+      if (tab === 'likes' && step1Result.success) {
+        const tabState = window.viewState.tabs.likes;
+        const oldestInBatch = step1Result.oldestTimestamp;
+
+        // 取得した最古データに合わせて、表示下限（baseline）を過去へ広げる
+        if (tabState.baseline === null || oldestInBatch < tabState.baseline) {
+          tabState.baseline = oldestInBatch;
+          console.log(`📉 likesタブのBaselineを拡張（LoadMore）: ${new Date(oldestInBatch * 1000).toLocaleString()}`);
+        }
+      }
+
       // カーソル更新
       window.viewState.updateTabCursor(tab, oldestKind1);
-      
+
       console.log('✅ もっと見る完了');
       window.viewState.renderNow();
-      
+
     } catch (err) {
       console.error('❌ もっと見る失敗:', err);
       alert('データの取得に失敗しました');
@@ -561,7 +567,7 @@ class FlowgazerApp {
   async loadMoreStep1(tab, untilTimestamp) {
     return new Promise((resolve) => {
       const events = [];
-      
+
       const filter = this._buildLoadMoreStep1Filter(tab, untilTimestamp);
       if (!filter) {
         resolve({ success: false });
@@ -578,7 +584,7 @@ class FlowgazerApp {
           }
         } else if (type === 'EOSE') {
           window.relayManager.unsubscribe('load-more-step1');
-          
+
           if (events.length === 0) {
             resolve({ success: false });
           } else {
@@ -636,7 +642,7 @@ class FlowgazerApp {
           filter.authors = this.filterAuthors;
         }
         break;
-        
+
       case 'following':
         if (window.dataStore.followingPubkeys.size === 0) {
           console.warn('フォローリストが空です');
@@ -661,7 +667,7 @@ class FlowgazerApp {
 
       case 'likes':
         // likesタブではkind:7を取得
-        filter.kinds = [7];
+        filter.kinds = [1, 6, 7];
         if (!myPubkey) return null;
         filter['#p'] = [myPubkey];
         break;
@@ -679,7 +685,7 @@ class FlowgazerApp {
    */
   _buildLoadMoreStep2Filter(tab, untilTimestamp, sinceTimestamp) {
     const myPubkey = window.nostrAuth?.pubkey;
-    
+
     // likesタブではStep2不要
     if (tab === 'likes') {
       return null;
@@ -697,7 +703,7 @@ class FlowgazerApp {
           filter.authors = this.filterAuthors;
         }
         break;
-        
+
       case 'following':
         if (window.dataStore.followingPubkeys.size === 0) return null;
         const followingAuthors = Array.from(window.dataStore.followingPubkeys);
@@ -770,7 +776,7 @@ class FlowgazerApp {
 
       // 3. 署名（引数のtempNsecを渡す。空なら内部保持のsessionNsecやnsecが使われる）
       const signed = await window.nostrAuth.signEvent(event, tempNsec);
-      
+
       window.relayManager.publish(signed);
       window.dataStore.addEvent(signed);
       window.viewState.onEventReceived(signed);
@@ -800,7 +806,7 @@ class FlowgazerApp {
 
     try {
       const kind7Content = document.getElementById('kind-7-content-input').value.trim() || '+';
-      
+
       const event = {
         kind: 7,
         content: kind7Content,
@@ -817,9 +823,9 @@ class FlowgazerApp {
       window.dataStore.addEvent(signed);
       window.viewState.onEventReceived(signed);
       window.viewState.renderNow();
-      
+
       alert('ふぁぼった!');
-      
+
     } catch (err) {
       console.error('失敗:', err);
       alert('ふぁぼれませんでした: ' + err.message);
@@ -840,10 +846,10 @@ class FlowgazerApp {
       const parser = new DOMParser();
       const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
       const terms = xmlDoc.querySelectorAll('term');
-      
+
       this.forbiddenWords = Array.from(terms).map(node => node.textContent);
       console.log('📋 禁止ワードリスト読み込み完了:', this.forbiddenWords.length, '件');
-      
+
     } catch (err) {
       console.error('禁止ワードリスト読み込み失敗:', err);
       this.forbiddenWords = [];
@@ -857,7 +863,7 @@ class FlowgazerApp {
   /**
    * ログインUI更新
    */
-updateLoginUI() {
+  updateLoginUI() {
     const notLoggedInSpan = document.getElementById('not-logged-in');
     const npubLink = document.getElementById('npub-link');
     const tempInput = document.getElementById('temp-nsec-input');
@@ -882,10 +888,10 @@ updateLoginUI() {
           // すでにセッション鍵（書き込み用）がセットされている場合
           const sNpub = window.NostrTools.nip19.npubEncode(auth.sessionPubkey);
           const shortSNpub = sNpub.substring(0, 8) + '...';
-          
+
           // 入力欄を隠し、ステータスを表示（inputの代わりにバッジ化）
           tempInput.style.display = 'none';
-          
+
           // ステータス表示用の要素がなければ作成
           let statusBadge = document.getElementById('session-write-status');
           if (!statusBadge) {
@@ -922,9 +928,9 @@ async function fetchMyChannels() {
   if (!myPubkey) return;
 
   console.log('📡 チャンネルリスト取得開始...');
-  
+
   const subId = 'my-channels-' + Date.now();
-  
+
   // Step 1: kind:10005 を取得してチャンネルID一覧を得る
   window.relayManager.subscribe(subId, {
     kinds: [10005],
@@ -933,27 +939,27 @@ async function fetchMyChannels() {
   }, async (type, event) => {
     if (type === 'EVENT' && event.kind === 10005) {
       console.log('✅ kind:10005 受信:', event.tags);
-      
+
       // eタグからチャンネルID一覧を抽出
       const channelIds = event.tags
         .filter(t => t[0] === 'e' && t[1])
         .map(t => t[1]);
-      
+
       if (channelIds.length === 0) {
         console.warn('⚠️ チャンネルが見つかりませんでした');
         updateChannelDropdown([]);
         window.relayManager.unsubscribe(subId);
         return;
       }
-      
+
       console.log(`📋 ${channelIds.length}個のチャンネルIDを取得`);
-      
+
       // Step 2: 各チャンネルの名前を解決
       await resolveChannelNames(channelIds);
-      
+
       window.relayManager.unsubscribe(subId);
     }
-    
+
     if (type === 'EOSE') {
       window.relayManager.unsubscribe(subId);
     }
@@ -1086,11 +1092,11 @@ async function resolveChannelNames(channelIds) {
       resolve();
     }
 
-    // 保険のタイムアウト（10秒）
+    // 保険のタイムアウト
     setTimeout(() => {
       console.log('⏱️ チャンネル名解決タイムアウト');
       finish();
-    }, 10000);
+    }, 5000);
   });
 }
 

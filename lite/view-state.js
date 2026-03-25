@@ -25,7 +25,8 @@ class ViewState {
       likes: {
         visibleEventIds: new Set(),
         cursor: null,
-        timeRange: { oldest: null, newest: null }
+        timeRange: { oldest: null, newest: null },
+        baseline: null
       }
     };
 
@@ -49,7 +50,7 @@ class ViewState {
   onEventReceived(event) {
     const myPubkey = window.nostrAuth?.pubkey;
     const tabs = this._determineTargetTabs(event, myPubkey);
-    
+
     if (tabs.length === 0) return false;
 
     let addedToCurrentTab = false;
@@ -259,11 +260,11 @@ class ViewState {
 
     // 2. タブの時間範囲内のイベントのみに絞り込む
     if (tabState.timeRange.oldest && tabState.timeRange.newest) {
-      events = events.filter(event => 
+      events = events.filter(event =>
         event.created_at >= tabState.timeRange.oldest &&
         event.created_at <= tabState.timeRange.newest
       );
-      
+
       console.log(`⏰ ${tab}タブ: 時間範囲フィルタ適用 (${new Date(tabState.timeRange.oldest * 1000).toLocaleTimeString()} 〜 ${new Date(tabState.timeRange.newest * 1000).toLocaleTimeString()})`);
     }
 
@@ -282,31 +283,30 @@ class ViewState {
   }
 
   /**
-   * 追加フィルタを適用
-   * @private
+   * _applyFilters 内の likes 処理
    */
-  _applyFilters(events, tab, options) {
-    const { flowgazerOnly = false, authors = null, showKind42 = false } = options;
-
-    // ===== likesタブの厳格化処理 =====
+    _applyFilters(events, tab, options) {
+    // options から必要なフィルタ条件を取り出す。
+    // options が空の場合も考慮してデフォルト値を設定します。
+    const flowgazerOnly = options?.flowgazerOnly || false;
+    const authors = options?.authors || null;
+    const showKind42 = options?.showKind42 || false;
+    
+    // ===== likesタブの処理 =====
     if (tab === 'likes') {
-      // 1. kind:7 のみを抽出して新しい順にソート
-      const kind7Events = events
-        .filter(e => e.kind === 7)
-        .sort((a, b) => b.created_at - a.created_at);
+      const tabState = this.tabs.likes;
 
-      // 2. 50件目（またはそれ以下の最古）を基準とする
-      let likesBaseline = 0;
-      if (kind7Events.length > 0) {
-        const baselineIndex = Math.min(49, kind7Events.length - 1);
-        likesBaseline = kind7Events[baselineIndex].created_at;
-        console.log(`📌 likesタブ基準: ${new Date(likesBaseline * 1000).toLocaleString()} (kind:7の${baselineIndex + 1}件目)`);
+      // baselineが未設定（初回）なら、今あるデータの中で50件目の時刻をセット
+      if (tabState.baseline === null && events.length > 0) {
+        const sorted = [...events].sort((a, b) => b.created_at - a.created_at);
+        const baselineIndex = Math.min(49, sorted.length - 1);
+        tabState.baseline = sorted[baselineIndex].created_at;
+        console.log(`📌 likesタブの初期Baselineを確定: ${new Date(tabState.baseline * 1000).toLocaleString()}`);
       }
 
-      // 3. すべてのイベントをこの基準でフィルタ
-      events = events.filter(e => e.created_at >= likesBaseline);
-
-      return events;
+      // 保存されているbaselineより新しいものだけを表示
+      const baseline = tabState.baseline || 0;
+      return events.filter(e => e.created_at >= baseline);
     }
 
     // ===== 以下、他のタブの必要最小限のフィルタ処理 =====
