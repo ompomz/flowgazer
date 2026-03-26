@@ -410,10 +410,7 @@
 </head>
 
 <body>
-  <div id="modal-placeholder"></div>
-
   <div class="container">
-
     <div class="flex-container">
       <button onclick="showAuthUI()">🔑</button>
       <input id="relay-url" type="text" list="relay-suggestions" style="flex-grow: 1; height: 2.25rem;">
@@ -496,13 +493,14 @@
     <ul id="timeline"></ul>
 
     <button id="load-more" class="full-width">loadmore</button>
-    <p style="text-align: center; margin-top: -2.5rem;"><a href="https://github.com/ompomz/flowgazer">view on github</a>
+    <p style="text-align: center; margin-top: -2.5rem;"><a href="https://github.com/ompomz/flowgazer">view on
+        github</a>
     </p>
   </div>
 
   <!-- 既存JS -->
-  <script src="https://ompomz.github.io/modal.js"></script>
-  <script src="./auth.js"></script>
+  <script src="https://ompomz.github.io/tweetsrecap/utility.js"></script>
+  <script src="https://ompomz.github.io/flowgazer/auth.js"></script>
   <script src="https://ompomz.github.io/flowgazer/auth-ui.js"></script>
 
   <!-- 
@@ -517,23 +515,20 @@
   <!-- 新設計JS -->
   <script src="https://ompomz.github.io/flowgazer/relay-manager.js"></script>
   <script src="https://ompomz.github.io/flowgazer/data-store.js"></script>
-  <script src="./view-state.js"></script>
+  <script src="https://ompomz.github.io/flowgazer/view-state.js"></script>
   <script src="https://ompomz.github.io/flowgazer/profile-fetcher.js"></script>
-  <script src="./timeline.js"></script>
+  <script src="./timelinelite.js"></script>
   <script src="./app.js"></script>
-  <script src="https://ompomz.github.io/tweetsrecap/utility.js"></script>
 
   <script>
-    // 初期化確認
+    // 初期化確認（詳細版を維持）
     console.log('✅ スクリプト読み込み完了');
-    console.log('dataStore:', typeof window.dataStore);
-    console.log('relayManager:', typeof window.relayManager);
-    console.log('viewState:', typeof window.viewState);
-    console.log('profileFetcher:', typeof window.profileFetcher);
-    console.log('Timeline:', typeof window.Timeline);
-    console.log('app:', typeof window.app);
+    console.log('Components:', {
+      dataStore: typeof window.dataStore,
+      viewState: typeof window.viewState,
+      app: typeof window.app
+    });
 
-    // DOMContentLoaded
     document.addEventListener('DOMContentLoaded', async () => {
       // インスタンスの存在確認
       if (!window.dataStore || !window.viewState) {
@@ -548,55 +543,70 @@
       // アプリ初期化
       await window.app.init();
 
-      // UI イベントリスナー
-      // 投稿ボタンのクリックイベント
-      document.getElementById('send-new-post').addEventListener('click', () => {
+      // --- 安全なイベントリスナー登録用のヘルパー関数 ---
+      const addEvent = (id, event, handler) => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener(event, handler);
+      };
+
+      // 投稿実行（tempNsec対応版）
+      addEvent('send-new-post', 'click', () => {
         const content = document.getElementById('new-post-content').value;
-        const tempNsec = document.getElementById('temp-nsec-input')?.value;
-        // 選択されたKindを取得
-        const kind = parseInt(document.getElementById('post-kind-selector').value);
-        // 選択されたチャンネルIDを取得
-        const channelId = document.getElementById('channel-list-selector').value;
+        const kindEl = document.getElementById('post-kind-selector');
+        const channelEl = document.getElementById('channel-list-selector');
+        const tempNsec = document.getElementById('temp-nsec-input')?.value; // 固有機能
+
+        const kind = kindEl ? parseInt(kindEl.value) : 1;
+        const channelId = channelEl ? channelEl.value : '';
 
         if (content) {
-          // チャンネル投稿なのにIDがない場合は止める
           if (kind === 42 && !channelId) {
-            alert("投稿先のチャンネルを選んでください！");
+            alert("送信先のチャンネルを選んでください！");
             return;
           }
-          // sendPostに情報を渡す
+          // 第4引数にtempNsecを渡す
           window.app.sendPost(content, kind, channelId, tempNsec);
         }
       });
 
-      // Kindのプルダウンが変わった時の表示切り替え
-      document.getElementById('post-kind-selector').addEventListener('change', (e) => {
+      // Kind切り替え
+      addEvent('post-kind-selector', 'change', (e) => {
         const channelSelector = document.getElementById('channel-list-selector');
+        if (!channelSelector) return;
 
         if (e.target.value === "42") {
           channelSelector.style.display = "inline";
-          // 📢 ここでKind 10005を取りに行く！
-          fetchMyChannels();
+          if (typeof fetchMyChannels === 'function') fetchMyChannels();
         } else {
           channelSelector.style.display = "none";
         }
       });
 
-      // Ctrl+Enter で投稿
-      document.getElementById('new-post-content').addEventListener('keydown', (e) => {
+      // Ctrl+Enter で送信
+      addEvent('new-post-content', 'keydown', (e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
           e.preventDefault();
-          document.getElementById('send-new-post').click();
+          document.getElementById('send-new-post')?.click();
         }
       });
 
-      // リレー接続ボタン
-      document.getElementById('subscribe-relay').addEventListener('click', () => {
-        const url = document.getElementById('relay-url').value;
-        window.app.connectRelay(url);
+      // リレー接続 / リフレッシュ
+      addEvent('subscribe-relay', 'click', async () => {
+        const urlInput = document.getElementById('relay-url');
+        const url = urlInput ? urlInput.value.trim() : '';
+
+        if (url) {
+          window.app.connectRelay(url);
+        } else {
+          console.log('🔄 タイムラインをリフレッシュします');
+          const btn = document.getElementById('subscribe-relay');
+          if (btn) { btn.disabled = true; btn.textContent = '...'; }
+          await window.app.initializeTimelineBaseline();
+          if (btn) { btn.disabled = false; btn.textContent = '接続'; }
+        }
       });
 
-      // タブボタン
+      // タブ切り替え
       document.querySelectorAll('.tab-button').forEach(btn => {
         btn.addEventListener('click', (e) => {
           const tab = e.target.id.replace('tab-', '');
@@ -605,19 +615,16 @@
       });
 
       // フィルター適用
-      document.getElementById('apply-filter').addEventListener('click', () => {
-        const input = document.getElementById('hex-filter').value;
+      addEvent('apply-filter', 'click', () => {
+        const inputEl = document.getElementById('hex-filter');
+        if (!inputEl) return;
+        const input = inputEl.value;
         const authors = input.split(/[ ,\n]/)
           .map(s => s.trim())
           .filter(s => s.length === 64 || s.startsWith('npub'))
           .map(s => {
             if (s.startsWith('npub')) {
-              try {
-                const decoded = NostrTools.nip19.decode(s);
-                return decoded.data;
-              } catch (e) {
-                return null;
-              }
+              try { return NostrTools.nip19.decode(s).data; } catch (e) { return null; }
             }
             return s;
           })
@@ -628,149 +635,117 @@
       });
 
       // フィルタークリア
-      document.getElementById('clear-filter').addEventListener('click', () => {
-        document.getElementById('hex-filter').value = '';
+      addEvent('clear-filter', 'click', () => {
+        const inputEl = document.getElementById('hex-filter');
+        if (inputEl) inputEl.value = '';
         window.app.applyFilter(null);
         localStorage.removeItem('hexFilterValue');
       });
 
-      // フォローリスト読み込み
-      document.getElementById('load-follows').addEventListener('click', () => {
+      // フォロー読み込み
+      addEvent('load-follows', 'click', () => {
         if (!window.nostrAuth.isLoggedIn()) {
           alert('鍵の入力が必要です');
-          showAuthUI();
+          if (typeof showAuthUI === 'function') showAuthUI();
           return;
         }
-
         const pubkeys = Array.from(window.dataStore.followingPubkeys);
         if (pubkeys.length === 0) {
           alert('フォローリストが取得できていません');
           return;
         }
-
-        document.getElementById('hex-filter').value = pubkeys.join('\n');
+        const inputEl = document.getElementById('hex-filter');
+        if (inputEl) inputEl.value = pubkeys.join('\n');
         alert(`${pubkeys.length}人のフォローを読み込みました`);
       });
 
-      // flowgazerしぼりこみ
-      document.getElementById('filter-flowgazer-only').addEventListener('change', (e) => {
-        window.app.toggleFlowgazerFilter(e.target.checked);
-      });
+      // しぼりこみ/自動更新系
+      addEvent('filter-flowgazer-only', 'change', (e) => window.app.toggleFlowgazerFilter(e.target.checked));
 
-      // kind:42表示切り替え
-      document.getElementById('toggle-kind42').addEventListener('change', (e) => {
-        window.app.toggleKind42Display(e.target.checked);
-      });
+      // Kind42表示切り替え
+      const kind42Checkbox = document.getElementById('toggle-kind42');
+      if (kind42Checkbox) {
+        const savedKind42 = localStorage.getItem('showKind42') === 'true';
+        kind42Checkbox.checked = savedKind42;
+        kind42Checkbox.addEventListener('change', (e) => window.app.toggleKind42Display(e.target.checked));
+      }
 
-      // 自動更新トグル
-      document.getElementById('auto-update-toggle').addEventListener('change', (e) => {
+      addEvent('auto-update-toggle', 'change', (e) => {
         window.app.isAutoUpdate = e.target.checked;
-        console.log(`🔄 自動更新: ${e.target.checked ? 'ON' : 'OFF'}`);
-
-        // OFFからONにした時は即座に描画
-        if (e.target.checked) {
-          window.viewState.renderNow();
-        }
+        if (e.target.checked) window.viewState.renderNow();
       });
 
       // もっと見る
-      document.getElementById('load-more').addEventListener('click', function () {
+      addEvent('load-more', 'click', function () {
         this.classList.add('loading');
         window.app.loadMore();
       });
 
       // 詳細設定トグル
-      document.getElementById('show-settings').addEventListener('click', () => {
-        document.getElementById('advanced-settings').classList.remove('hidden');
-        document.getElementById('show-settings').classList.add('hidden');
-        document.getElementById('hide-settings').classList.remove('hidden');
+      addEvent('show-settings', 'click', () => {
+        document.getElementById('advanced-settings')?.classList.remove('hidden');
+        document.getElementById('show-settings')?.classList.add('hidden');
+        document.getElementById('hide-settings')?.classList.remove('hidden');
       });
 
-      document.getElementById('hide-settings').addEventListener('click', () => {
-        document.getElementById('advanced-settings').classList.add('hidden');
-        document.getElementById('hide-settings').classList.add('hidden');
-        document.getElementById('show-settings').classList.remove('hidden');
+      addEvent('hide-settings', 'click', () => {
+        document.getElementById('advanced-settings')?.classList.add('hidden');
+        document.getElementById('hide-settings')?.classList.add('hidden');
+        document.getElementById('show-settings')?.classList.remove('hidden');
       });
 
-      // ふぁぼマークの変更イベント
+      // ふぁぼ初期化
       const favInput = document.getElementById('kind-7-content-input');
       if (favInput) {
-        favInput.addEventListener('change', (e) => {
-          saveFavMark(e.target.value);
-        });
+        favInput.addEventListener('change', (e) => saveFavMark(e.target.value));
+        loadFavMark();
       }
 
-      // 保存されたふぁぼマークを復元
-      loadFavMark();
-
-      // 保存されたフィルターを復元
+      // フィルター復元
       const savedFilter = localStorage.getItem('hexFilterValue');
-      if (savedFilter) {
+      if (savedFilter && document.getElementById('hex-filter')) {
         document.getElementById('hex-filter').value = savedFilter;
       }
-
-      const kind42Checkbox = document.getElementById('toggle-kind42');
-      const savedKind42State = localStorage.getItem('showKind42');
-
-      let showKind42;
-
-      if (savedKind42State !== null) {
-        showKind42 = savedKind42State === 'true';
-      } else {
-        showKind42 = kind42Checkbox.checked;
-      }
-
-      // UI と内部状態を同期
-      kind42Checkbox.checked = showKind42;
-      window.app.showKind42 = showKind42;
-      window.app.toggleKind42Display(showKind42);
-
-      // チェック変更時の保存
-      kind42Checkbox.addEventListener('change', (e) => {
-        const newValue = e.target.checked;
-        window.app.toggleKind42Display(newValue);
-        localStorage.setItem('showKind42', newValue);
-      });
-
     });
 
-    // 新規鍵ペア生成
+    // --- グローバル関数群 ---
+
     function generateAndLoginWithNewKeypair() {
-      const confirmed = confirm(
-        '新しい鍵ペアを生成します。\n' +
-        '生成された秘密鍵（nsec）は失くすと見つからないので\n' +
-        '大事に持っておいてね。'
-      );
-
-      if (!confirmed) return;
-
+      if (!confirm('新しい鍵ペアを生成します。nsecを失くさないよう保存してください。')) return;
       const seckey = window.NostrTools.generateSecretKey();
       const nsec = window.NostrTools.nip19.nsecEncode(seckey);
-
       window.nostrAuth.loginWithNsec(nsec);
+      // 古い方の挙動（location.reload）にするか、新しい方の挙動（UI書き換え）にするか選べますが、
+      // 確実なのは location.reload() です。
       location.reload();
     }
 
-    // ふぁぼマーク保存・読み込み関数
     function saveFavMark(val) {
       const chars = Array.from(val);
-      if (chars.length > 0) {
-        const singleChar = chars[0];
-        localStorage.setItem('favMark', singleChar);
-        const input = document.getElementById('kind-7-content-input');
-        if (input) input.value = singleChar;
-      } else {
-        localStorage.setItem('favMark', "+");
-      }
+      const singleChar = chars.length > 0 ? chars[0] : "+";
+      localStorage.setItem('favMark', singleChar);
+      const input = document.getElementById('kind-7-content-input');
+      if (input) input.value = singleChar;
     }
 
     function loadFavMark() {
       const savedMark = localStorage.getItem('favMark');
-      if (savedMark) {
-        const input = document.getElementById('kind-7-content-input');
-        if (input) input.value = savedMark;
-      }
+      const input = document.getElementById('kind-7-content-input');
+      if (savedMark && input) input.value = savedMark;
     }
+
+    // 離脱復帰時の自動更新
+    let lastActiveTime = Date.now();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        const idleTime = (Date.now() - lastActiveTime) / 1000;
+        if (idleTime > 30 && window.app?.initializeTimelineBaseline) {
+          window.app.initializeTimelineBaseline();
+        }
+      } else {
+        lastActiveTime = Date.now();
+      }
+    });
   </script>
 </body>
 

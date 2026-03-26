@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>flowgazer</title>
     <link rel="icon" type="image/x-icon" href="https://ompomz.github.io/flowgazer/favicon.ico">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://ompomz.github.io/flowgazer/style.css">
 </head>
 
 <body>
@@ -102,20 +102,20 @@
     -->
 
     <!-- 既存JS -->
+    <script src="https://ompomz.github.io/tweetsrecap/utility.js"></script>
     <script src="https://ompomz.github.io/header/loadHeader.js"></script>
     <script src="https://ompomz.github.io/flowgazer/tutorial.js"></script>
-    <script src="./auth.js"></script>
-    <script src="./auth-ui.js"></script>
+    <script src="https://ompomz.github.io/flowgazer/auth.js"></script>
+    <script src="https://ompomz.github.io/flowgazer/auth-ui.js"></script>
     <script src="https://unpkg.com/nostr-tools@2.17.0/lib/nostr.bundle.js"></script>
 
     <!-- 新設計JS -->
     <script src="https://ompomz.github.io/flowgazer/relay-manager.js"></script>
     <script src="https://ompomz.github.io/flowgazer/data-store.js"></script>
-    <script src="./view-state.js"></script>
+    <script src="https://ompomz.github.io/flowgazer/view-state.js"></script>
     <script src="https://ompomz.github.io/flowgazer/profile-fetcher.js"></script>
     <script src="./timeline.js"></script>
-    <script src="./app.js"></script>
-    <script src="https://ompomz.github.io/tweetsrecap/utility.js"></script>
+    <script src="https://ompomz.github.io/flowgazer/app.js"></script>
 
     <script>
         // 初期化確認
@@ -257,9 +257,23 @@
                 alert(`${pubkeys.length}人のフォローを読み込みました`);
             });
 
-            // しぼりこみ/自動更新系
+            // --- しぼりこみ/自動更新系 ---
+
+            // flowgazerのみ表示
             addEvent('filter-flowgazer-only', 'change', (e) => window.app.toggleFlowgazerFilter(e.target.checked));
-            addEvent('toggle-kind42', 'change', (e) => window.app.toggleKind42Display(e.target.checked));
+
+            // Kind42表示切り替えの初期化と連動
+            const kind42Checkbox = document.getElementById('toggle-kind42');
+            if (kind42Checkbox) {
+                // ページ読み込み時にlocalStorageから復元して見た目を合わせる
+                const savedKind42 = localStorage.getItem('showKind42') === 'true';
+                kind42Checkbox.checked = savedKind42;
+
+                // 変更されたら app.js の関数を呼ぶ（保存はapp.js側で実行される）
+                kind42Checkbox.addEventListener('change', (e) => window.app.toggleKind42Display(e.target.checked));
+            }
+
+            // 自動更新
             addEvent('auto-update-toggle', 'change', (e) => {
                 window.app.isAutoUpdate = e.target.checked;
                 if (e.target.checked) window.viewState.renderNow();

@@ -3,61 +3,6 @@
  * 【責務】: DOM要素の生成とレンダリング・適切なクリーンアップ
  */
 
-// ===== ユーティリティ（表示名用） =====
-
-function lenb(str) {
-    let length = 0;
-    for (const char of str) {
-        length += /[^\x01-\x7E]/.test(char) ? 2 : 1;
-    }
-    return length;
-}
-
-function truncateByLenb(str, maxLenb) {
-    let result = '';
-    let currentLenb = 0;
-
-    for (const char of str) {
-        const charLen = /[^\x01-\x7E]/.test(char) ? 2 : 1;
-
-        if (currentLenb + charLen + 1 > maxLenb) {
-            return result + '…';
-        }
-
-        result += char;
-        currentLenb += charLen;
-    }
-    return result;
-}
-
-function hexToHue(hex6) {
-    const r = parseInt(hex6.slice(0, 2), 16) / 255;
-    const g = parseInt(hex6.slice(2, 4), 16) / 255;
-    const b = parseInt(hex6.slice(4, 6), 16) / 255;
-
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    const d = max - min;
-
-    let h = 0;
-    if (d !== 0) {
-        switch (max) {
-            case r:
-                h = ((g - b) / d) % 6;
-                break;
-            case g:
-                h = (b - r) / d + 2;
-                break;
-            case b:
-                h = (r - g) / d + 4;
-                break;
-        }
-        h *= 60;
-        if (h < 0) h += 360;
-    }
-    return Math.round(h);
-}
-
 // ===== Timeline クラス =====
 
 class Timeline {
@@ -66,7 +11,7 @@ class Timeline {
         this.currentTab = 'global';
         // DOM要素の追跡用
         this.activeElements = new Set();
-        // ★ 追加：チャンネル名キャッシュ
+        // チャンネル名キャッシュ
         this.channelNameMap = window.channelNameMap || new Map();
         // フィルターオプション
         this.filterOptions = {
@@ -488,6 +433,7 @@ class Timeline {
         let timer;
 
         const start = () => {
+            // 900ms 後に実行
             timer = setTimeout(() => {
                 if (window.sendLikeEvent) {
                     if (confirm('☆ふぁぼる？')) {
@@ -497,18 +443,27 @@ class Timeline {
             }, 900);
         };
 
-        const cancel = () => clearTimeout(timer);
+        const cancel = () => {
+            clearTimeout(timer);
+        };
 
         return {
             attach(element) {
+                // 開始
                 element.addEventListener('mousedown', start);
+                element.addEventListener('touchstart', start, { passive: true });
+
+                // 解除（指を離した、マウスが外れた）
                 element.addEventListener('mouseup', cancel);
                 element.addEventListener('mouseleave', cancel);
-                element.addEventListener('touchstart', start, { passive: true });
                 element.addEventListener('touchend', cancel);
                 element.addEventListener('touchcancel', cancel);
 
-                // ハンドラー参照を保存（detach用）
+                // 動いたらキャンセル（スクロール対策）
+                // マウスを動かしたり、指をスライド（スクロール）させたら即座にタイマー停止
+                element.addEventListener('mousemove', cancel);
+                element.addEventListener('touchmove', cancel, { passive: true });
+
                 element._longPressHandlers = { start, cancel };
             },
 
@@ -520,15 +475,15 @@ class Timeline {
                 element.removeEventListener('mousedown', start);
                 element.removeEventListener('mouseup', cancel);
                 element.removeEventListener('mouseleave', cancel);
+                element.removeEventListener('mousemove', cancel);
                 element.removeEventListener('touchstart', start);
                 element.removeEventListener('touchend', cancel);
+                element.removeEventListener('touchmove', cancel);
                 element.removeEventListener('touchcancel', cancel);
 
                 delete element._longPressHandlers;
                 clearTimeout(timer);
             },
-
-            // 後で detach するために element を保持
             element: null
         };
     }
@@ -571,7 +526,7 @@ class Timeline {
 
     createAuthorLink(pubkey) {
         const npub = window.NostrTools.nip19.npubEncode(pubkey);
-        const displayName = window.dataStore.getDisplayName(pubkey);
+        const rawName = window.dataStore.getDisplayName(pubkey) || pubkey.substring(0, 8);
 
         const link = document.createElement('a');
         link.className = 'pubkey-ref';
@@ -579,8 +534,32 @@ class Timeline {
         link.target = '_blank';
         link.rel = 'noreferrer';
 
-        // 💡 MyNostrUtils の関数を活用
-        link.textContent = MyNostrUtils.truncateByByte(displayName, 20);
+        let truncatedName = "";
+        let currentWidth = 0;
+        const ellipsis = "…";
+        const ellipsisWidth = this.measureCtx.measureText(ellipsis).width;
+        const maxWidth = this.maxNameWidthPx;
+
+        for (const char of rawName) {
+            const charWidth = this.measureCtx.measureText(char).width;
+
+            // 次の文字を足すと maxWidth を超える可能性がある場合
+            if (currentWidth + charWidth > maxWidth) {
+                // すでに1文字以上あるなら、末尾を三点リーダーにする余裕があるか判定してカット
+                if (truncatedName.length > 0) {
+                    // 三点リーダー込みで幅に収まる位置まで削る（安全策）
+                    while (truncatedName.length > 0 && (this.measureCtx.measureText(truncatedName).width + ellipsisWidth) > maxWidth) {
+                        truncatedName = truncatedName.slice(0, -1);
+                    }
+                    truncatedName += ellipsis;
+                }
+                break;
+            }
+            truncatedName += char;
+            currentWidth += charWidth;
+        }
+
+        link.textContent = truncatedName;
         link.style.color = MyNostrUtils.getHslColor(pubkey);
 
         return link;
@@ -589,60 +568,11 @@ class Timeline {
     createContent(event) {
         const div = document.createElement('div');
         div.className = 'post-content';
-        const formattedContent = MyNostrUtils.linkify(event.content, { expandMedia: false });
+        const rawContent = event.content || '';
+        const escapedContent = MyNostrUtils.escapeHtml(rawContent);
+        const formattedContent = MyNostrUtils.linkify(escapedContent, { expandMedia: false });
         div.innerHTML = formattedContent;
-
         return div;
-    }
-
-    parseContent(content, tags) {
-        const pattern = /(https?:\/\/[^\s]+)|(nostr:[\w]+1[ac-hj-np-z02-9]+)|(:[_a-zA-Z0-9]+:)/;
-        const parts = content.split(pattern).filter(s => s);
-
-        return parts.map(s => {
-            if (!s) return document.createTextNode('');
-
-            // --- URL ---
-            if (s.startsWith('http')) {
-                return this.createUrlLink(s);
-            }
-
-            // --- nostr:xxx 埋め込み ---
-            if (s.startsWith('nostr:')) {
-                const code = s.substring(6); // "nostr:" を除去
-
-                try {
-                    const decoded = NostrTools.nip19.decode(code);
-
-                    // nevent / note → イベントIDが取れる
-                    if (decoded.type === "nevent" || decoded.type === "note") {
-                        const id = decoded.data.id;
-                        if (id) {
-                            const original = window.dataStore.getEvent(id);
-                            if (original) {
-                                // inline RT を生成
-                                return this.createInlineRTElement(original);
-                            }
-                        }
-                    }
-
-                    // nprofile / naddr などは今は通常の nostr リンクとして扱う
-                    return this.createNostrRef(code);
-
-                } catch (e) {
-                    // decode 失敗 → 通常の nostr リンク
-                    return this.createNostrRef(code);
-                }
-            }
-
-            // --- カスタム絵文字 ---
-            if (s.startsWith(':') && s.endsWith(':')) {
-                return this.createCustomEmoji(s, tags);
-            }
-
-            // --- 通常テキスト ---
-            return document.createTextNode(s);
-        });
     }
 
     createUrlLink(url) {
