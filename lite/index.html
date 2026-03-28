@@ -6,6 +6,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>flowgazer lite</title>
   <style>
+    html {
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
+
     :root {
       --primary: #0078D4;
       --primary-hover: #106EBE;
@@ -19,7 +24,7 @@
     * {
       margin: 0;
       padding: 0;
-      box-sizing: border-box
+      box-sizing: border-box;
     }
 
     body {
@@ -42,12 +47,6 @@
     a {
       color: var(--primary);
       text-decoration: none;
-    }
-
-    h1 {
-      font-size: 1.2rem;
-      margin-bottom: .5rem;
-      color: var(--text);
     }
 
     input,
@@ -80,7 +79,7 @@
       resize: none;
       overflow: hidden;
       font-weight: 400;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Helvetica Neue", Arial, sans-serif;
+      font-family: inherit;
     }
 
     .container button {
@@ -95,20 +94,7 @@
       color: var(--text);
     }
 
-    .primary-button {
-      background-color: var(--primary);
-      color: #fff;
-      border: 1px solid var(--primary);
-    }
-
-    .primary-button:hover {
-      background-color: var(--primary-hover);
-    }
-
-    .full-width {
-      width: 100%
-    }
-
+    /* --- Layout Containers --- */
     .flex-container {
       display: flex;
       align-items: center;
@@ -116,33 +102,151 @@
       margin: .5rem 0;
     }
 
+    .between-container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: .5rem 0;
+    }
+
     .flex-container input,
-    .flex-container textarea {
+    .flex-container textarea,
+    .between-container input {
       flex-grow: 1;
       margin: 0;
     }
 
-    .flex-container button {
-      margin: 0
+    /* --- Specific Elements --- */
+    #relay-url {
+      height: 2.25rem;
     }
 
+    #new-post-content {
+      height: 2.25rem;
+      margin-left: -0.5rem;
+    }
+
+    #npub-link {
+      display: none;
+    }
+
+    /* --- Advanced Settings --- */
+    #advanced-settings>div:first-child {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-left: 0.25rem;
+      flex-wrap: wrap;
+    }
+
+    #advanced-settings label {
+      margin-left: 1rem;
+    }
+
+    #advanced-settings label[for="auto-update-toggle"] {
+      margin-left: 0;
+    }
+
+    #filter-flowgazer-only,
+    label[for="filter-flowgazer-only"] {
+      display: none;
+    }
+
+    #kind-7-content-input {
+      width: 2.5rem;
+      height: 1.5rem;
+      text-align: center;
+      font-size: 0.9rem;
+      vertical-align: middle;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      display: inline-block;
+      padding: 0;
+    }
+
+    /* フィルタボタン縦並び用コンテナ */
+    .flex-container>div:has(#apply-filter) {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    /* --- Post & Footer Area --- */
+    form[onsubmit*="false"] {
+      display: inline;
+    }
+
+    #temp-nsec-input {
+      display: none;
+      max-width: 3.5rem;
+      margin-right: 0.5rem;
+    }
+
+    .viewongithub {
+      text-align: center;
+      margin-top: -3rem;
+    }
+
+    /* --- Components --- */
+    .full-width {
+      width: 100%;
+    }
+
+    #tab-buttons {
+      display: flex;
+      margin: 0 0 -6px 0;
+      justify-content: center;
+    }
+
+    #tab-buttons .tab-button {
+      flex: 1;
+      border: none;
+      background: var(--border);
+      border-radius: 0;
+      color: var(--text-soft);
+    }
+
+    #tab-buttons .tab-button.active {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    #load-more {
+      background: var(--primary);
+      color: #fff;
+      margin-top: 0.5rem;
+      margin-bottom: calc(env(safe-area-inset-bottom) + 3.5rem);
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #subscribe-relay,
+    #show-settings,
+    #hide-settings,
+    #send-new-post {
+      text-align: center;
+      padding: 4px 0;
+      width: 6rem;
+    }
+
+    /* --- Utility --- */
+    .hidden {
+      display: none;
+    }
+
+    /* --- Timeline Event Styles --- */
     ul {
       list-style: none;
-      padding: 0;
-      margin: .5rem 0;
+      margin-top: 0.5rem;
+      min-height: 1px;
     }
 
     li.event {
       word-break: break-all;
       padding: .5rem .25rem;
       border-top: 1px solid var(--border);
-    }
-
-    ul,
-    li {
-      font-size: .9rem;
-      -webkit-text-size-adjust: none;
-      text-size-adjust: none;
     }
 
     .post-content {
@@ -164,231 +268,12 @@
       vertical-align: bottom;
     }
 
-    #tab-buttons {
-      width: 100%;
-      max-width: none;
-      margin-left: 0;
-      margin-right: 0;
-      display: flex;
-      gap: 0;
-      margin: 0 0 -6px 0;
-      justify-content: center;
-    }
-
-    #tab-buttons .tab-button {
-      flex: 1;
-      border: none;
-      background: var(--border);
-      cursor: pointer;
-      border-radius: 0;
-      color: var(--text-soft);
-      margin-bottom: 0;
-    }
-
-    #tab-buttons .tab-button+.tab-button {
-      border-left: none;
-    }
-
-    #tab-buttons .tab-button.active {
-      background: var(--primary);
-      color: #fff;
-      border-color: var(--primary);
-    }
-
-    #load-more {
-      background: var(--primary);
-      color: #fff;
-      border: 1px solid var(--primary);
-      margin-top: 0.5rem;
-      margin-bottom: calc(env(safe-area-inset-bottom) + 3rem);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
-      padding: 4px 0;
-      width: 100%;
-    }
-
-    #load-more.loading::before {
-      content: "";
-      display: inline-block;
-      width: 0.9rem;
-      height: 0.9rem;
-      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3' stroke-linecap='round'><path d='M12 2a10 10 0 1 1-10 10' /></svg>");
-      background-size: contain;
-      animation: spin 1s linear infinite;
-    }
-
-    @keyframes spin {
-      to {
-        transform: rotate(360deg);
-      }
-    }
-
-    #subscribe-relay,
-    #apply-filter,
-    #clear-filter,
-    #load-follows,
-    #send-new-post,
-    #show-settings,
-    #hide-settings {
-      text-align: center;
-      padding: 4px 0;
-      width: 5rem;
-    }
-
-    .hidden {
-      display: none
-    }
-
     @media (max-width:767px) {
       .container {
         max-width: 100%;
         padding: 4px;
         margin: 0;
       }
-    }
-
-    /* Tutorial Overlay */
-
-    #tutorial-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      justify-content: center;
-      align-items: center;
-      z-index: 9999;
-      background-color: rgba(243, 242, 241, .7);
-      display: none;
-      backdrop-filter: blur(3px);
-      transition: all 0.3s ease-in-out;
-    }
-
-    #tutorial-modal {
-      background-color: var(--surface);
-      padding: 1.2rem 1.2rem .5rem 1.2rem;
-      border-radius: .6rem;
-      max-width: 600px;
-      width: 80%;
-      max-height: 90vh;
-      overflow-y: auto;
-      position: relative;
-    }
-
-    #image-container {
-      text-align: center;
-      margin-bottom: .5rem;
-    }
-
-    .tutorial-image {
-      display: none;
-      max-width: 100%;
-      height: auto;
-    }
-
-    .tutorial-image.active {
-      display: block
-    }
-
-    #tutorial-navigation {
-      display: flex;
-      justify-content: space-between;
-      margin: .5rem 0 0 0;
-    }
-
-    #prev-button,
-    #next-button {
-      width: 2rem;
-      height: 2rem;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1rem;
-      font-weight: 600;
-      color: #fff;
-      background-color: var(--primary);
-      border: 1px solid var(--primary);
-      border-radius: 50%;
-      cursor: pointer;
-    }
-
-    #prev-button:hover,
-    #next-button:hover {
-      background-color: var(--primary-hover);
-    }
-
-    #tutorial-close-button {
-      position: absolute;
-      top: .5rem;
-      right: .5rem;
-      font-size: .8rem;
-      font-weight: 600;
-      color: #fff;
-      background-color: var(--primary);
-      padding: .25rem .6rem;
-      border-radius: 999px;
-      cursor: pointer;
-      border: 1px solid var(--primary);
-      white-space: nowrap;
-    }
-
-    .dot-navigation {
-      text-align: center
-    }
-
-    .dot {
-      height: 1rem;
-      width: 1rem;
-      background-color: var(--border);
-      border-radius: 50%;
-      display: inline-block;
-      margin: 0 5px;
-      cursor: pointer;
-    }
-
-    .dot.active {
-      background-color: var(--primary);
-    }
-
-    .modal {
-      display: none;
-      position: fixed;
-      z-index: 1;
-      left: 0;
-      top: 0;
-      width: 100%;
-      height: 100%;
-      overflow: auto;
-      background-color: rgba(0, 0, 0, .2);
-      backdrop-filter: blur(3px);
-      -webkit-backdrop-filter: blur(3px);
-    }
-
-    .modal-content {
-      margin: auto;
-      display: block;
-      max-width: 80%;
-      max-height: 80vh;
-      width: 80%;
-    }
-
-    .modal-image {
-      width: auto;
-      height: auto;
-      max-width: 100%;
-      max-height: 100%;
-      object-fit: contain;
-      display: block;
-      margin: auto;
-    }
-
-    .close-button {
-      color: #fff;
-      font-size: 40px;
-      font-weight: 700;
-      cursor: pointer;
     }
 
     .post-options {
@@ -398,16 +283,13 @@
       margin: 0.5rem 0;
     }
 
-    /* select 共通スタイル */
     .post-options select {
       height: 2.25rem;
       padding: 0 0.5rem;
-      font-size: 0.9rem;
       border: 1px solid var(--border);
       background: var(--surface);
       color: var(--text);
       border-radius: 4px;
-      box-sizing: border-box;
       cursor: pointer;
     }
   </style>
@@ -417,7 +299,7 @@
   <div class="container">
     <div class="flex-container">
       <button onclick="showAuthUI()">🔑</button>
-      <input id="relay-url" type="text" list="relay-suggestions" style="flex-grow: 1; height: 2.25rem;">
+      <input id="relay-url" type="text" list="relay-suggestions">
       <datalist id="relay-suggestions">
         <option value="wss://r.kojira.io/">
         <option value="wss://yabu.me/">
@@ -429,39 +311,38 @@
       </datalist>
       <button id="subscribe-relay">connect</button>
     </div>
-    <div class="flex-container" style="justify-content: space-between;">
-      <a id="npub-link" class="npub-link" target="_blank" style="display: none;"></a><span id="not-logged-in">ROM</span>
-      <button id="show-settings" style="width: 6rem;">option</button>
-      <button id="hide-settings" class="hidden" style="width: 6rem;">option</button>
+    <div class="between-container">
+      <a id="npub-link" class="npub-link" target="_blank"></a><span id="not-logged-in">ROM</span>
+      <button id="show-settings">option</button>
+      <button id="hide-settings" class="hidden">option</button>
     </div>
-    <button id="generate-trial-keypair" class="full-width" onclick="generateAndLoginWithNewKeypair()"
-      style="display: none;">
+
+    <button id="generate-trial-keypair" class="hidden" onclick="generateAndLoginWithNewKeypair()">
       新しい鍵ペアを生成して試す！
     </button>
 
     <div id="advanced-settings" class="hidden">
 
-      <div style="display: flex; align-items: center; gap: 0.5rem; margin-left: 0.25rem; flex-wrap: wrap;">
+      <div>
         <label for="auto-update-toggle">autoload</label>
         <input type="checkbox" id="auto-update-toggle" checked>
 
-        <label for="filter-flowgazer-only" style="margin-left: 1rem; display: none;">via flowgazer しぼりこみ</label>
-        <input type="checkbox" id="filter-flowgazer-only" style="display: none;">
+        <label for="filter-flowgazer-only">via flowgazer しぼりこみ</label>
+        <input type="checkbox" id="filter-flowgazer-only">
 
-        <label for="toggle-kind42" style="margin-left: 1rem;">view kind:42</label>
+        <label for="toggle-kind42">view kind:42</label>
         <input type="checkbox" id="toggle-kind42">
 
-        <label for="kind-7-content-input" style="margin-left: 1rem;">kind:7 content</label>
-        <input id="kind-7-content-input" type="text" maxlength="10" value="⭐"
-          style="width: 2.5rem; height: 1.5rem; text-align: center; font-size: 0.9rem; vertical-align: middle; border: 1px solid #ccc; border-radius: 4px; display: inline-block;">
+        <label for="kind-7-content-input">kind:7 content</label>
+        <input id="kind-7-content-input" type="text" maxlength="10" value="⭐">
       </div>
 
       <div class="flex-container">
         <textarea id="hex-filter" rows="2" placeholder="(npub1…,hex…)"></textarea>
-        <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+        <div>
           <button id="apply-filter">apply</button>
           <button id="clear-filter">clear</button>
-          <button id="load-follows" style="display: none;">kind:3</button>
+          <button id="load-follows" class="hidden">kind:3</button>
         </div>
       </div>
 
@@ -477,14 +358,13 @@
 
     </div>
 
-    <div class="flex-container" style="gap: 0;">
-      <input type="text" name="username" autocomplete="username" style="display: none;">
-      <form onsubmit="return false;" style="display: inline;">
-        <input type="password" id="temp-nsec-input" autocomplete="nsec" placeholder="nsec"
-          style="display: none; width: 3.5rem; margin-right: 0.5rem;">
+    <div class="flex-container">
+      <input type="text" name="username" autocomplete="username" class="hidden">
+      <form onsubmit="return false;">
+        <input type="password" id="temp-nsec-input" autocomplete="nsec" placeholder="nsec">
       </form>
-      <textarea id="new-post-content" placeholder="" style="height: 2.25rem;"></textarea>
-      <button id="send-new-post" style="margin-left: 0.5rem;">send</button>
+      <textarea id="new-post-content" placeholder=""></textarea>
+      <button id="send-new-post">send</button>
     </div>
 
     <div id="tab-buttons">
@@ -497,9 +377,9 @@
     <ul id="timeline"></ul>
 
     <button id="load-more" class="full-width">loadmore</button>
-    <p style="text-align: center; margin-top: -2.5rem;"><a href="https://github.com/ompomz/flowgazer">view on
-        github</a>
-    </p>
+
+    <p class="viewongithub"><a href="https://github.com/ompomz/flowgazer">view on github</a></p>
+
   </div>
 
   <!-- 既存JS -->

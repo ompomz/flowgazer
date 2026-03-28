@@ -212,7 +212,7 @@ li.event {
     background: #66b3ff;
     color: #fff;
     margin-top: 0.5rem;
-    margin-bottom: calc(env(safe-area-inset-bottom) + 3rem);
+    margin-bottom: calc(env(safe-area-inset-bottom) + 3.5rem);
     border: 1px solid #66b3ff;
     display: flex;
     align-items: center;
@@ -220,7 +220,7 @@ li.event {
     gap: 0.5rem;
 }
 
-/* ローディングアニメーション(spin)は必要なので維持 */
+/* ローディングアニメーション */
 #load-more.loading::before {
     content: "";
     width: 0.9rem;
@@ -402,4 +402,13 @@ li.event {
 
 .dot.active {
     background-color: #00796b
+}
+
+.viewongithub {
+    text-align: center;
+    margin-top: -3rem;
+}
+
+.viewongithub a {
+    color: #66b3ff !important;
 }
