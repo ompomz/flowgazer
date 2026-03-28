@@ -211,8 +211,7 @@ li.event {
 #load-more {
     background: #66b3ff;
     color: #fff;
-    margin-top: 0.5rem;
-    margin-bottom: calc(env(safe-area-inset-bottom) + 3.5rem);
+    margin: 0.5rem 0;
     border: 1px solid #66b3ff;
     display: flex;
     align-items: center;
@@ -406,7 +405,7 @@ li.event {
 
 .viewongithub {
     text-align: center;
-    margin-top: -3rem;
+    padding-bottom: 3rem;
 }
 
 .viewongithub a {
