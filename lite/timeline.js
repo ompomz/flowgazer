@@ -18,13 +18,15 @@ class Timeline {
             flowgazerOnly: false,
             authors: null
         };
+
+        // 1. Canvasを作成して、測るためのペン(measureCtx)を保存する
         const canvas = document.createElement('canvas');
         this.measureCtx = canvas.getContext('2d');
         this.measureCtx.font = '14px sans-serif';
 
-        const sampleText = "🎵🎵か～('□')ま～('□')ど～('ｏ')　か～('□')ま～('□')ど～('ｏ') 　瀬戸の海は　お母さん 　讃岐の山は　お父さん 　か～('□')ま～('□')ど～('ｏ')　か～('□')ま～('□')ど～('ｏ') 　丸い心は　かまどのお菓子 名物かまど";
-        this.maxContentWidthPx = this.measureCtx.measureText(sampleText).width;
+        // 2. 時刻の幅を計算
         this.maxNameWidthPx = this.measureCtx.measureText("[00:00:00]").width;
+        this.maxContentWidthPx = 0;
     }
 
     // ========================================
@@ -106,46 +108,50 @@ class Timeline {
     }
 
     createExpandableContent(event) {
-        const fullContent = event.content;
+        const fullContent = event.content || '';
         const lineCount = (fullContent.match(/\n/g) || []).length;
 
-        // 1. 絶対短いものは即座に返す
-        // 100文字以下、かつ改行が少ない、かつ画像リンクらしきものがない場合
+        // 1. 判定用の「実質的な長さ」を計算（識別子を無視）
+        const virtualContent = fullContent.replace(/(https?:\/\/[^\s]+|nostr:[a-z0-9]+)/gi, 'L');
+
         const hasMedia = /https?:\/\/[^\s]+\.(jpg|jpeg|png|gif|webp|mp4)/i.test(fullContent);
-        if (fullContent.length < 100 && lineCount < 4 && !hasMedia) {
+
+        // 判定（仮想的な長さが100未満かつ改行が少なければそのまま）
+        if (virtualContent.length < 100 && lineCount < 4 && !hasMedia) {
             return this.createContent(event);
         }
 
-        // 2. 折りたたみ閾値の判定
-        // ここでは Canvas を使わず、一旦 MyNostrUtils 側で「文字数」ベースで切る
-        // (1行40文字想定で3行分 = 120文字くらいを閾値にする)
         const threshold = 120;
-        const isPotentiallyLong = fullContent.length > threshold || lineCount >= 4;
+        // 仮想的な長さで「長いかどうか」を決める
+        const isPotentiallyLong = virtualContent.length > threshold || lineCount >= 4;
 
         if (!isPotentiallyLong) {
             return this.createContent(event);
         }
 
-        // 3. 短縮版のテキストを作成
-        // MyNostrUtils.truncateByByte があればそれを使う
-        const shortText = MyNostrUtils.truncateByByte(fullContent, threshold);
-        const isLong = shortText.length < fullContent.length;
+        // 2. 短縮版のテキスト作成
+        let shortText = fullContent;
+        if (fullContent.length > threshold) {
+            // 簡易的には substring でも良いが、壊さないために慎重にカット
+            shortText = fullContent.substring(0, threshold);
+        }
 
+        const isLong = shortText.length < fullContent.length;
         if (!isLong) return this.createContent(event);
 
-        // --- ここからDOM構築 ---
+        // --- DOM構築 ---
         const wrapper = document.createElement('span');
         wrapper.className = 'expandable-content';
 
         const render = (text) => {
+            // text が短縮されていても、linkify が動くようにする
             const tempEvent = { ...event, content: text };
             return this.createContent(tempEvent);
         };
 
-        let currentContentNode = render(shortText);
+        let currentContentNode = render(shortText + "...");
         wrapper.appendChild(currentContentNode);
 
-        // 全文表示ボタン
         const toggleLink = document.createElement('span');
         toggleLink.textContent = ' [全文を表示]';
         toggleLink.className = 'npub-link';
@@ -154,12 +160,9 @@ class Timeline {
         toggleLink.onclick = (e) => {
             e.stopPropagation();
             const isExpanded = toggleLink.textContent.includes('とじる');
-
-            // 切り替え
-            const newNode = render(isExpanded ? shortText : fullContent);
+            const newNode = render(isExpanded ? shortText + "..." : fullContent);
             currentContentNode.replaceWith(newNode);
             currentContentNode = newNode;
-
             toggleLink.textContent = isExpanded ? ' [全文を表示]' : ' [とじる]';
         };
 
@@ -560,7 +563,6 @@ class Timeline {
         }
 
         link.textContent = truncatedName;
-        link.style.color = MyNostrUtils.getHslColor(pubkey);
 
         return link;
     }
@@ -569,9 +571,41 @@ class Timeline {
         const div = document.createElement('div');
         div.className = 'post-content';
         const rawContent = event.content || '';
+
+        // 1. まずは普通にリンク化（文字列が生成される）
         const escapedContent = MyNostrUtils.escapeHtml(rawContent);
         const formattedContent = MyNostrUtils.linkify(escapedContent, { expandMedia: false });
         div.innerHTML = formattedContent;
+
+        // 2. 既存の createInlineRTElement を活用する
+        const links = div.querySelectorAll('a.nostr-ref');
+        links.forEach(link => {
+            // リンクが nostr:nevent... または nostr:note... かチェック
+            if (link.textContent.startsWith('nostr:')) {
+                const href = link.getAttribute('href');
+                const urlParams = new URLSearchParams(new URL(href).search);
+                const nip19 = urlParams.get('id'); // URLから識別子を取得
+
+                try {
+                    const decoded = window.NostrTools.nip19.decode(nip19);
+                    let targetId = (decoded.type === 'nevent') ? decoded.data.id : (decoded.type === 'note' ? decoded.data : null);
+
+                    if (targetId) {
+                        const originalEvent = window.dataStore.getEvent(targetId);
+                        if (originalEvent) {
+                            // 既存のメソッドをそのまま呼び出す
+                            const inlineRT = this.createInlineRTElement(originalEvent);
+
+                            // <a>タグを丸ごと <span>(RT表示) に置き換え
+                            link.replaceWith(inlineRT);
+                        }
+                    }
+                } catch (e) {
+                    // デコードエラー（短縮されて壊れている等）ならリンクのまま維持
+                }
+            }
+        });
+
         return div;
     }
 

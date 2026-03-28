@@ -198,10 +198,15 @@
     #load-more {
       background: var(--primary);
       color: #fff;
-      margin-top: 0.5rem;
-      margin-bottom: env(safe-area-inset-bottom);
-      margin-bottom: calc(env(safe-area-inset-bottom) + 3rem);
       border: 1px solid var(--primary);
+      margin-top: 0.5rem;
+      margin-bottom: calc(env(safe-area-inset-bottom) + 3rem);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 4px 0;
+      width: 100%;
     }
 
     #load-more.loading::before {
@@ -209,10 +214,9 @@
       display: inline-block;
       width: 0.9rem;
       height: 0.9rem;
-      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23aaa' stroke-width='2'><path d='M12 2a10 10 0 1 1-10 10' /></svg>");
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3' stroke-linecap='round'><path d='M12 2a10 10 0 1 1-10 10' /></svg>");
       background-size: contain;
       animation: spin 1s linear infinite;
-      align-items: center;
     }
 
     @keyframes spin {
