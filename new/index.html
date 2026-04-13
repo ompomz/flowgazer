@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>flowgazer</title>
+    <link rel="icon" type="image/x-icon" href="https://ompomz.github.io/flowgazer/favicon.ico">
+    <link rel="stylesheet" href="https://ompomz.github.io/flowgazer/style.css">
+</head>
+
+<body>
+    <div id="header-placeholder"></div>
+
+    <div class="container">
+        <a href="https://github.com/ompomz/flowgazer/">
+            <h1>flowgazer</h1>
+        </a>
+        <p>新設計版！タイムラインを見たり、投稿したり、ふぁぼったりできるよ。作ったのはClaude。</p>
+
+        <div class="flex-container">
+            <button id="generate-trial-keypair" onclick="generateAndLoginWithNewKeypair()">新しい鍵ペアを生成して試す！</button>
+            <button class="btn-grow" onclick="showAuthUI()">すでに鍵をお持ちの方</button>
+        </div>
+
+        <div class="flex-container"> <a id="npub-link" class="npub-link" target="_blank"></a>
+            <span id="not-logged-in">見るだけモード</span>
+        </div>
+
+        <textarea id="new-post-content" rows="3" placeholder="いまなにしてる？" class="full-width"></textarea>
+        <button id="send-new-post" class="full-width">投稿</button>
+
+        <div class="flex-center">
+            <button id="show-settings">詳細設定を表示</button>
+            <button id="hide-settings" class="hidden">詳細設定を隠す</button>
+        </div>
+
+        <div id="advanced-settings" class="hidden">
+
+            <div class="flex-container">
+                <input id="relay-url" type="text" list="relay-suggestions" placeholder="wss://...">
+                <datalist id="relay-suggestions">
+                    <option value="wss://r.kojira.io/">
+                    <option value="wss://yabu.me/">
+                    <option value="wss://nostr.compile-error.net/">
+                    <option value="wss://relay-jp.nostr.wirednet.jp/">
+                    <option value="wss://relay.damus.io/">
+                    <option value="wss://nos.lol/">
+                    <option value="wss://relay.nostr.band/">
+                </datalist>
+                <button id="subscribe-relay">接続</button>
+            </div>
+
+            <div class="flex-container flex-wrap">
+                <select id="post-kind-selector">
+                    <option value="1">投稿モード：通常</option>
+                    <option value="42">投稿モード：チャンネル</option>
+                </select>
+                <select id="channel-list-selector" class="hidden">
+                    <option value="">チャンネルを選択</option>
+                </select>
+            </div>
+
+            <div class="settings-checkbox-row flex-wrap">
+                <label for="auto-update-toggle" class="no-margin-left">自動更新</label>
+                <input type="checkbox" id="auto-update-toggle" checked>
+
+                <label for="filter-flowgazer-only">via flowgazer</label>
+                <input type="checkbox" id="filter-flowgazer-only">
+
+                <label for="toggle-kind42">チャンネル投稿</label>
+                <input type="checkbox" id="toggle-kind42">
+
+                <label for="kind-7-content-input">ふぁぼマーク</label>
+                <input id="kind-7-content-input" type="text" maxlength="10" value="⭐">
+            </div>
+
+            <div class="flex-container">
+                <textarea id="hex-filter" rows="2" placeholder="投稿者しぼりこみ(npub1…,hex…)"></textarea>
+                <div class="flex-column">
+                    <button id="apply-filter">適用</button>
+                    <button id="clear-filter">クリア</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-buttons">
+            <button id="tab-global" class="tab-button active">みんな</button>
+            <button id="tab-following" class="tab-button">フォロー</button>
+            <!-- チャンネルタブ：初期は非表示。チャンネル選択時に表示 -->
+            <button id="tab-channel" class="tab-button" style="display:none;">チャンネル</button>
+            <button id="tab-myposts" class="tab-button">自分</button>
+            <button id="tab-likes" class="tab-button">ふぁぼられ</button>
+        </div>
+
+        <ul id="timeline"></ul>
+        <button id="load-more" class="full-width">もっと見る</button>
+
+        <p class="viewongithub"><a href="https://github.com/ompomz/flowgazer">view on github</a></p>
+    </div>
+
+    <!-- 
+    Based on motherfucking-nostr-client by かすてらふぃ（jiftechnify）
+    Some parts generated or modified with AI assistance  
+    Uses nostr-tools (MIT License)
+    Licensed under WTFPL
+    -->
+
+    <!-- 既存JS -->
+    <script src="https://ompomz.github.io/tweetsrecap/utility.js"></script>
+    <script src="https://ompomz.github.io/header/loadHeader.js"></script>
+    <script src="https://ompomz.github.io/flowgazer/auth.js"></script>
+    <script src="./auth-ui.js"></script>
+    <script src="https://unpkg.com/nostr-tools@2.17.0/lib/nostr.bundle.js"></script>
+
+    <!-- 新設計JS -->
+    <script src="https://ompomz.github.io/flowgazer/relay-manager.js"></script>
+    <script src="./data-store.js"></script>
+    <script src="./view-state.js"></script>
+    <script src="https://ompomz.github.io/flowgazer/profile-fetcher.js"></script>
+    <script src="https://ompomz.github.io/flowgazer/timeline.js"></script>
+    <script src="./app.js"></script>
+
+    <script>
+        console.log('✅ スクリプト読み込み完了');
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            if (!window.dataStore || !window.viewState) {
+                console.error('❌ 初期化エラー');
+                return;
+            }
+
+            window.timeline = new Timeline(document.getElementById('timeline'));
+
+            await window.app.init();
+        });
+    </script>
+</body>
+
+</html>
