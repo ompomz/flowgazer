@@ -44,7 +44,7 @@ class FlowgazerApp {
 
     // リレー接続
     const savedRelay = localStorage.getItem('relayUrl');
-    const defaultRelay = 'wss://nos.lol/';
+    const defaultRelay = 'wss://relay.damus.io/';
     const relay = savedRelay || defaultRelay;
     await this.connectRelay(relay);
 
@@ -1316,7 +1316,9 @@ class FlowgazerApp {
     if (btn) {
       // 長い名前は切り詰める
       btn.textContent = name.length > 12 ? name.substring(0, 12) + '…' : name;
-      btn.style.display = '';
+
+      // style.displayをいじるのではなく、クラスで制御する
+      btn.classList.remove('hidden');
     }
   }
 }
