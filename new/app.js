@@ -44,7 +44,7 @@ class FlowgazerApp {
 
     // リレー接続
     const savedRelay = localStorage.getItem('relayUrl');
-    const defaultRelay = 'wss://relay.damus.io/';
+    const defaultRelay = 'wss://nos.lol/';
     const relay = savedRelay || defaultRelay;
     await this.connectRelay(relay);
 

@@ -6,17 +6,377 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>flowgazer</title>
     <link rel="icon" type="image/x-icon" href="https://ompomz.github.io/flowgazer/favicon.ico">
-    <link rel="stylesheet" href="./style.css">
+    <style>
+        /* ベーススタイル */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            -webkit-text-size-adjust: 100%;
+            text-size-adjust: 100%;
+        }
+
+        body {
+            font-weight: 400;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Helvetica Neue", Arial, sans-serif;
+            padding: .5rem;
+            line-height: 1.3;
+            background-color: #f7f7f7;
+            color: #666;
+            font-size: .9rem;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto 0 .5rem;
+            padding: .5rem;
+        }
+
+        a {
+            color: #666;
+            text-decoration: none;
+        }
+
+        h1 {
+            font-size: 1.1rem;
+        }
+
+        /* フォーム要素の共通設定 */
+        input,
+        textarea,
+        select {
+            transition: background-color 0.3s, color 0.3s;
+            cursor: pointer;
+            font-size: .9rem;
+            padding: .5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            color: #666;
+            background-color: #fff;
+        }
+
+        input[type="checkbox"] {
+            vertical-align: middle;
+            cursor: pointer;
+        }
+
+        textarea {
+            resize: vertical;
+        }
+
+        /* ボタン共通 */
+        .container button {
+            white-space: nowrap;
+            font-size: .8rem;
+            font-weight: 700;
+            padding: 4px 16px;
+            margin: 0;
+            border: none;
+            border-radius: 999px;
+            cursor: pointer;
+            background-color: #ddd;
+            color: #fff;
+        }
+
+        .full-width {
+            width: 100%;
+        }
+
+        /* レイアウト用共通クラス */
+        .flex-container {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            margin: 0;
+        }
+
+        .flex-container button,
+        .flex-container input,
+        .flex-container textarea,
+        .flex-container select {
+            flex-grow: 1;
+            margin: 0.25rem 0;
+        }
+
+        .flex-column {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .flex-column button {
+            margin: 0;
+        }
+
+        .flex-wrap {
+            flex-wrap: wrap;
+        }
+
+        .flex-exbetween {
+            display: flex;
+            justify-content: left;
+            gap: 1rem;
+            align-items: baseline;
+            margin-bottom: 0.25rem;
+        }
+
+        /* チェックボックス行専用のスタイル */
+        .settings-checkbox-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.25rem;
+            margin: 0;
+        }
+
+        .settings-checkbox-row input {
+            flex-grow: 0 !important;
+            width: auto;
+            margin: 0;
+        }
+
+        .settings-checkbox-row label {
+            display: inline-flex;
+            align-items: center;
+            cursor: pointer;
+            white-space: nowrap;
+            margin-left: 0.5rem;
+            font-size: 0.85rem;
+        }
+
+        .settings-checkbox-row .no-margin-left {
+            margin-left: 0.25rem !important;
+        }
+
+        /* 特定入力欄 */
+        #kind-7-content-input {
+            width: 2.2rem;
+            height: 1.5rem;
+            text-align: center;
+            padding: 0;
+        }
+
+        /* ehagaki モーダル関連 (優先設定) */
+        /* ボタン: open-ehagaki-modal */
+        #open-ehagaki-modal {
+            position: fixed;
+            top: 0.5rem;
+            right: 0.5rem;
+            width: 3.5rem;
+            height: 3.5rem;
+            border-radius: 50%;
+            background-color: hsla(150, 70%, 70%, 0.3);
+            background-image: url('https://raw.githubusercontent.com/Lokuyow/ehagaki/main/public/ehagaki_icon.svg');
+            background-size: 60%;
+            background-repeat: no-repeat;
+            background-position: center;
+            border: none;
+            cursor: pointer;
+            z-index: 999;
+            transition: transform 0.2s;
+        }
+
+        #open-ehagaki-modal:hover {
+            transform: scale(1.1);
+        }
+
+        /* モーダル外枠 */
+        #ehagaki-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* モーダルコンテンツ */
+        #ehagaki-modal>div {
+            position: relative;
+            width: 95%;
+            max-width: 600px;
+            height: 80vh;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        /* 閉じるボタン */
+        #close-ehagaki-modal {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1001;
+            font-weight: bold;
+            color: #fff;
+            background: hsl(152, 74%, 43%, 0.5);
+            border: none;
+            border-radius: 999px;
+            padding: 6px 18px;
+            cursor: pointer;
+        }
+
+        /* iframe */
+        #ehagaki-iframe {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* タイムライン・表示制御 */
+        ul {
+            list-style: none;
+            padding: 0;
+            margin: 0.5rem 0;
+        }
+
+        li.event {
+            word-break: break-all;
+            padding: .5rem .25rem;
+            border-top: 1px dashed #ddd;
+        }
+
+        .event-liked {
+            border-right: .3rem solid gold;
+        }
+
+        .npub-link,
+        .nostr-ref,
+        .pubkey-ref {
+            color: #66b3ff;
+            text-decoration: none;
+        }
+
+        .custom-emoji {
+            height: 1.2rem;
+            vertical-align: bottom;
+        }
+
+        .post-content {
+            display: inline;
+        }
+
+        .hidden-section,
+        .hidden {
+            display: none;
+        }
+
+        /* タブまわりなど */
+        .setting-tabs-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            margin: 0.5rem 0 0 0;
+            gap: 0.25rem;
+        }
+
+        #show-settings,
+        #hide-settings {
+            background-color: hsl(0, 0%, 60%);
+            margin: 0;
+        }
+
+        #tab-buttons {
+            display: flex;
+            gap: 0.25rem;
+            align-items: center;
+        }
+
+        #tab-buttons button {
+            margin: 0;
+        }
+
+        .tab-button.active {
+            background: #66b3ff;
+        }
+
+        #load-more {
+            background: #66b3ff;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        /* 各種カラーバリエーション */
+        #generate-trial-keypair {
+            background-color: #f9c;
+        }
+
+        #send-new-post {
+            background-color: #ffcc66;
+            margin: 0;
+        }
+
+        #subscribe-relay,
+        #apply-filter,
+        #clear-filter {
+            background-color: #ffcc66;
+            text-align: center;
+            padding: 4px 0;
+            max-width: 4rem;
+            width: 4rem;
+        }
+
+        /* アニメーション */
+        #load-more.loading::before {
+            content: "";
+            width: 0.9rem;
+            height: 0.9rem;
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3' stroke-linecap='round'><path d='M12 2a10 10 0 1 1-10 10' /></svg>");
+            background-size: contain;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* フッター・レスポンシブ */
+        .viewongithub {
+            margin-top: 0.5rem;
+            text-align: center;
+            padding-bottom: 3rem;
+        }
+
+        .viewongithub a {
+            color: #66b3ff !important;
+        }
+
+        @media (max-width: 767px) {
+            .container {
+                max-width: 100%;
+                padding: 4px;
+                margin: 0;
+            }
+        }
+
+        @media (max-width: 400px) {
+            .flex-container button {
+                font-size: 0.6rem !important;
+            }
+        }
+    </style>
 </head>
 
 <body>
     <div id="header-placeholder"></div>
 
     <div class="container">
-        <a href="https://github.com/ompomz/flowgazer/">
-            <h1>flowgazer</h1>
-        </a>
-        <p>新設計版！タイムラインを見たり、投稿したり、ふぁぼったりできるよ。作ったのはClaude。</p>
+        <div class="flex-exbetween">
+            <a href="https://ompomz.github.io/flowgazer/">
+                <h1>flowgazer</h1>
+            </a>
+            <p style="font-size: 0.8rem;">タイムラインを見たり、投稿したり、ふぁぼったりできるよ。</p>
+        </div>
 
         <div class="flex-container">
             <button id="generate-trial-keypair" onclick="generateAndLoginWithNewKeypair()">新しい鍵ペアを生成して試す！</button>
@@ -26,70 +386,72 @@
         <div class="flex-container"> <a id="npub-link" class="npub-link" target="_blank"></a>
             <span id="not-logged-in">見るだけモード</span>
         </div>
+        <div style="margin-top: 0.25rem;">
+            <textarea id="new-post-content" rows="3" placeholder="いまなにしてる？" class="full-width"></textarea>
+            <button id="send-new-post" class="full-width">投稿</button>
+        </div>
 
-        <textarea id="new-post-content" rows="3" placeholder="いまなにしてる？" class="full-width"></textarea>
-        <button id="send-new-post" class="full-width">投稿</button>
-
-        <div class="flex-center">
+        <div class="setting-tabs-row">
             <button id="show-settings">詳細設定を表示</button>
             <button id="hide-settings" class="hidden">詳細設定を隠す</button>
-        </div>
 
-        <div id="advanced-settings" class="hidden">
+            <div id="advanced-settings" style="width: 100%;" class="hidden">
+                <div class="flex-container">
+                    <input id="relay-url" type="text" list="relay-suggestions" placeholder="wss://...">
+                    <datalist id="relay-suggestions">
+                        <option value="wss://r.kojira.io/">
+                        <option value="wss://yabu.me/">
+                        <option value="wss://nostr.compile-error.net/">
+                        <option value="wss://relay-jp.nostr.wirednet.jp/">
+                        <option value="wss://relay.damus.io/">
+                        <option value="wss://nos.lol/">
+                        <option value="wss://relay.nostr.band/">
+                    </datalist>
+                    <button id="subscribe-relay">接続</button>
+                </div>
 
-            <div class="flex-container">
-                <input id="relay-url" type="text" list="relay-suggestions" placeholder="wss://...">
-                <datalist id="relay-suggestions">
-                    <option value="wss://r.kojira.io/">
-                    <option value="wss://yabu.me/">
-                    <option value="wss://nostr.compile-error.net/">
-                    <option value="wss://relay-jp.nostr.wirednet.jp/">
-                    <option value="wss://relay.damus.io/">
-                    <option value="wss://nos.lol/">
-                    <option value="wss://relay.nostr.band/">
-                </datalist>
-                <button id="subscribe-relay">接続</button>
-            </div>
+                <div class="flex-container flex-wrap">
+                    <select id="post-kind-selector" style="flex-grow: 0;">
+                        <option value="1">投稿モード：通常</option>
+                        <option value="42">投稿モード：チャンネル</option>
+                    </select>
+                    <select id="channel-list-selector" class="hidden">
+                        <option value="">チャンネルを選択</option>
+                    </select>
+                </div>
 
-            <div class="flex-container flex-wrap">
-                <select id="post-kind-selector">
-                    <option value="1">投稿モード：通常</option>
-                    <option value="42">投稿モード：チャンネル</option>
-                </select>
-                <select id="channel-list-selector" class="hidden">
-                    <option value="">チャンネルを選択</option>
-                </select>
-            </div>
+                <div class="settings-checkbox-row flex-wrap">
+                    <label for="auto-update-toggle" class="no-margin-left">自動更新</label>
+                    <input type="checkbox" id="auto-update-toggle" checked>
 
-            <div class="settings-checkbox-row flex-wrap">
-                <label for="auto-update-toggle" class="no-margin-left">自動更新</label>
-                <input type="checkbox" id="auto-update-toggle" checked>
+                    <label for="filter-flowgazer-only">flowgazer しぼりこみ</label>
+                    <input type="checkbox" id="filter-flowgazer-only">
 
-                <label for="filter-flowgazer-only">via flowgazer</label>
-                <input type="checkbox" id="filter-flowgazer-only">
+                    <label for="toggle-kind42">チャンネル投稿</label>
+                    <input type="checkbox" id="toggle-kind42">
 
-                <label for="toggle-kind42">チャンネル投稿</label>
-                <input type="checkbox" id="toggle-kind42">
+                    <label for="kind-7-content-input">ふぁぼマーク</label>
+                    <input id="kind-7-content-input" type="text" maxlength="10" value="⭐">
+                </div>
 
-                <label for="kind-7-content-input">ふぁぼマーク</label>
-                <input id="kind-7-content-input" type="text" maxlength="10" value="⭐">
-            </div>
-
-            <div class="flex-container">
-                <textarea id="hex-filter" rows="2" placeholder="投稿者しぼりこみ(npub1…,hex…)"></textarea>
-                <div class="flex-column">
-                    <button id="apply-filter">適用</button>
-                    <button id="clear-filter">クリア</button>
+                <div class="flex-container">
+                    <textarea id="hex-filter" rows="3" placeholder="投稿者しぼりこみ(npub1…,hex…)"></textarea>
+                    <div class="flex-column">
+                        <button id="apply-filter">適用</button>
+                        <button id="clear-filter">クリア</button>
+                    </div>
                 </div>
             </div>
+
+            <div id="tab-buttons">
+                <button id="tab-global" class="tab-button active">みんな</button>
+                <button id="tab-following" class="tab-button">フォロー</button>
+                <button id="tab-channel" class="tab-button hidden">チャンネル</button>
+                <button id="tab-myposts" class="tab-button">自分</button>
+                <button id="tab-likes" class="tab-button">ふぁぼられ</button>
+            </div>
         </div>
 
-        <div id="tab-buttons">
-            <button id="tab-global" class="tab-button active">みんな</button>
-            <button id="tab-following" class="tab-button">フォロー</button>
-            <button id="tab-myposts" class="tab-button">自分</button>
-            <button id="tab-likes" class="tab-button">ふぁぼられ</button>
-        </div>
         <ul id="timeline"></ul>
         <button id="load-more" class="full-width">もっと見る</button>
 
@@ -106,307 +468,32 @@
     <!-- 既存JS -->
     <script src="https://ompomz.github.io/tweetsrecap/utility.js"></script>
     <script src="https://ompomz.github.io/header/loadHeader.js"></script>
-    <script src="https://ompomz.github.io/flowgazer/tutorial.js"></script>
     <script src="https://ompomz.github.io/flowgazer/auth.js"></script>
-    <script src="https://ompomz.github.io/flowgazer/auth-ui.js"></script>
+    <script src="https://ompomz.github.io/flowgazer/new/auth-ui.js"></script>
     <script src="https://unpkg.com/nostr-tools@2.17.0/lib/nostr.bundle.js"></script>
 
     <!-- 新設計JS -->
     <script src="https://ompomz.github.io/flowgazer/relay-manager.js"></script>
-    <script src="https://ompomz.github.io/flowgazer/data-store.js"></script>
-    <script src="https://ompomz.github.io/flowgazer/view-state.js"></script>
+    <script src="https://ompomz.github.io/flowgazer/new/data-store.js"></script>
+    <script src="https://ompomz.github.io/flowgazer/new/view-state.js"></script>
     <script src="https://ompomz.github.io/flowgazer/profile-fetcher.js"></script>
-    <script src="./timeline.js"></script>
-    <script src="https://ompomz.github.io/flowgazer/app.js"></script>
+    <script src="https://ompomz.github.io/flowgazer/timeline.js"></script>
+    <script src="https://ompomz.github.io/flowgazer/new/app.js"></script>
 
     <script>
-        // 初期化確認
         console.log('✅ スクリプト読み込み完了');
 
         document.addEventListener('DOMContentLoaded', async () => {
-            // インスタンスの存在確認
             if (!window.dataStore || !window.viewState) {
                 console.error('❌ 初期化エラー');
                 return;
             }
 
-            // タイムラインインスタンス作成
             window.timeline = new Timeline(document.getElementById('timeline'));
 
-            // アプリ初期化
             await window.app.init();
-
-            // --- 安全なイベントリスナー登録用のヘルパー関数 ---
-            const addEvent = (id, event, handler) => {
-                const el = document.getElementById(id);
-                if (el) el.addEventListener(event, handler);
-            };
-
-            // 投稿実行
-            addEvent('send-new-post', 'click', () => {
-                const content = document.getElementById('new-post-content').value;
-                const kindEl = document.getElementById('post-kind-selector');
-                const channelEl = document.getElementById('channel-list-selector');
-
-                const kind = kindEl ? parseInt(kindEl.value) : 1;
-                const channelId = channelEl ? channelEl.value : '';
-
-                if (content) {
-                    if (kind === 42 && !channelId) {
-                        alert("送信先のチャンネルを選んでください！");
-                        return;
-                    }
-                    window.app.sendPost(content, kind, channelId);
-                }
-            });
-
-            // Kind切り替え（要素がある場合のみ）
-            addEvent('post-kind-selector', 'change', (e) => {
-                const channelSelector = document.getElementById('channel-list-selector');
-                if (!channelSelector) return;
-
-                if (e.target.value === "42") {
-                    channelSelector.style.display = "inline";
-                    if (typeof fetchMyChannels === 'function') fetchMyChannels();
-                } else {
-                    channelSelector.style.display = "none";
-                }
-            });
-
-            // Ctrl+Enter で送信
-            addEvent('new-post-content', 'keydown', (e) => {
-                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                    e.preventDefault();
-                    const btn = document.getElementById('send-new-post');
-                    if (btn) btn.click();
-                }
-            });
-
-            // リレー接続
-            addEvent('subscribe-relay', 'click', async () => {
-                const urlInput = document.getElementById('relay-url');
-                const url = urlInput ? urlInput.value.trim() : '';
-
-                if (url) {
-                    // URLが入力されていれば、新規接続
-                    window.app.connectRelay(url);
-                } else {
-                    // URLが空なら、現在の接続で「最新の投稿を読み直す」動作にする
-                    console.log('🔄 タイムラインをリフレッシュします');
-
-                    // ローディング感を出すためにボタンを一時的に無効化
-                    const btn = document.getElementById('subscribe-relay');
-                    btn.disabled = true;
-                    btn.textContent = '接続';
-
-                    await window.app.initializeTimelineBaseline();
-
-                    btn.disabled = false;
-                    btn.textContent = '接続';
-                }
-            });
-
-            // タブ切り替え
-            document.querySelectorAll('.tab-button').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const tab = e.target.id.replace('tab-', '');
-                    window.app.switchTab(tab);
-                });
-            });
-
-            // フィルター適用
-            addEvent('apply-filter', 'click', () => {
-                const inputEl = document.getElementById('hex-filter');
-                if (!inputEl) return;
-                const input = inputEl.value;
-                const authors = input.split(/[ ,\n]/)
-                    .map(s => s.trim())
-                    .filter(s => s.length === 64 || s.startsWith('npub'))
-                    .map(s => {
-                        if (s.startsWith('npub')) {
-                            try { return NostrTools.nip19.decode(s).data; } catch (e) { return null; }
-                        }
-                        return s;
-                    })
-                    .filter(Boolean);
-
-                window.app.applyFilter(authors);
-                localStorage.setItem('hexFilterValue', input);
-            });
-
-            // フィルタークリア
-            addEvent('clear-filter', 'click', () => {
-                const inputEl = document.getElementById('hex-filter');
-                if (inputEl) inputEl.value = '';
-                window.app.applyFilter(null);
-                localStorage.removeItem('hexFilterValue');
-            });
-
-            // フォロー読み込み
-            addEvent('load-follows', 'click', () => {
-                if (!window.nostrAuth.isLoggedIn()) {
-                    alert('鍵の入力が必要です');
-                    if (typeof showAuthUI === 'function') showAuthUI();
-                    return;
-                }
-                const pubkeys = Array.from(window.dataStore.followingPubkeys);
-                if (pubkeys.length === 0) {
-                    alert('フォローリストが取得できていません');
-                    return;
-                }
-                const inputEl = document.getElementById('hex-filter');
-                if (inputEl) inputEl.value = pubkeys.join('\n');
-                alert(`${pubkeys.length}人のフォローを読み込みました`);
-            });
-
-            // --- しぼりこみ/自動更新系 ---
-
-            // flowgazerのみ表示
-            addEvent('filter-flowgazer-only', 'change', (e) => window.app.toggleFlowgazerFilter(e.target.checked));
-
-            // Kind42表示切り替えの初期化と連動
-            const kind42Checkbox = document.getElementById('toggle-kind42');
-            if (kind42Checkbox) {
-                // ページ読み込み時にlocalStorageから復元して見た目を合わせる
-                const savedKind42 = localStorage.getItem('showKind42') === 'true';
-                kind42Checkbox.checked = savedKind42;
-
-                // 変更されたら app.js の関数を呼ぶ（保存はapp.js側で実行される）
-                kind42Checkbox.addEventListener('change', (e) => window.app.toggleKind42Display(e.target.checked));
-            }
-
-            // 自動更新
-            addEvent('auto-update-toggle', 'change', (e) => {
-                window.app.isAutoUpdate = e.target.checked;
-                if (e.target.checked) window.viewState.renderNow();
-            });
-
-            // もっと見る
-            addEvent('load-more', 'click', function () {
-                this.classList.add('loading');
-                window.app.loadMore();
-            });
-
-            // 詳細設定トグル
-            addEvent('show-settings', 'click', () => {
-                document.getElementById('advanced-settings')?.classList.remove('hidden');
-                document.getElementById('show-settings')?.classList.add('hidden');
-                document.getElementById('hide-settings')?.classList.remove('hidden');
-            });
-
-            addEvent('hide-settings', 'click', () => {
-                document.getElementById('advanced-settings')?.classList.add('hidden');
-                document.getElementById('hide-settings')?.classList.add('hidden');
-                document.getElementById('show-settings')?.classList.remove('hidden');
-            });
-
-            // ふぁぼ初期化
-            const favInput = document.getElementById('kind-7-content-input');
-            if (favInput) {
-                favInput.addEventListener('change', (e) => saveFavMark(e.target.value));
-                loadFavMark();
-            }
-
-            // 設定復元
-            const savedFilter = localStorage.getItem('hexFilterValue');
-            if (savedFilter && document.getElementById('hex-filter')) {
-                document.getElementById('hex-filter').value = savedFilter;
-            }
-        });
-
-        // 新規鍵ペア生成
-        function generateAndLoginWithNewKeypair() {
-            const confirmed = confirm(
-                '新しい鍵ペアを生成します。\n' +
-                '生成された秘密鍵（nsec）は失くすと見つからないので\n' +
-                '大事に持っておいてね。'
-            );
-
-            if (!confirmed) return;
-
-            const seckey = window.NostrTools.generateSecretKey();
-            const nsec = window.NostrTools.nip19.nsecEncode(seckey);
-
-            // 利用開始処理
-            window.nostrAuth.loginWithNsec(nsec);
-
-            const loginBtn = document.querySelector('.btn-grow');
-            if (loginBtn) {
-                loginBtn.textContent = '秘密鍵はこちら';
-                loginBtn.style.backgroundColor = '#66b3ff';
-                loginBtn.style.color = '#fff';
-
-                // 動作は「設定モーダルを表示」のまま
-                loginBtn.onclick = (e) => {
-                    e.preventDefault();
-                    if (typeof showAuthUI === 'function') {
-                        showAuthUI();
-                    }
-                };
-            }
-
-            const genBtn = document.getElementById('generate-trial-keypair');
-            if (genBtn) {
-                genBtn.disabled = true;
-                genBtn.style.opacity = '0.6';
-            }
-
-            if (window.app) window.app.init();
-        }
-
-        // ふぁぼマーク保存
-        function saveFavMark(val) {
-            const chars = Array.from(val);
-            const singleChar = chars.length > 0 ? chars[0] : "+";
-            localStorage.setItem('favMark', singleChar);
-            const input = document.getElementById('kind-7-content-input');
-            if (input) input.value = singleChar;
-        }
-
-        function loadFavMark() {
-            const savedMark = localStorage.getItem('favMark');
-            const input = document.getElementById('kind-7-content-input');
-            if (savedMark && input) input.value = savedMark;
-        }
-
-        // ブラウザのタブに戻ってきたとき、またはアプリを切り替えて戻ってきたときの処理
-        let lastActiveTime = Date.now();
-
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible') {
-                const now = Date.now();
-                const idleTime = (now - lastActiveTime) / 1000;
-
-                console.log(`復帰: 離脱時間 ${idleTime}秒`);
-
-                if (idleTime > 30) {
-                    if (window.app && typeof window.app.initializeTimelineBaseline === 'function') {
-                        window.app.initializeTimelineBaseline();
-                    }
-                }
-            } else {
-                lastActiveTime = Date.now();
-            }
         });
     </script>
-
-    <div id="tutorial-overlay">
-        <div id="tutorial-modal">
-            <div id="tutorial-close-button">とじる</div>
-            <div id="tutorial-content">
-                <div id="image-container">
-                    <img src="https://ompomz.github.io/flowgazer/image1.png" class="tutorial-image active">
-                    <img src="https://ompomz.github.io/flowgazer/image2.png" class="tutorial-image">
-                    <img src="https://ompomz.github.io/flowgazer/image3.png" class="tutorial-image">
-                </div>
-                <div id="dot-navigation" class="dot-navigation">
-                    <span class="dot active" data-index="0"></span>
-                    <span class="dot" data-index="1"></span>
-                    <span class="dot" data-index="2"></span>
-                </div>
-            </div>
-        </div>
-    </div>
 </body>
 
 </html>
