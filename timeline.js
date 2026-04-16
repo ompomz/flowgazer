@@ -573,37 +573,63 @@ class Timeline {
         div.className = 'post-content';
         const rawContent = event.content || '';
 
-        // 1. まずは普通にリンク化（文字列が生成される）
+        // 1. HTMLエスケープ + linkify
         const escapedContent = MyNostrUtils.escapeHtml(rawContent);
         const formattedContent = MyNostrUtils.linkify(escapedContent, { expandMedia: false });
         div.innerHTML = formattedContent;
 
-        // 2. 既存の createInlineRTElement を活用する
+        // :emoji: を探して置換
+        const walker = document.createTreeWalker(div, NodeFilter.SHOW_TEXT, null, false);
+        const textNodes = [];
+
+        while (walker.nextNode()) {
+            textNodes.push(walker.currentNode);
+        }
+
+        textNodes.forEach(node => {
+            const text = node.nodeValue;
+
+            // :xxx: パターン検出
+            if (!text.includes(':')) return;
+
+            const parts = text.split(/(:[a-zA-Z0-9_+-]+:)/g);
+            if (parts.length === 1) return;
+
+            const fragment = document.createDocumentFragment();
+
+            parts.forEach(part => {
+                if (/^:[a-zA-Z0-9_+-]+:$/.test(part)) {
+                    const emojiEl = this.createCustomEmoji(part, event.tags || []);
+                    fragment.appendChild(emojiEl);
+                } else {
+                    fragment.appendChild(document.createTextNode(part));
+                }
+            });
+
+            node.replaceWith(fragment);
+        });
+
         const links = div.querySelectorAll('a.nostr-ref');
         links.forEach(link => {
-            // リンクが nostr:nevent... または nostr:note... かチェック
             if (link.textContent.startsWith('nostr:')) {
                 const href = link.getAttribute('href');
                 const urlParams = new URLSearchParams(new URL(href).search);
-                const nip19 = urlParams.get('id'); // URLから識別子を取得
+                const nip19 = urlParams.get('id');
 
                 try {
                     const decoded = window.NostrTools.nip19.decode(nip19);
-                    let targetId = (decoded.type === 'nevent') ? decoded.data.id : (decoded.type === 'note' ? decoded.data : null);
+                    let targetId =
+                        (decoded.type === 'nevent') ? decoded.data.id :
+                            (decoded.type === 'note' ? decoded.data : null);
 
                     if (targetId) {
                         const originalEvent = window.dataStore.getEvent(targetId);
                         if (originalEvent) {
-                            // 既存のメソッドをそのまま呼び出す
                             const inlineRT = this.createInlineRTElement(originalEvent);
-
-                            // <a>タグを丸ごと <span>(RT表示) に置き換え
                             link.replaceWith(inlineRT);
                         }
                     }
-                } catch (e) {
-                    // デコードエラー（短縮されて壊れている等）ならリンクのまま維持
-                }
+                } catch (e) { }
             }
         });
 
