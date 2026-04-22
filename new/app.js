@@ -25,7 +25,7 @@ class FlowgazerApp {
 
     // ===== Baseline方式用 =====
     this.isInitializing = false;
-    this.cursorSince = null; // Anchor Phaseで確定した基準時刻
+    this.cursorSince = Math.floor(Date.now() / 1000) - 300; // 300秒（5分）× 1 = 300
   }
 
   // ========================================
@@ -464,6 +464,7 @@ class FlowgazerApp {
    */
   executeStreamPhase() {
     console.log('📡 Stream Phase開始');
+    console.log('Current cursorSince:', this.cursorSince);
 
     const filters = this._buildStreamPhaseFilters();
 

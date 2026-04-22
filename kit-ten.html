@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>flowgazer</title>
+    <link rel="icon" type="image/x-icon" href="https://ompomz.github.io/flowgazer/favicon.ico">
+
+    <style>
+        /* ベーススタイル */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            -webkit-text-size-adjust: 100%;
+            text-size-adjust: 100%;
+        }
+
+        body {
+            font-weight: 400;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Helvetica Neue", Arial, sans-serif;
+            padding: .5rem;
+            line-height: 1.3;
+            background-color: #f7f7f7;
+            color: #666;
+            font-size: .9rem;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto 0 .5rem;
+            padding: .5rem;
+        }
+
+        a {
+            color: #666;
+            text-decoration: none;
+        }
+
+        h1 {
+            font-size: 1.1rem;
+        }
+
+        /* フォーム要素の共通設定 */
+        input,
+        textarea,
+        select {
+            box-sizing: border-box;
+            vertical-align: middle;
+            text-align: start;
+            min-height: 28.5px;
+            cursor: pointer;
+            transition: background-color 0.3s, color 0.3s;
+            background-color: #fff;
+            font-size: .9rem;
+            color: #666;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: .5rem;
+            margin: 0;
+            flex-grow: 1;
+        }
+
+        input[type="checkbox"] {
+            vertical-align: middle;
+            cursor: pointer;
+        }
+
+        textarea {
+            resize: vertical;
+        }
+
+        /* ボタン共通 */
+        .container button {
+            background-color: #ddd;
+            font-size: .8rem;
+            font-weight: 700;
+            text-align: center;
+            color: #fff;
+            white-space: nowrap;
+            padding: 0.25rem 0.75rem;
+            margin: 0;
+            min-width: 4rem;
+            min-height: 1.75rem;
+            border: none;
+            border-radius: 999px;
+            cursor: pointer;
+        }
+
+        .full-width {
+            width: 100%;
+        }
+
+        /* レイアウト用共通クラス */
+        .flex-container {
+            display: flex;
+            align-items: center;
+            row-gap: 0.5rem;
+            column-gap: 0.25rem;
+            margin: 0;
+        }
+
+        .flex-column {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .flex-wrap {
+            flex-wrap: wrap;
+        }
+
+        /* チェックボックス行専用のスタイル */
+        .settings-checkbox-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.25rem;
+            margin: 0;
+        }
+
+        .settings-checkbox-row input {
+            flex-grow: 0 !important;
+            width: auto;
+            margin: 0;
+        }
+
+        .settings-checkbox-row label {
+            display: inline-flex;
+            align-items: center;
+            cursor: pointer;
+            white-space: nowrap;
+            margin-left: 0.5rem;
+            font-size: 0.85rem;
+        }
+
+        .settings-checkbox-row .no-margin-left {
+            margin-left: 0 !important;
+        }
+
+        #kind-7-content-input {
+            width: 2.2rem;
+            height: 1.5rem;
+            text-align: center;
+            padding: 0;
+        }
+
+        /* ehagaki モーダル関連 */
+        /* ボタン: open-ehagaki-modal */
+        #open-ehagaki-modal {
+            position: fixed;
+            top: 0.5rem;
+            right: 0.5rem;
+            width: 3.5rem;
+            height: 3.5rem;
+            border-radius: 50%;
+            background-color: hsla(150, 70%, 70%, 0.3);
+            background-image: url('https://raw.githubusercontent.com/Lokuyow/ehagaki/main/public/ehagaki_icon.svg');
+            background-size: 60%;
+            background-repeat: no-repeat;
+            background-position: center;
+            border: none;
+            cursor: pointer;
+            z-index: 999;
+            transition: transform 0.2s;
+        }
+
+        #open-ehagaki-modal:hover {
+            transform: scale(1.1);
+        }
+
+        /* モーダル外枠 */
+        #ehagaki-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* モーダルコンテンツ */
+        #ehagaki-modal>div {
+            position: relative;
+            width: 95%;
+            max-width: 600px;
+            height: 80vh;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        /* 閉じるボタン */
+        #close-ehagaki-modal {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1001;
+            font-weight: bold;
+            color: #fff;
+            background: hsl(152, 74%, 43%, 0.5);
+            border: none;
+            border-radius: 999px;
+            padding: 6px 18px;
+            cursor: pointer;
+        }
+
+        /* iframe */
+        #ehagaki-iframe {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* タイムライン・表示制御 */
+        ul {
+            list-style: none;
+            padding: 0;
+            margin: .5rem 0;
+        }
+
+        li.event {
+            word-break: break-all;
+            padding: .5rem .25rem;
+            border-top: 1px dashed #ddd;
+        }
+
+        .event-liked {
+            border-right: .3rem solid gold;
+        }
+
+        .npub-link,
+        .nostr-ref,
+        .pubkey-ref {
+            color: #66b3ff;
+            text-decoration: none;
+        }
+
+        .custom-emoji {
+            height: 1.2rem;
+            vertical-align: bottom;
+        }
+
+        .post-content {
+            display: inline;
+        }
+
+        .hidden-section,
+        .hidden {
+            display: none;
+        }
+
+        #tab-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+            align-items: center;
+        }
+
+        .tab-button.active {
+            background: #66b3ff;
+        }
+
+        #load-more {
+            background: #66b3ff;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+        }
+
+        #send-new-post,
+        #subscribe-relay,
+        #apply-filter,
+        #clear-filter {
+            background-color: #ffcc66;
+        }
+
+        /* アニメーション */
+        #load-more.loading::before {
+            content: "";
+            width: 0.9rem;
+            height: 0.9rem;
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3' stroke-linecap='round'><path d='M12 2a10 10 0 1 1-10 10' /></svg>");
+            background-size: contain;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* フッター・レスポンシブ */
+        .viewongithub {
+            margin-top: 0.5rem;
+            text-align: center;
+            padding-bottom: 3rem;
+        }
+
+        .viewongithub a {
+            color: #66b3ff !important;
+        }
+
+        @media (max-width: 767px) {
+            .container {
+                max-width: 100%;
+                padding: 4px;
+                margin: 0;
+            }
+        }
+
+        @media (max-width: 400px) {
+            .container button {
+                font-size: 0.7rem !important;
+            }
+        }
+
+        /* コンテナ：指の座標（中心）を基準にする */
+        .lp-menu {
+            position: fixed;
+            z-index: 10000;
+            width: 0;
+            height: 0;
+            background: none;
+            border: none;
+            pointer-events: none;
+            /* コンテナ自体は触らせない */
+            /* 指の少し上に中心が来るように調整（お好みで 0 にしてもOK） */
+            transform: translate(0, -20px);
+            animation: menu-pop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        /* 共通スタイル：中心から移動させるために absolute にする */
+        .lp-item {
+            position: absolute;
+            width: 3rem;
+            height: 3rem;
+            background: #ffffff;
+            border-radius: 999px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            border: none;
+            transition: all 0.2s ease;
+            user-select: none;
+            pointer-events: auto;
+        }
+
+        /* SVGアイコンのサイズと色を自動調整 */
+        .lp-item svg {
+            width: 1.5rem;
+            height: 1.5rem;
+            display: block;
+            transition: transform 0.2s ease;
+        }
+
+        /* ふぁぼボタンだけはテキスト（絵文字）なので専用調整 */
+        #lp-like-icon {
+            font-family: "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+            font-size: 1.25rem;
+            line-height: 1;
+        }
+
+        /* 位置の個別設定 (中心からの距離) */
+        /* 上：like */
+        .lp-item[data-action="like"] {
+            top: -3rem;
+            left: 0;
+            color: #ffcc66;
+        }
+
+        /* 左：repost */
+        .lp-item[data-action="repost"] {
+            top: 0;
+            left: -3rem;
+            color: #66b3ff;
+        }
+
+        /* 右：quote */
+        .lp-item[data-action="quote"] {
+            top: 0;
+            left: 3rem;
+            color: #666666;
+        }
+
+        /* 下：reply */
+        .lp-item[data-action="reply"] {
+            top: 3rem;
+            left: 0;
+            color: #66b3ff;
+        }
+
+        /* 選択時のエフェクト */
+        .lp-item.selected {
+            background: #fff;
+            transform: scale(1.06);
+            box-shadow:
+                0 0 20px 12px rgba(120, 170, 255, 0.35),
+                0 0 40px 20px rgba(120, 170, 255, 0.25),
+        }
+
+        @keyframes menu-pop {
+            from {
+                opacity: 0;
+                transform: scale(0.5);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <button id="open-ehagaki-modal"></button>
+
+    <div id="ehagaki-modal" style="display:none;">
+        <div>
+            <button id="close-ehagaki-modal">✕ とじる</button>
+            <iframe id="ehagaki-iframe"
+                src="https://lokuyow.github.io/ehagaki/?parentOrigin=https://ompomz.github.io/flowgazer/kit-ten.html"
+                allow="local-network-access; local-network; loopback-network" frameborder="0" width="600" height="400">
+            </iframe>
+        </div>
+    </div>
+    <div id="long-press-menu" class="lp-menu" style="display: none;">
+        <div class="lp-item" data-action="like" id="lp-like-icon" title="ふぁぼ"></div>
+
+        <div class="lp-item" data-action="repost" title="リポスト">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="17 1 21 5 17 9"></polyline>
+                <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+                <polyline points="7 23 3 19 7 15"></polyline>
+                <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+            </svg>
+        </div>
+
+        <div class="lp-item" data-action="quote" title="引用">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 21c3 0 7-1 7-8V5H4v8h4c0 2-1 4-4 4v4zm13 0c3 0 7-1 7-8V5h-6v8h4c0 2-1 4-4 4v4z"></path>
+            </svg>
+        </div>
+
+        <div class="lp-item" data-action="reply" title="リプライ">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+        </div>
+    </div>
+
+    <div id="push-menu" class="container"
+        style="height: 15rem; margin-top: -12rem; background-color: #f7f7f7; transition: margin-top 0.4s ease; display: flex; flex-direction: column; justify-content: flex-end;">
+
+        <div id="menu-content" class="flex-column" style="display: none;">
+            <div class="flex-container">
+                <button onclick="showAuthUI()">🔑</button>
+                <input id="relay-url" type="text" list="relay-suggestions" placeholder="wss://...">
+                <datalist id="relay-suggestions">
+                    <option value="wss://r.kojira.io/">
+                    <option value="wss://yabu.me/">
+                    <option value="wss://nostr.compile-error.net/">
+                    <option value="wss://relay-jp.nostr.wirednet.jp/">
+                    <option value="wss://relay.damus.io/">
+                    <option value="wss://nos.lol/">
+                    <option value="wss://relay.nostr.band/">
+                </datalist>
+                <button id="subscribe-relay" style="margin-right: 3rem;">接続</button>
+            </div>
+
+            <div class="settings-checkbox-row">
+                <label for="auto-update-toggle" class="no-margin-left">自動更新</label>
+                <input type="checkbox" id="auto-update-toggle" checked>
+
+                <label for="filter-flowgazer-only" style="display: none;">flowgazerしぼりこみ</label>
+                <input type="checkbox" id="filter-flowgazer-only" class="hidden">
+
+                <label for="toggle-kind42">チャンネル投稿</label>
+                <input type="checkbox" id="toggle-kind42">
+
+                <label for="kind-7-content-input">ふぁぼマーク</label>
+                <input id="kind-7-content-input" type="text" maxlength="10" value="⭐">
+            </div>
+
+            <div class="flex-container">
+                <div class="flex-column" style="flex-grow: 1;">
+                    <label for="hex-filter" style="margin: 0 0 -0.2rem 0;">投稿者しぼりこみ</label>
+                    <textarea id="hex-filter" rows="2" placeholder="npub1…,hex…"></textarea>
+                </div>
+                <div class="flex-column" style="flex-grow: 0; margin-right: 3rem;">
+                    <button id="apply-filter">適用</button>
+                    <button id="clear-filter">クリア</button>
+                </div>
+            </div>
+
+            <div class="flex-container" style="overflow: hidden;">
+                <select id="post-kind-selector" style="max-width: 14rem;">
+                    <option value="1">投稿モード：通常</option>
+                    <option value="42">投稿モード：チャンネル</option>
+                </select>
+                <select id="channel-list-selector" class="hidden" style="margin-right: 3rem;">
+                    <option value="">チャンネルを選択</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="flex-container" style="margin-top: 0.25rem;">
+            <textarea id="new-post-content" rows="1" placeholder="いまなにしてる？" style="max-width: 24.625rem;"></textarea>
+            <button id="send-new-post">投稿</button>
+
+            <button style="margin-right: 3rem;"
+                onclick="const m = document.getElementById('push-menu'); const c = document.getElementById('menu-content'); if (m.style.marginTop === '0px') { m.style.marginTop = '-12rem'; c.style.display = 'none'; } else { m.style.marginTop = '0px'; c.style.display = 'flex'; }">設定</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div id="tab-buttons">
+            <button id="tab-global" class="tab-button active">みんな</button>
+            <button id="tab-following" class="tab-button">フォロー</button>
+            <button id="tab-channel" class="tab-button hidden">チャンネル</button>
+            <button id="tab-myposts" class="tab-button">自分</button>
+            <button id="tab-likes" class="tab-button">ふぁぼられ</button>
+        </div>
+
+        <ul id="timeline"></ul>
+        <button id="load-more">もっと見る</button>
+
+        <p class="viewongithub"><a href="https://github.com/ompomz/flowgazer">view on github</a></p>
+    </div>
+
+    <div class="hidden-section">
+        <a href="https://github.com/ompomz/flowgazer/">
+            <h1>flowgazer</h1>
+        </a>
+        <p>タイムラインを見たり、投稿したり、ふぁぼったりできるよ。</p>
+        <button id="show-settings">詳細設定をひらく</button>
+        <button id="hide-settings" class="hidden">詳細設定をとじる</button>
+    </div>
+    <div id="advanced-settings" style="width: 100%;" class="hidden">
+        <div style="display: inline;"><a id="npub-link" class="npub-link" target="_blank"></a>
+            <span id="not-logged-in"> 見るだけモード</span>
+        </div>
+    </div>
+
+    <!-- 
+    Based on motherfucking-nostr-client by かすてらふぃ（jiftechnify）
+    Some parts generated or modified with AI assistance  
+    Uses nostr-tools (MIT License)
+    Licensed under WTFPL
+    -->
+
+    <!-- 既存JS -->
+    <script src="https://ompomz.github.io/tweetsrecap/utility.js"></script>
+    <script src="https://ompomz.github.io/flowgazer/auth.js"></script>
+    <script src="https://ompomz.github.io/flowgazer/new/auth-ui.js"></script>
+    <script src="https://unpkg.com/nostr-tools@2.17.0/lib/nostr.bundle.js"></script>
+
+    <!-- 新設計JS -->
+    <script src="https://ompomz.github.io/flowgazer/relay-manager.js"></script>
+    <script src="https://ompomz.github.io/flowgazer/new/data-store.js"></script>
+    <script src="https://ompomz.github.io/flowgazer/new/view-state.js"></script>
+    <script src="https://ompomz.github.io/flowgazer/profile-fetcher.js"></script>
+    <script src="https://ompomz.github.io/flowgazer/new/timeline.js"></script>
+    <script src="https://ompomz.github.io/flowgazer/new/app.js"></script>
+
+    <script>
+        console.log('✅ スクリプト読み込み完了');
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            if (!window.dataStore || !window.viewState) {
+                console.error('❌ 初期化エラー');
+                return;
+            }
+
+            window.timeline = new Timeline(document.getElementById('timeline'));
+
+            await window.app.init();
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const modal = document.getElementById('ehagaki-modal');
+            const iframe = document.getElementById('ehagaki-iframe');
+            const openBtn = document.getElementById('open-ehagaki-modal');
+            const closeBtn = document.getElementById('close-ehagaki-modal');
+            const EMBED_NS = 'ehagaki.embed';
+
+            const closeModal = () => { modal.style.display = 'none'; };
+
+            openBtn.addEventListener('click', () => { modal.style.display = 'flex'; });
+            closeBtn.addEventListener('click', closeModal);
+            modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+            window.addEventListener('message', async (event) => {
+                if (event.origin !== 'https://lokuyow.github.io') return;
+
+                const data = event.data;
+                const EMBED_NS = 'ehagaki.embed';
+                const iframe = document.getElementById('ehagaki-iframe');
+
+                if (data?.namespace !== EMBED_NS || data?.version !== 1) return;
+
+                const postToIframe = (obj) => {
+                    iframe.contentWindow.postMessage({
+                        namespace: EMBED_NS,
+                        version: 1,
+                        ...obj
+                    }, event.origin);
+                };
+
+                // あなたの auth.js のインスタンスを参照 (window.nostrAuth と仮定)
+                const auth = window.nostrAuth;
+
+                switch (data.type) {
+                    case 'ready':
+                        // ログイン済み(pubkeyがある)なら、iframe側にログインを促す
+                        if (auth.pubkey) {
+                            postToIframe({
+                                type: 'auth.login',
+                                payload: { pubkeyHex: auth.pubkey }
+                            });
+                        }
+                        break;
+
+                    case 'auth.request':
+                        if (auth.pubkey) {
+                            postToIframe({
+                                type: 'auth.result',
+                                requestId: data.requestId,
+                                payload: {
+                                    pubkeyHex: auth.pubkey,
+                                    capabilities: ['signEvent']
+                                }
+                            });
+                        } else {
+                            postToIframe({
+                                type: 'auth.error',
+                                requestId: data.requestId,
+                                payload: { code: 'parent_client_not_logged_in', message: 'ログインしてください' }
+                            });
+                        }
+                        break;
+
+                    case 'rpc.request':
+                        if (data.payload?.method === 'signEvent') {
+                            try {
+                                // 親クライアントの signEvent メソッドを呼び出す
+                                // auth.js の signEvent が内部で this.nsec を使って署名する作りならこれでOK
+                                const signedEvent = await auth.signEvent(data.payload.params.event);
+
+                                postToIframe({
+                                    type: 'rpc.result',
+                                    requestId: data.requestId,
+                                    payload: { result: signedEvent }
+                                });
+                            } catch (err) {
+                                postToIframe({
+                                    type: 'rpc.error',
+                                    requestId: data.requestId,
+                                    payload: { code: 'rpc_failed', message: err.message }
+                                });
+                            }
+                        }
+                        break;
+
+                    case 'post.success':
+                        console.log('eHagaki: 投稿成功！');
+                        setTimeout(() => { closeModal(); }, 1000);
+                        break;
+                }
+            });
+        });
+
+        function openEhagakiWithReply(eventId) {
+            const modal = document.getElementById('ehagaki-modal');
+            const iframe = document.getElementById('ehagaki-iframe');
+
+            // 1. まずモーダルを表示
+            modal.style.display = 'flex';
+
+            // 2. iframeに「この投稿へのリプライを準備して」と指示を出す
+            // iframeが読み込み完了(ready)した後に送るのが確実です
+            iframe.contentWindow.postMessage({
+                namespace: 'ehagaki.embed',
+                version: 1,
+                type: 'composer.setContext',
+                requestId: `reply-${Date.now()}`,
+                payload: {
+                    reply: eventId,  // ここにリプライ先のIDを入れる
+                    quotes: [],      // 引用は空にする
+                    content: ""      // 本文も空にする（または「@user 」などを入れても良い）
+                }
+            }, 'https://lokuyow.github.io');
+        }
+    </script>
+</body>
+
+</html>
