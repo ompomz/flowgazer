@@ -1202,22 +1202,34 @@ class FlowgazerApp {
   }
 
   updateTabVisibility() {
-    const isLoggedIn = window.nostrAuth.isLoggedIn();
-    const tabButtons = document.getElementById('tab-buttons');
-    const tabsToToggle = ['tab-following', 'tab-myposts', 'tab-likes'];
+    const auth = window.nostrAuth;
+    // ログインしているかどうかの判定結果をログに出す
+    const isLoggedIn = auth && typeof auth.isLoggedIn === 'function' && auth.isLoggedIn();
 
-    if (tabButtons) {
-      tabButtons.style.display = isLoggedIn ? 'flex' : 'none';
+    console.log("Checking Tabs - IsLoggedIn:", isLoggedIn);
+    console.log("Current Pubkey:", auth?.pubkey);
+
+    const tabButtons = document.getElementById('tab-buttons');
+    if (!tabButtons) {
+      console.error("Error: tab-buttons element not found!");
+      return;
     }
 
+    // 判定
+    if (isLoggedIn) {
+      tabButtons.style.display = 'flex';
+      console.log("Tabs should be VISIBLE now.");
+    } else {
+      tabButtons.style.display = 'none';
+      console.log("Tabs are HIDDEN because isLoggedIn is false.");
+    }
+
+    // 各タブボタンの個別制御
+    const tabsToToggle = ['tab-following', 'tab-myposts', 'tab-likes'];
     tabsToToggle.forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = isLoggedIn ? '' : 'none';
     });
-
-    if (!isLoggedIn && this.currentTab !== 'global') {
-      this.switchTab('global');
-    }
   }
 
   /**

@@ -329,13 +329,24 @@
             z-index: 10000;
             width: 0;
             height: 0;
-            background: none;
-            border: none;
             pointer-events: none;
-            /* コンテナ自体は触らせない */
-            /* 指の少し上に中心が来るように調整（お好みで 0 にしてもOK） */
-            transform: translate(0, -20px);
+            /* 計算の根拠： 1. likeボタンの配置が top: -3rem 2. 指との隙間を 1rem あけたい ⇒ コンテナの中心（指の位置）を基準に、 likeボタンの「上端」が指の「+1rem」の位置に来るように調整します。 */
+            transform: translate(-1.5rem, 5rem);
             animation: menu-pop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes menu-pop {
+            from {
+                opacity: 0;
+                /* translate の値を合わせつつ、スケールを小さく */
+                transform: translate(-1.5rem, 5rem) scale(0.5);
+            }
+
+            to {
+                opacity: 1;
+                /* ここを新しい数値に合わせる */
+                transform: translate(-1.5rem, 5rem) scale(1);
+            }
         }
 
         /* 共通スタイル：中心から移動させるために absolute にする */
@@ -409,18 +420,6 @@
                 0 0 20px 12px rgba(120, 170, 255, 0.35),
                 0 0 40px 20px rgba(120, 170, 255, 0.25),
         }
-
-        @keyframes menu-pop {
-            from {
-                opacity: 0;
-                transform: scale(0.5);
-            }
-
-            to {
-                opacity: 1;
-                transform: scale(1);
-            }
-        }
     </style>
 </head>
 
@@ -439,7 +438,7 @@
     <div id="long-press-menu" class="lp-menu" style="display: none;">
         <div class="lp-item" data-action="like" id="lp-like-icon" title="ふぁぼ"></div>
 
-        <div class="lp-item" data-action="repost" title="リポスト">
+        <div class="lp-item" data-action="repost" title="RT">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                 stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="17 1 21 5 17 9"></polyline>
@@ -601,44 +600,60 @@
 
             const closeModal = () => { modal.style.display = 'none'; };
 
-            openBtn.addEventListener('click', () => { modal.style.display = 'flex'; });
+            openBtn.addEventListener('click', () => {
+                // 1. 親のURLを再取得
+                const parentUrl = window.location.origin + window.location.pathname;
+
+                // 2. iframeのURLを「常にparentOrigin付き」で上書きする
+                // これにより、iframe内でのリンク移動でパラメータが消えても、開き直せば復活します
+                iframe.src = `https://lokuyow.github.io/ehagaki/?parentOrigin=${encodeURIComponent(parentUrl)}`;
+
+                // 3. モーダルを表示
+                modal.style.display = 'flex';
+            });
             closeBtn.addEventListener('click', closeModal);
             modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
             window.addEventListener('message', async (event) => {
+                // 1. まずは「知らない人」からのメッセージを無視する
                 if (event.origin !== 'https://lokuyow.github.io') return;
 
                 const data = event.data;
                 const EMBED_NS = 'ehagaki.embed';
-                const iframe = document.getElementById('ehagaki-iframe');
 
-                if (data?.namespace !== EMBED_NS || data?.version !== 1) return;
+                // 2. eHagaki（子クライアント）からの通信か確認する
+                if (data?.namespace !== EMBED_NS) return;
 
-                const postToIframe = (obj) => {
-                    iframe.contentWindow.postMessage({
+                // 3. 返事をするための「専用の封筒」を準備する
+                const reply = (obj) => {
+                    // メッセージを送ってきた相手(event.source)に直接返します
+                    event.source.postMessage({
                         namespace: EMBED_NS,
                         version: 1,
                         ...obj
                     }, event.origin);
                 };
 
-                // あなたの auth.js のインスタンスを参照 (window.nostrAuth と仮定)
                 const auth = window.nostrAuth;
 
+                // iframeの要素を取得
+                const iframe = document.getElementById('ehagaki-iframe');
+
+
+                // 4. 用件に合わせて返事をする
                 switch (data.type) {
-                    case 'ready':
-                        // ログイン済み(pubkeyがある)なら、iframe側にログインを促す
+                    case 'ready': // 子が「準備できたよ！」と言ってきた時
                         if (auth.pubkey) {
-                            postToIframe({
+                            reply({
                                 type: 'auth.login',
                                 payload: { pubkeyHex: auth.pubkey }
                             });
                         }
                         break;
 
-                    case 'auth.request':
+                    case 'auth.request': // 子が「ログインさせて！」と言ってきた時
                         if (auth.pubkey) {
-                            postToIframe({
+                            reply({
                                 type: 'auth.result',
                                 requestId: data.requestId,
                                 payload: {
@@ -646,40 +661,22 @@
                                     capabilities: ['signEvent']
                                 }
                             });
-                        } else {
-                            postToIframe({
-                                type: 'auth.error',
-                                requestId: data.requestId,
-                                payload: { code: 'parent_client_not_logged_in', message: 'ログインしてください' }
-                            });
                         }
                         break;
 
-                    case 'rpc.request':
+                    case 'rpc.request': // 子が「署名して！」と言ってきた時
                         if (data.payload?.method === 'signEvent') {
                             try {
-                                // 親クライアントの signEvent メソッドを呼び出す
-                                // auth.js の signEvent が内部で this.nsec を使って署名する作りならこれでOK
-                                const signedEvent = await auth.signEvent(data.payload.params.event);
-
-                                postToIframe({
+                                const signed = await auth.signEvent(data.payload.params.event);
+                                reply({
                                     type: 'rpc.result',
                                     requestId: data.requestId,
-                                    payload: { result: signedEvent }
+                                    payload: { result: signed }
                                 });
                             } catch (err) {
-                                postToIframe({
-                                    type: 'rpc.error',
-                                    requestId: data.requestId,
-                                    payload: { code: 'rpc_failed', message: err.message }
-                                });
+                                reply({ type: 'rpc.error', requestId: data.requestId, payload: { message: err.message } });
                             }
                         }
-                        break;
-
-                    case 'post.success':
-                        console.log('eHagaki: 投稿成功！');
-                        setTimeout(() => { closeModal(); }, 1000);
                         break;
                 }
             });
@@ -689,10 +686,13 @@
             const modal = document.getElementById('ehagaki-modal');
             const iframe = document.getElementById('ehagaki-iframe');
 
-            // 1. まずモーダルを表示
+            // ここでも src をセットし直して、確実に親情報を渡す
+            const parentUrl = window.location.origin + window.location.pathname;
+            iframe.src = `https://lokuyow.github.io/ehagaki/?parentOrigin=${encodeURIComponent(parentUrl)}`;
+
             modal.style.display = 'flex';
 
-            // 2. iframeに「この投稿へのリプライを準備して」と指示を出す
+            // iframeに「この投稿へのリプライを準備して」と指示を出す
             // iframeが読み込み完了(ready)した後に送るのが確実です
             iframe.contentWindow.postMessage({
                 namespace: 'ehagaki.embed',
@@ -706,6 +706,15 @@
                 }
             }, 'https://lokuyow.github.io');
         }
+
+        document.addEventListener('keydown', (e) => {
+            const modal = document.getElementById('ehagaki-modal');
+            if (!modal) return;
+
+            if (e.key === 'Escape' && modal.style.display === 'flex') {
+                modal.style.display = 'none';
+            }
+        });
     </script>
 </body>
 

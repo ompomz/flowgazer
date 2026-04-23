@@ -219,6 +219,47 @@ class Timeline {
         return li;
     }
 
+    // pubkeyを元に、表示用の短い名前（@nameなど）を返す
+    resolveName(pubkey) {
+        const profile = window.dataStore.getProfile(pubkey);
+
+        let name = null;
+
+        if (profile) {
+            name =
+                profile.display_name ||
+                profile.name ||
+                profile.nip05?.split('@')[0];
+        }
+
+        if (!name) {
+            const npub = window.NostrTools.nip19.npubEncode(pubkey);
+            name = npub.substring(0, 10) + "...";
+        }
+
+        const ctx = this.measureCtx;
+        const maxWidth = this.maxNameWidthPx;
+
+        let result = "";
+        let width = 0;
+        const ellipsis = "…";
+        const ellipsisWidth = ctx.measureText(ellipsis).width;
+
+        for (const char of name) {
+            const charWidth = ctx.measureText(char).width;
+
+            if (width + charWidth + ellipsisWidth > maxWidth) {
+                result += ellipsis;
+                return `@${result}`; // ←ここで @付与
+            }
+
+            result += char;
+            width += charWidth;
+        }
+
+        return `@${result}`; // ←通常時も @付与
+    }
+
     /**
      * kind:1 (投稿) 要素
      */
@@ -243,6 +284,26 @@ class Timeline {
 
         // メタデータ
         li.appendChild(this.createMetadata(event));
+
+        // リプライ先（pタグ）の表示を追加
+        // 最初に見つかった p タグをリプライ先とみなす（または自分以外のpubkeyを探す）
+        const replyTag = event.tags.find(tag => tag[0] === "p");
+        if (replyTag) {
+            const targetPubkey = replyTag[1];
+
+            const replySpan = document.createElement('span');
+            replySpan.className = 'reply-indicator';
+            replySpan.appendChild(document.createTextNode(' '));
+
+            // リプライ先の名前をリンクにする
+            const targetName = this.resolveName(targetPubkey);
+            const targetLink = this.createAuthorLink(targetPubkey);
+            targetLink.textContent = targetName;
+            replySpan.appendChild(targetLink);
+
+            li.appendChild(replySpan);
+            li.appendChild(document.createTextNode(' '));
+        }
 
         // 本文
         const cwTag = event.tags.find(tag => tag[0] === "content-warning");
@@ -566,7 +627,7 @@ class Timeline {
     async executeNostrAction(action, originalEvent) {
         const nevent = window.NostrTools.nip19.neventEncode({
             id: originalEvent.id,
-            relays: [window.relayManager.url] // 今繋がっているリレーをヒントとして入れる
+            relays: [window.relayManager.url]
         });
 
         switch (action) {
@@ -575,17 +636,27 @@ class Timeline {
                 break;
 
             case 'repost':
-                if (!confirm('リポストしますか？')) return;
+                if (!confirm('RTしますか？')) return;
+
+                // 対象が kind:1 なら 6、それ以外なら 16 を選択
+                const isTextNote = originalEvent.kind === 1;
+                const repostKind = isTextNote ? 6 : 16;
 
                 const repostEv = {
-                    kind: 6,
-                    content: "",
+                    kind: repostKind,
+                    content: "", // NIP-18では通常空文字列
                     created_at: Math.floor(Date.now() / 1000),
                     tags: [
-                        ["e", originalEvent.id, window.relayManager.url, "mention"],
+                        // kind:16 の場合、対象の kind を指定する ["k", "数値"] タグが推奨されます
+                        ["e", originalEvent.id, window.relayManager.url],
                         ["p", originalEvent.pubkey]
                     ]
                 };
+
+                // kind:16 (Generic Repost) の場合は、対象イベントの kind を明示するタグを追加
+                if (!isTextNote) {
+                    repostEv.tags.push(["k", String(originalEvent.kind)]);
+                }
 
                 // --- クライアントタグを追加 ---
                 repostEv.tags.push([
@@ -598,9 +669,10 @@ class Timeline {
                 try {
                     const signed = await window.nostrAuth.signEvent(repostEv);
                     window.relayManager.publish(signed);
+                    alert(isTextNote ? 'RTしました' : 'RT（kind:16）しました');
                 } catch (err) {
-                    console.error('リポスト失敗:', err);
-                    alert('リポストに失敗しました');
+                    console.error('RT失敗:', err);
+                    alert('RTに失敗しました');
                 }
                 break;
 
