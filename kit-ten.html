@@ -580,6 +580,73 @@
     <script>
         console.log('✅ スクリプト読み込み完了');
 
+        // --- eHagaki 管理マネージャー ---
+        window.ehagakiManager = {
+            ORIGIN: 'https://lokuyow.github.io',
+            NS: 'ehagaki.embed',
+            VERSION: 1,
+
+            get modal() { return document.getElementById('ehagaki-modal'); },
+            get iframe() { return document.getElementById('ehagaki-iframe'); },
+
+            /**
+             * モーダルを開き、必要であればコンテキスト（リプライ等）を設定する
+             */
+            open(payload = null) {
+                const parentUrl = window.location.origin + window.location.pathname;
+
+                // 常に parentOrigin を付与してリロード（初期化）
+                this.iframe.src = `${this.ORIGIN}/ehagaki/?parentOrigin=${encodeURIComponent(parentUrl)}`;
+                this.modal.style.display = 'flex';
+
+                // ペイロード（リプライ先など）がある場合は、readyを待ってから送るか、
+                // 簡易的に少し遅延させて送信（より確実な ready 待機は後ほど実装可能）
+                if (payload) {
+                    // iframeのロード完了を待ってから送信
+                    this.iframe.onload = () => {
+                        this.setContext(payload);
+                    };
+                }
+            },
+
+            /**
+             * モーダルを閉じる
+             */
+            close() {
+                this.modal.style.display = 'none';
+            },
+
+            /**
+             * 子の iframe へメッセージを送信する（共通フォーマット）
+             */
+            post(type, data = {}) {
+                if (!this.iframe.contentWindow) return;
+
+                const message = {
+                    namespace: this.NS,
+                    version: this.VERSION,
+                    type: type,
+                    ...data
+                };
+                this.iframe.contentWindow.postMessage(message, this.ORIGIN);
+            },
+
+            /**
+             * 投稿コンテキスト（リプライ、引用、本文）を更新する
+             */
+            setContext(payload) {
+                this.post('composer.setContext', {
+                    requestId: `mgr-${Date.now()}`,
+                    payload: {
+                        reply: payload.reply || null,
+                        quotes: payload.quotes || [],
+                        content: payload.content ?? ""
+                    }
+                });
+            }
+        };
+
+        // --- メイン初期化処理 ---
         document.addEventListener('DOMContentLoaded', async () => {
             if (!window.dataStore || !window.viewState) {
                 console.error('❌ 初期化エラー');
@@ -587,132 +654,81 @@
             }
 
             window.timeline = new Timeline(document.getElementById('timeline'));
-
             await window.app.init();
-        });
 
-        document.addEventListener('DOMContentLoaded', () => {
-            const modal = document.getElementById('ehagaki-modal');
-            const iframe = document.getElementById('ehagaki-iframe');
+            // モーダル関連の固定イベントリスナー
             const openBtn = document.getElementById('open-ehagaki-modal');
             const closeBtn = document.getElementById('close-ehagaki-modal');
-            const EMBED_NS = 'ehagaki.embed';
 
-            const closeModal = () => { modal.style.display = 'none'; };
+            if (openBtn) openBtn.onclick = () => window.ehagakiManager.open();
+            if (closeBtn) closeBtn.onclick = () => window.ehagakiManager.close();
 
-            openBtn.addEventListener('click', () => {
-                // 1. 親のURLを再取得
-                const parentUrl = window.location.origin + window.location.pathname;
-
-                // 2. iframeのURLを「常にparentOrigin付き」で上書きする
-                // これにより、iframe内でのリンク移動でパラメータが消えても、開き直せば復活します
-                iframe.src = `https://lokuyow.github.io/ehagaki/?parentOrigin=${encodeURIComponent(parentUrl)}`;
-
-                // 3. モーダルを表示
-                modal.style.display = 'flex';
-            });
-            closeBtn.addEventListener('click', closeModal);
-            modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-
-            window.addEventListener('message', async (event) => {
-                // 1. まずは「知らない人」からのメッセージを無視する
-                if (event.origin !== 'https://lokuyow.github.io') return;
-
-                const data = event.data;
-                const EMBED_NS = 'ehagaki.embed';
-
-                // 2. eHagaki（子クライアント）からの通信か確認する
-                if (data?.namespace !== EMBED_NS) return;
-
-                // 3. 返事をするための「専用の封筒」を準備する
-                const reply = (obj) => {
-                    // メッセージを送ってきた相手(event.source)に直接返します
-                    event.source.postMessage({
-                        namespace: EMBED_NS,
-                        version: 1,
-                        ...obj
-                    }, event.origin);
-                };
-
-                const auth = window.nostrAuth;
-
-                // iframeの要素を取得
-                const iframe = document.getElementById('ehagaki-iframe');
-
-
-                // 4. 用件に合わせて返事をする
-                switch (data.type) {
-                    case 'ready': // 子が「準備できたよ！」と言ってきた時
-                        if (auth.pubkey) {
-                            reply({
-                                type: 'auth.login',
-                                payload: { pubkeyHex: auth.pubkey }
-                            });
-                        }
-                        break;
-
-                    case 'auth.request': // 子が「ログインさせて！」と言ってきた時
-                        if (auth.pubkey) {
-                            reply({
-                                type: 'auth.result',
-                                requestId: data.requestId,
-                                payload: {
-                                    pubkeyHex: auth.pubkey,
-                                    capabilities: ['signEvent']
-                                }
-                            });
-                        }
-                        break;
-
-                    case 'rpc.request': // 子が「署名して！」と言ってきた時
-                        if (data.payload?.method === 'signEvent') {
-                            try {
-                                const signed = await auth.signEvent(data.payload.params.event);
-                                reply({
-                                    type: 'rpc.result',
-                                    requestId: data.requestId,
-                                    payload: { result: signed }
-                                });
-                            } catch (err) {
-                                reply({ type: 'rpc.error', requestId: data.requestId, payload: { message: err.message } });
-                            }
-                        }
-                        break;
-                }
-            });
+            window.ehagakiManager.modal.onclick = (e) => {
+                if (e.target === window.ehagakiManager.modal) window.ehagakiManager.close();
+            };
         });
 
-        function openEhagakiWithReply(eventId) {
-            const modal = document.getElementById('ehagaki-modal');
-            const iframe = document.getElementById('ehagaki-iframe');
+        // --- メッセージ受信ハンドラ ---
+        window.addEventListener('message', async (event) => {
+            const mgr = window.ehagakiManager;
+            const auth = window.nostrAuth;
 
-            // ここでも src をセットし直して、確実に親情報を渡す
-            const parentUrl = window.location.origin + window.location.pathname;
-            iframe.src = `https://lokuyow.github.io/ehagaki/?parentOrigin=${encodeURIComponent(parentUrl)}`;
+            // 1. バリデーション
+            if (event.origin !== mgr.ORIGIN) return;
+            if (event.source !== mgr.iframe.contentWindow) return;
 
-            modal.style.display = 'flex';
+            const data = event.data;
+            if (data?.namespace !== mgr.NS) return;
 
-            // iframeに「この投稿へのリプライを準備して」と指示を出す
-            // iframeが読み込み完了(ready)した後に送るのが確実です
-            iframe.contentWindow.postMessage({
-                namespace: 'ehagaki.embed',
-                version: 1,
-                type: 'composer.setContext',
-                requestId: `reply-${Date.now()}`,
-                payload: {
-                    reply: eventId,  // ここにリプライ先のIDを入れる
-                    quotes: [],      // 引用は空にする
-                    content: ""      // 本文も空にする（または「@user 」などを入れても良い）
-                }
-            }, 'https://lokuyow.github.io');
-        }
+            // 2. 用件に応じた応答
+            switch (data.type) {
+                case 'ready':
+                    if (auth.pubkey) {
+                        mgr.post('auth.login', { payload: { pubkeyHex: auth.pubkey } });
+                    }
+                    break;
 
+                case 'auth.request':
+                    if (auth.pubkey) {
+                        mgr.post('auth.result', {
+                            requestId: data.requestId,
+                            payload: {
+                                pubkeyHex: auth.pubkey,
+                                capabilities: ['signEvent']
+                            }
+                        });
+                    }
+                    break;
+
+                case 'rpc.request':
+                    if (data.payload?.method === 'signEvent') {
+                        try {
+                            const signed = await auth.signEvent(data.payload.params.event);
+                            mgr.post('rpc.result', {
+                                requestId: data.requestId,
+                                payload: { result: signed }
+                            });
+                        } catch (err) {
+                            mgr.post('rpc.error', {
+                                requestId: data.requestId,
+                                payload: { message: err.message }
+                            });
+                        }
+                    }
+                    break;
+
+                case 'post.success':
+                    console.log('投稿成功:', data.payload);
+                    // 投稿成功時に自動で閉じる場合はここに追加
+                    // mgr.close();
+                    break;
+            }
+        });
+
+        // キーボードショートカット
         document.addEventListener('keydown', (e) => {
-            const modal = document.getElementById('ehagaki-modal');
-            if (!modal) return;
-
-            if (e.key === 'Escape' && modal.style.display === 'flex') {
-                modal.style.display = 'none';
+            if (e.key === 'Escape' && window.ehagakiManager.modal.style.display === 'flex') {
+                window.ehagakiManager.close();
             }
         });
     </script>

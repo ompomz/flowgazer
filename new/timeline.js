@@ -499,132 +499,132 @@ class Timeline {
      */
     createLongPressHandler(event) {
         let timer;
-        let lastPos = { x: 0, y: 0 };
+        let startPos = { x: 0, y: 0 };
+        const THRESHOLD = 10;
 
         const triggerAction = () => {
             const menu = document.getElementById('long-press-menu');
 
-            // --- 追加：ふぁぼマークを設定から取得 ---
+            // ふぁぼアイコンの反映
             const customLikeIcon = document.getElementById('kind-7-content-input')?.value || "⭐";
             const likeDisplay = document.getElementById('lp-like-icon');
-            if (likeDisplay) {
-                likeDisplay.textContent = customLikeIcon;
-            }
-            const items = menu.querySelectorAll('.lp-item');
+            if (likeDisplay) likeDisplay.textContent = customLikeIcon;
 
-            // 1. メニューの表示位置を設定（指の少し上）
-            menu.style.left = `${lastPos.x}px`;
-            menu.style.top = `${lastPos.y - 20}px`;
+            // 表示位置設定
+            menu.style.left = `${startPos.x}px`;
+            menu.style.top = `${startPos.y - 20}px`;
             menu.style.display = 'flex';
 
-            // 2. 「ふぁぼ（like）」をデフォルト選択状態にする
-            // CSSで .selected クラスに強調スタイルを当てておいてください
+            // 初期選択状態（like）の設定
+            const items = menu.querySelectorAll('.lp-item');
             items.forEach(i => i.classList.remove('selected'));
-            const likeBtn = menu.querySelector('[data-action="like"]');
-            if (likeBtn) likeBtn.classList.add('selected');
+            menu.querySelector('[data-action="like"]')?.classList.add('selected');
 
-            // 3. メニューを閉じる共通処理
+            // --- 共通の閉じる処理 ---
             const closeMenu = (e) => {
-                // メニュー内をクリックした場合は閉じない（個別のonclickで閉じるため）
                 if (e && e.target && menu.contains(e.target)) return;
-
                 menu.style.display = 'none';
-                // リスナーを解除してメモリリークを防ぐ
+                // リスナー解除
                 document.removeEventListener('pointerdown', closeMenu);
                 document.removeEventListener('keydown', handleKeyDown);
+                menu.onclick = null; // 委譲リスナーも掃除
             };
 
-            // 4. キーボード操作（Enterで実行 / Escapeでキャンセル）
+            // --- キーボード操作 ---
             const handleKeyDown = (e) => {
                 if (e.key === 'Enter') {
-                    e.preventDefault();
-                    // 現在 selected が付いているボタンのアクションを実行
-                    const currentSelected = menu.querySelector('.lp-item.selected');
-                    if (currentSelected) {
-                        const action = currentSelected.getAttribute('data-action');
-                        this.executeNostrAction(action, event);
-                    }
+                    const selected = menu.querySelector('.lp-item.selected');
+                    if (selected) this.executeNostrAction(selected.getAttribute('data-action'), event);
                     closeMenu();
-                } else if (e.key === 'Escape') {
+                } else if (e.key === 'Escape') closeMenu();
+            };
+
+            // --- イベント委譲によるクリック一括管理 ---
+            menu.onclick = (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+
+                // クリックされた要素から一番近い .lp-item を探す
+                const item = e.target.closest('.lp-item');
+                const action = item?.getAttribute('data-action');
+
+                if (action) {
+                    this.executeNostrAction(action, event);
                     closeMenu();
                 }
             };
 
-            // 5. リスナーの登録
-            // pointerdownは表示直後の誤爆を防ぐため少し遅らせる
             setTimeout(() => {
                 document.addEventListener('pointerdown', closeMenu);
                 document.addEventListener('keydown', handleKeyDown);
             }, 100);
-
-            // 6. 各ボタンのクリック（タップ）イベント
-            items.forEach(item => {
-                item.onclick = (e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-
-                    // アクションを取得して実行
-                    const action = item.getAttribute('data-action');
-                    this.executeNostrAction(action, event);
-
-                    // 即座にメニューを閉じる
-                    closeMenu();
-                };
-            });
         };
 
         const start = (e) => {
-            // マウスとタッチの両方の座標に対応
             const touch = e.touches ? e.touches[0] : e;
-            lastPos = { x: touch.clientX, y: touch.clientY };
-            // 800ms長押しでメニュー表示
-            timer = setTimeout(triggerAction, 800);
+            startPos = { x: touch.clientX, y: touch.clientY };
+            timer = setTimeout(() => triggerAction(e), 400);
         };
 
-        const cancel = () => clearTimeout(timer);
+        const move = (e) => {
+            if (!timer) return;
+            const touch = e.touches ? e.touches[0] : e;
+            const dist = Math.hypot(touch.clientX - startPos.x, touch.clientY - startPos.y);
+
+            // 設定したしきい値を超えて動いたらキャンセル
+            if (dist > THRESHOLD) {
+                clearTimeout(timer);
+                timer = null;
+            }
+        };
+
+        const cancel = () => {
+            clearTimeout(timer);
+            timer = null;
+        };
 
         return {
-            element: null, // attach時に要素を保持
-
+            element: null,
             attach(element) {
                 this.element = element;
-                // 開始イベント
                 element.addEventListener('mousedown', start);
                 element.addEventListener('touchstart', start, { passive: true });
 
-                // 中断イベント（指を離す、スクロールする、枠外に出る）
+                // 移動検知（しきい値判定用）
+                element.addEventListener('mousemove', move);
+                element.addEventListener('touchmove', move, { passive: true });
+
+                // 中断イベント
                 element.addEventListener('mouseup', cancel);
                 element.addEventListener('mouseleave', cancel);
                 element.addEventListener('touchend', cancel);
                 element.addEventListener('touchcancel', cancel);
-                element.addEventListener('mousemove', cancel);
-                element.addEventListener('touchmove', cancel, { passive: true });
 
-                // 既存コードとの互換性のためハンドラを保存
-                element._longPressHandlers = { start, cancel };
+                element._longPressHandlers = { start, move, cancel };
             },
-
             detach() {
-                const element = this.element;
-                if (!element || !element._longPressHandlers) return;
-
-                const { start, cancel } = element._longPressHandlers;
-                element.removeEventListener('mousedown', start);
-                element.removeEventListener('mouseup', cancel);
-                element.removeEventListener('mouseleave', cancel);
-                element.removeEventListener('mousemove', cancel);
-                element.removeEventListener('touchstart', start);
-                element.removeEventListener('touchend', cancel);
-                element.removeEventListener('touchmove', cancel);
-                element.removeEventListener('touchcancel', cancel);
-
-                delete element._longPressHandlers;
+                const el = this.element;
+                if (!el || !el._longPressHandlers) return;
+                const { start, move, cancel } = el._longPressHandlers;
+                el.removeEventListener('mousedown', start);
+                el.removeEventListener('touchstart', start);
+                el.removeEventListener('mousemove', move);
+                el.removeEventListener('touchmove', move);
+                el.removeEventListener('mouseup', cancel);
+                el.removeEventListener('mouseleave', cancel);
+                el.removeEventListener('touchend', cancel);
+                el.removeEventListener('touchcancel', cancel);
+                delete el._longPressHandlers;
                 clearTimeout(timer);
             }
         };
     }
 
+    /**
+     * Nostrアクション（like, repost, quote, reply）を実行
+     */
     async executeNostrAction(action, originalEvent) {
+        // neventの生成（共通ロジック）
         const nevent = window.NostrTools.nip19.neventEncode({
             id: originalEvent.id,
             relays: [window.relayManager.url]
@@ -638,27 +638,24 @@ class Timeline {
             case 'repost':
                 if (!confirm('RTしますか？')) return;
 
-                // 対象が kind:1 なら 6、それ以外なら 16 を選択
                 const isTextNote = originalEvent.kind === 1;
                 const repostKind = isTextNote ? 6 : 16;
 
                 const repostEv = {
                     kind: repostKind,
-                    content: "", // NIP-18では通常空文字列
+                    content: "",
                     created_at: Math.floor(Date.now() / 1000),
                     tags: [
-                        // kind:16 の場合、対象の kind を指定する ["k", "数値"] タグが推奨されます
                         ["e", originalEvent.id, window.relayManager.url],
                         ["p", originalEvent.pubkey]
                     ]
                 };
 
-                // kind:16 (Generic Repost) の場合は、対象イベントの kind を明示するタグを追加
                 if (!isTextNote) {
                     repostEv.tags.push(["k", String(originalEvent.kind)]);
                 }
 
-                // --- クライアントタグを追加 ---
+                // クライアントタグ
                 repostEv.tags.push([
                     'client',
                     'flowgazer',
@@ -669,7 +666,8 @@ class Timeline {
                 try {
                     const signed = await window.nostrAuth.signEvent(repostEv);
                     window.relayManager.publish(signed);
-                    alert(isTextNote ? 'RTしました' : 'RT（kind:16）しました');
+                    // alertはUXを阻害する場合があるため、必要に応じてトースト通知等へ
+                    console.log('RT成功');
                 } catch (err) {
                     console.error('RT失敗:', err);
                     alert('RTに失敗しました');
@@ -677,22 +675,19 @@ class Timeline {
                 break;
 
             case 'quote':
-            case 'reply':
-                const isQuote = (action === 'quote');
-                document.getElementById('ehagaki-modal').style.display = 'flex';
+                // マネージャーを呼び出すだけ
+                window.ehagakiManager.open({
+                    quotes: [nevent],
+                    reply: null
+                });
+                break;
 
-                // eHagaki へ（encodedId の代わりに nevent を渡す）
-                document.getElementById('ehagaki-iframe').contentWindow.postMessage({
-                    namespace: 'ehagaki.embed',
-                    version: 1,
-                    type: 'composer.setContext',
-                    requestId: `${action}-${Date.now()}`,
-                    payload: {
-                        reply: isQuote ? null : nevent,
-                        quotes: isQuote ? [nevent] : [],
-                        content: ""
-                    }
-                }, 'https://lokuyow.github.io');
+            case 'reply':
+                // マネージャーを呼び出すだけ
+                window.ehagakiManager.open({
+                    reply: nevent,
+                    quotes: []
+                });
                 break;
         }
     }
