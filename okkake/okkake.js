@@ -89,12 +89,25 @@ async function resolveToHex(input) {
   const str = input.trim();
   const res = { hex: "", relays: [], pubkey: "" };
 
-  // NIP-05
+  // NIP-05 (最優先でチェック)
   if (str.includes("@")) {
+    console.log("🔍 NIP-05 解決を試みます:", str);
     try {
-      const profile = await NostrTools.nip05.queryProfile(str);
-      if (profile && profile.pubkey) { res.hex = profile.pubkey; return res; }
-    } catch (e) { console.error("NIP-05 error:", e); }
+      // タイムアウト設定（5秒待ってもダメなら諦める）
+      const profile = await Promise.race([
+        NostrTools.nip05.queryProfile(str),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 5000))
+      ]);
+
+      if (profile && profile.pubkey) {
+        console.log("✅ NIP-05 解決成功:", profile.pubkey);
+        res.hex = profile.pubkey;
+        return res;
+      }
+    } catch (e) {
+      console.warn("⚠️ NIP-05 解決に失敗（タイポの可能性あり）:", e.message);
+      // ここで return せず、そのまま下の NIP-19 や Raw Hex 判定へ流すのがコツ！
+    }
   }
 
   // NIP-19 (npub, note, nevent, nprofile)
@@ -105,16 +118,26 @@ async function resolveToHex(input) {
       if (decoded.type === 'nprofile' || decoded.type === 'nevent') {
         res.hex = decoded.data.id || decoded.data.pubkey;
         res.relays = decoded.data.relays || [];
-        res.pubkey = decoded.data.pubkey || ""; // nevent用
+        res.pubkey = decoded.data.pubkey || "";
       } else {
-        res.hex = decoded.data; // npub, note用
+        res.hex = decoded.data;
       }
       return res;
-    } catch (e) { console.error("NIP-19 error:", e); }
+    } catch (e) {
+      console.error("❌ NIP-19 decode error:", e);
+    }
   }
 
-  res.hex = str; // 素のHex
-  return res;
+  // 最後：入力が「ちゃんとした Hex (64文字)」かチェック
+  const hexPattern = /^[0-9a-fA-F]{64}$/;
+  if (hexPattern.test(str)) {
+    res.hex = str;
+    return res;
+  }
+
+  // ここまで来ても解決できず、Hexでもないなら「失敗」として null を返す
+  console.warn("⚠️ 解決に失敗しました（不正な形式）:", str);
+  return null;
 }
 
 /* ---------- Timeline ---------- */
@@ -200,22 +223,41 @@ Timeline.prototype.loadOrigin = async function (pubkey, eventId, isAutoLoad) {
 };
 
 Timeline.prototype.fetchContacts = function (pubkey) {
+  var self = this;
   return new Promise(function (resolve) {
     var subId = "k3-" + Date.now();
     var list = [];
+
+    // --- タイムアウト設定 (3秒) ---
+    var timer = setTimeout(function () {
+      console.warn("⌛ Contact list request timed out for:", pubkey);
+      relayManager.unsubscribe(subId);
+
+      // タイムアウト時は、せめて自分自身だけでもリストに入れて返す
+      if (list.length === 0) list.push(pubkey);
+      resolve(list);
+    }, 3000);
 
     relayManager.subscribe(
       subId,
       { kinds: [3], authors: [pubkey] },
       function (type, ev) {
         if (type === "EVENT") {
+          // イベントが届いたら、中身をパース
           for (var i = 0; i < ev.tags.length; i++) {
             if (ev.tags[i][0] === "p") list.push(ev.tags[i][1]);
           }
+          // 注: kind 3 は通常1つだけですが、
+          // EOSEを待たずに resolve したい場合はここで条件判定も可能です
         }
+
         if (type === "EOSE") {
+          // 正常に応答が完了した場合、タイマーを解除
+          clearTimeout(timer);
           relayManager.unsubscribe(subId);
+
           if (list.length === 0) list.push(pubkey);
+          console.log("✅ Contact list loaded:", list.length);
           resolve(list);
         }
       }
