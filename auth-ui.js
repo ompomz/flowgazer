@@ -29,32 +29,33 @@ function createAuthUI() {
     `;
 
     panel.innerHTML = `
-        <div id="auth-status"></div>
-        <div id="auth-login">
-            <button id="nip07-login" style="margin-bottom: 0.5rem; font-size: 0.8rem; font-weight: bold; padding: 0.25rem 1rem; border: none; border-radius: 999px; background-color: #e0f2f1; color: #00796b; cursor: pointer;">🔐 NIP-07でログイン</button>
-            <button id="generate-trial-keypair" style="margin-bottom: 0.5rem; font-size: 0.8rem; font-weight: bold; padding: 0.25rem 1rem; border: none; border-radius: 999px; background-color: #f9c; color: #fff; cursor: pointer;">✨ 新規作成してはじめる</button>
-            
+    <div id="auth-status"></div>
+    <div id="auth-login">
+        <button id="nip07-login" style="margin-bottom: 0.5rem; margin-right: 0.5rem; font-size: 0.8rem; font-weight: bold; padding: 0 1rem; height: 2.2rem; border: none; border-radius: 999px; background-color: #e0f2f1; color: #00796b; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;">🔐 NIP-07でログイン</button>
+        <button id="generate-trial-keypair" style="margin-bottom: 0.5rem; font-size: 0.8rem; font-weight: bold; padding: 0 1rem; height: 2.2rem; border: none; border-radius: 999px; background-color: #f9c; color: #fff; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;">✨ 新規作成してはじめる</button>
+        
         <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem;">
-            <form onsubmit="return false;" style="display: flex; gap: 0.5rem; flex-grow: 1;">
-            <input type="text" name="username" autocomplete="username" style="display:none;">
-            <input type="password" id="nsec-input" autocomplete="current-password" placeholder="nsec1..." style="flex-grow: 1; font-size: 0.9rem; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"> <button type="button" id="nsec-login" style="font-size: 0.8rem; font-weight: bold; padding: 0.25rem 1rem; border: none; border-radius: 999px; background-color: #e0f2f1; color: #00796b; cursor: pointer;">🔑 nsec</button>
+            <form onsubmit="return false;" style="display: flex; gap: 0.5rem; flex-grow: 1; align-items: center;">
+                <input type="text" name="username" autocomplete="username" style="display:none;">
+                <input type="password" id="nsec-input" autocomplete="current-password" placeholder="nsec1..." style="flex-grow: 1; font-size: 0.9rem; padding: 0 0.5rem; height: 2.2rem; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;"> 
+                <button type="button" id="nsec-login" style="font-size: 0.8rem; font-weight: bold; padding: 0 1rem; height: 2.2rem; border: none; border-radius: 999px; background-color: #e0f2f1; color: #00796b; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap;">🔑 nsec</button>
             </form>
-            </div>
-            <small style="color: #999; display: block; margin-bottom: 0.5rem;">書き込み可能</small>
-
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <input type="text" id="npub-input" placeholder="npub1... or name@domain.com" style="flex-grow: 1; font-size: 0.9rem; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
-                <button type="button" id="npub-login" style="font-size: 0.8rem; font-weight: bold; padding: 0.25rem 1rem; border: none; border-radius: 999px; background-color: #e0f2f1; color: #00796b; cursor: pointer;">👀 npub</button>
-            </div>
-            <small style="color: #999; display: block;">読み取り専用</small>
         </div>
+        <small style="color: #999; display: block; margin-bottom: 0.5rem;">書き込み可能</small>
 
-        <div id="auth-info" style="display: none;">
-            <p><span id="auth-mode" style="color: #999; font-size: 0.8rem;"></span><span> 公開鍵: <span id="auth-npub" style="font-family: monospace;"></span></span></p>
-            <div id="copy-nsec-container"></div>
-            <button id="logout-btn" style="background-color: #ffebee; color: #c62828; border-radius: 999px; padding: 0.25rem 1rem; border: none; margin-top: 1rem; cursor: pointer;">サインアウト</button>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <input type="text" id="npub-input" placeholder="npub1... or name@domain.com" style="flex-grow: 1; font-size: 0.9rem; padding: 0 0.5rem; height: 2.2rem; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+            <button type="button" id="npub-login" style="font-size: 0.8rem; font-weight: bold; padding: 0 1rem; height: 2.2rem; border: none; border-radius: 999px; background-color: #e0f2f1; color: #00796b; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap;">👀 npub</button>
         </div>
-        <button id="close-auth" style="margin-top: 1rem; background-color: #00796b; color: #fff; border-radius: 999px; padding: 0.25rem 1rem; border: none; cursor: pointer; width: 100%;">とじる</button>
+        <small style="color: #999; display: block;">読み取り専用</small>
+    </div>
+
+    <div id="auth-info" style="display: none;">
+        <p><span id="auth-mode" style="color: #999; font-size: 0.8rem;"></span><span> 公開鍵: <span id="auth-npub" style="font-family: monospace;"></span></span></p>
+        <div id="copy-nsec-container"></div>
+        <button id="logout-btn" style="background-color: #ffebee; color: #c62828; border-radius: 999px; padding: 0 1rem; height: 2.2rem; border: none; margin-top: 1rem; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;">サインアウト</button>
+    </div>
+    <button id="close-auth" style="margin-top: 1rem; background-color: #00796b; color: #fff; border-radius: 999px; padding: 0 1rem; height: 2.2rem; border: none; cursor: pointer; width: 100%; display: inline-flex; align-items: center; justify-content: center;">とじる</button>
     `;
 
     overlay.appendChild(panel);
