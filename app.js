@@ -40,7 +40,7 @@ class FlowgazerApp {
 
     // ログインUI更新
     this.updateLoginUI();
-    this.updateTabVisibility(); // ← 追加
+    this.updateTabVisibility();
 
     // リレー接続
     const savedRelay = localStorage.getItem('relayUrl');
@@ -48,6 +48,7 @@ class FlowgazerApp {
     const relay = savedRelay || defaultRelay;
     await this.connectRelay(relay);
 
+    // キャッシュ済みチャンネルリストを復元（ログイン不要）
     const savedChannels = localStorage.getItem('myChannels');
     if (savedChannels) {
       try {
@@ -58,22 +59,52 @@ class FlowgazerApp {
       }
     }
 
-    if (window.nostrAuth.isLoggedIn()) {
-      fetchMyChannels();
-    }
-
-    // 禁止ワード取得
+    // 禁止ワード取得（全員共通）
     await this.fetchForbiddenWords();
 
-    // ログイン済みなら初期データ取得
-    if (window.nostrAuth.isLoggedIn()) {
-      this.fetchInitialData();
-    }
-
-    // Baseline方式でタイムライン初期化
+    // Baseline方式でタイムライン初期化（全員共通）
     await this.initializeTimelineBaseline();
 
+    // ログイン済みならログイン後処理を実行
+    if (window.nostrAuth.isLoggedIn()) {
+      await this.onLogin();
+    }
+
     console.log('✅ flowgazer起動完了');
+  }
+
+  // ========================================
+  // ログイン後初期化（init() からも auth-ui.js からも呼ぶ）
+  // ========================================
+
+  /**
+   * リロード時のログイン後初期化。
+   *
+   * 【呼び出し元の使い分け】
+   * ・リロード時  → init() からここを呼ぶ
+   * ・ログイン操作後 → auth-ui.js の onAuthSuccess() が直接処理する
+   *   （kind:3 を待ってからモーダルを閉じる必要があるため auth-ui.js 側で完結）
+   */
+  async onLogin() {
+    const myPubkey = window.nostrAuth.pubkey;
+    if (!myPubkey) {
+      console.warn('⚠️ onLogin: pubkey が未確定のため処理をスキップします');
+      return;
+    }
+
+    console.log('🔑 onLogin: ログイン後初期化開始 (リロード)', myPubkey.substring(0, 8) + '...');
+
+    this.updateLoginUI();
+
+    // タブのデータ取得済みフラグをリセット
+    this.tabDataFetched.following = false;
+    this.tabDataFetched.myposts   = false;
+    this.tabDataFetched.likes     = false;
+
+    // フォローリスト取得 → 確定後に Stream Phase 再起動（fetchInitialData内で行う）
+    this.fetchInitialData();
+
+    fetchMyChannels();
   }
 
   // ========================================
@@ -600,9 +631,15 @@ class FlowgazerApp {
 
   /**
    * ログイン後の初期データ取得
+   * フォローリストが確定したタイミングで Stream Phase を再起動し、
+   * following タブをリロード不要で反映させる。
    */
   fetchInitialData() {
     const myPubkey = window.nostrAuth.pubkey;
+    if (!myPubkey) {
+      console.warn('⚠️ fetchInitialData: pubkey 未確定のためスキップ');
+      return;
+    }
 
     // 1. フォローリスト取得
     window.relayManager.subscribe('following-list', {
@@ -614,6 +651,15 @@ class FlowgazerApp {
         const pubkeys = event.tags.filter(t => t[0] === 'p').map(t => t[1]);
         window.dataStore.setFollowingList(pubkeys);
         window.profileFetcher.requestMultiple(pubkeys);
+
+        // ★ フォローリスト確定 → following フィルタを含めた Stream Phase に再構築
+        // cursorSince は既存の値を引き継ぐため、既読分を重複取得しない
+        console.log(`👥 フォローリスト確定 (${pubkeys.length}人) → Stream Phase 再起動`);
+        window.relayManager.unsubscribe('stream-phase');
+        this.executeStreamPhase();
+
+        // following タブを即時再描画
+        window.viewState.renderNow();
       }
     });
 

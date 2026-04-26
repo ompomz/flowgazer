@@ -70,49 +70,162 @@ function createAuthUI() {
  */
 function setupAuthEvents() {
     const handlers = {
-        // 成功時の共通処理
-        onAuthSuccess: (msg) => {
-            console.log("Auth Success! Current pubkey:", window.nostrAuth.pubkey);
 
-            if (msg) alert(msg);
+        // ----------------------------------------
+        // ローディング表示ヘルパー
+        // ----------------------------------------
+
+        /** モーダル内にローディングメッセージを表示し、入力UIを隠す */
+        showLoading(msg) {
+            const status = document.getElementById('auth-status');
+            if (status) {
+                status.textContent = msg;
+                status.style.cssText = 'margin-bottom: 0.75rem; color: #00796b; font-size: 0.85rem;';
+            }
+            document.getElementById('auth-login').style.display = 'none';
+            document.getElementById('close-auth').style.display = 'none';
+        },
+
+        /** ローディング表示をリセットする */
+        clearLoading() {
+            const status = document.getElementById('auth-status');
+            if (status) {
+                status.textContent = '';
+                status.style.cssText = '';
+            }
+            document.getElementById('close-auth').style.display = '';
+        },
+
+        // ----------------------------------------
+        // pubkey 確定後の共通処理
+        // kind:3 を待ってからモーダルを閉じる
+        // ----------------------------------------
+
+        /**
+         * ログイン成功後の共通処理。
+         * kind:3 (フォローリスト) の取得を試みて、
+         * 結果によらず取得完了後にモーダルを閉じる。
+         *
+         * @param {string} welcomeMsg - alert に表示するメッセージ（空文字なら表示しない）
+         */
+        onAuthSuccess: async (welcomeMsg) => {
+            const myPubkey = window.nostrAuth.pubkey;
+            if (!myPubkey) {
+                console.error('onAuthSuccess: pubkey が未確定です');
+                return;
+            }
+            console.log('Auth Success! pubkey:', myPubkey.substring(0, 8) + '...');
+
+            if (welcomeMsg) alert(welcomeMsg);
+
             updateAuthUI();
 
-            // 重要なポイント：少し待ってからアプリ側のUIを叩く
-            setTimeout(() => {
-                if (window.app && window.app.updateLoginUI) {
-                    console.log("Calling app.updateLoginUI...");
-                    window.app.updateLoginUI();
-                }
-                handlers.closeAuth();
-            }, 300); // 0.3秒くらいしっかり待ってみる
+            // ---- UI 更新だけ先に行う ----
+            if (window.app?.updateLoginUI) window.app.updateLoginUI();
+
+            // ---- kind:3 を待ちながらローディング表示 ----
+            handlers.showLoading('📡 フォロー情報を取得中...');
+
+            const TIMEOUT_MS = 8000;
+            let resolved = false;
+
+            await new Promise((resolve) => {
+                const done = (hasFollowing) => {
+                    if (resolved) return;
+                    resolved = true;
+                    window.relayManager.unsubscribe('auth-following-check');
+                    console.log(`👥 kind:3 取得完了 (フォロー: ${hasFollowing ? 'あり' : 'なし'})`);
+                    resolve();
+                };
+
+                const timeoutId = setTimeout(() => {
+                    console.warn('⏱️ kind:3 タイムアウト → グローバルタイムラインで続行');
+                    done(false);
+                }, TIMEOUT_MS);
+
+                window.relayManager.subscribe('auth-following-check', {
+                    kinds: [3],
+                    authors: [myPubkey],
+                    limit: 1
+                }, (type, event) => {
+                    if (type === 'EVENT') {
+                        clearTimeout(timeoutId);
+                        // DataStore にフォローリストを反映
+                        const pubkeys = event.tags
+                            .filter(t => t[0] === 'p')
+                            .map(t => t[1]);
+                        window.dataStore.setFollowingList(pubkeys);
+                        window.profileFetcher.requestMultiple(pubkeys);
+                        done(pubkeys.length > 0);
+                    } else if (type === 'EOSE') {
+                        // EVENT が来ないまま EOSE → フォローなし or kind:3 未投稿
+                        clearTimeout(timeoutId);
+                        done(false);
+                    }
+                });
+            });
+
+            // ---- フォロー情報確定後に Stream Phase を再起動 ----
+            window.relayManager.unsubscribe('stream-phase');
+            if (window.app?.executeStreamPhase) window.app.executeStreamPhase();
+
+            // ---- onLogin の残り処理（タブフラグリセット・チャンネル取得）を実行 ----
+            // ※ フォローリストは上で取得済みなので fetchInitialData() は呼ばない
+            if (window.app) {
+                window.app.tabDataFetched.following = false;
+                window.app.tabDataFetched.myposts   = false;
+                window.app.tabDataFetched.likes     = false;
+                window.app.updateLoginUI();
+            }
+            if (typeof fetchMyChannels === 'function') fetchMyChannels();
+
+            window.viewState?.renderNow();
+
+            // ---- ローディングを消してモーダルを閉じる ----
+            handlers.clearLoading();
+            handlers.closeAuth();
         },
+
+        // ----------------------------------------
+        // 各ログイン方法（すべて async に統一）
+        // ----------------------------------------
 
         nip07Login: async () => {
             try {
                 await window.nostrAuth.loginWithExtension();
-                handlers.onAuthSuccess('いけた！');
-            } catch (e) { alert(e.message); }
+                await handlers.onAuthSuccess('いけた！');
+            } catch (e) {
+                handlers.clearLoading();
+                alert(e.message);
+            }
         },
 
-        nsecLogin: () => {
+        nsecLogin: async () => {
             const nsec = document.getElementById('nsec-input').value.trim();
             if (!nsec) return;
             try {
-                window.nostrAuth.loginWithNsec(nsec);
-                handlers.onAuthSuccess('いけた！');
-            } catch (e) { alert(e.message); }
+                window.nostrAuth.loginWithNsec(nsec); // 同期
+                await handlers.onAuthSuccess('いけた！');
+            } catch (e) {
+                handlers.clearLoading();
+                alert(e.message);
+            }
         },
 
-        npubLogin: () => {
+        npubLogin: async () => {
             const npub = document.getElementById('npub-input').value.trim();
             if (!npub) return;
             try {
-                window.nostrAuth.loginWithNpub(npub);
-                handlers.onAuthSuccess('welcome to nostr!');
-            } catch (e) { alert(e.message); }
+                // loginWithNpub は async（NIP-05 解決に fetch が必要）なので await する
+                await window.nostrAuth.loginWithNpub(npub);
+                await handlers.onAuthSuccess('welcome to nostr!');
+            } catch (e) {
+                handlers.clearLoading();
+                alert(e.message);
+            }
         },
 
-        generateTrial: () => {
+        generateTrial: async () => {
             if (!confirm(
                 '新しい鍵ペアを生成します。\n' +
                 '生成された秘密鍵（nsec）は失くすと見つからないので\n' +
@@ -120,9 +233,12 @@ function setupAuthEvents() {
             try {
                 const sk = window.NostrTools.generateSecretKey();
                 const nsec = window.NostrTools.nip19.nsecEncode(sk);
-                window.nostrAuth.loginWithNsec(nsec);
-                handlers.onAuthSuccess('welcome to nostr!');
-            } catch (e) { alert(e.message); }
+                window.nostrAuth.loginWithNsec(nsec); // 同期
+                await handlers.onAuthSuccess('welcome to nostr!');
+            } catch (e) {
+                handlers.clearLoading();
+                alert(e.message);
+            }
         },
 
         logout: () => {
@@ -130,7 +246,7 @@ function setupAuthEvents() {
             alert('またきてね');
             updateAuthUI();
             if (window.app?.updateLoginUI) window.app.updateLoginUI();
-            showAuthUI(); // ログアウト後に再度ログイン画面を見せる
+            showAuthUI();
         },
 
         closeAuth: () => {
