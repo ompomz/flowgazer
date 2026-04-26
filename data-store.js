@@ -8,20 +8,22 @@ class DataStore {
     // ===== 基本データ =====
     this.events = new Map(); // eventId -> event
     this.profiles = new Map(); // pubkey -> profile
-    
+
     // ===== カテゴリ分類 (シンプルな分類のみ) =====
     this.eventsByKind = new Map(); // kind -> Set<eventId>
     this.eventsByAuthor = new Map(); // pubkey -> Set<eventId>
     this.eventsByReferencedEvent = new Map(); // eventId -> Set<eventId> (eタグ)
     this.eventsByReferencedPubkey = new Map(); // pubkey -> Set<eventId> (pタグ)
-    
+
     // ===== ユーザー固有のデータ =====
     this.followingPubkeys = new Set(); // フォロー中のpubkey
     this.likedByMeIds = new Set(); // 自分がふぁぼった投稿ID
-    
+
     // ===== リアクションカウント =====
     this.reactionCounts = new Map(); // eventId -> { reposts: 0, reactions: 0 }
-    
+
+    this.eventsByChannel = new Map(); // channelId -> Set<eventId>
+
     console.log('✅ DataStore初期化完了');
   }
 
@@ -83,6 +85,19 @@ class DataStore {
         this.eventsByReferencedEvent.get(tag[1]).add(event.id);
       }
     });
+
+    // kind:42 チャンネルインデックス（eタグのrootがchannelId）
+    if (event.kind === 42) {
+      const rootTag = event.tags.find(t => t[0] === 'e' && t[3] === 'root')
+        || event.tags.find(t => t[0] === 'e');
+      if (rootTag?.[1]) {
+        const channelId = rootTag[1];
+        if (!this.eventsByChannel.has(channelId)) {
+          this.eventsByChannel.set(channelId, new Set());
+        }
+        this.eventsByChannel.get(channelId).add(event.id);
+      }
+    }
 
     // pタグ (参照ユーザー) インデックス
     event.tags.forEach(tag => {
@@ -251,13 +266,13 @@ class DataStore {
   getProfile(pubkey) {
     return this.profiles.get(pubkey);
   }
-  
-    /**
-   * 指定した pubkey の最新の kind:X イベントを返す
-   * @param {string} pubkey
-   * @param {number} kind
-   * @returns {Object|null}
-   */
+
+  /**
+ * 指定した pubkey の最新の kind:X イベントを返す
+ * @param {string} pubkey
+ * @param {number} kind
+ * @returns {Object|null}
+ */
   getLatestEventByKind(pubkey, kind) {
     const eventIds = this.eventsByAuthor.get(pubkey);
     if (!eventIds) return null;
@@ -297,6 +312,15 @@ class DataStore {
    */
   isFollowing(pubkey) {
     return this.followingPubkeys.has(pubkey);
+  }
+
+  /**
+   * チャンネルIDに紐づくeventIdを取得
+   * @param {string} channelId
+   * @returns {Set<string>}
+   */
+  getEventIdsByChannel(channelId) {
+    return this.eventsByChannel.get(channelId) || new Set();
   }
 
   // ========================================
@@ -353,6 +377,7 @@ class DataStore {
     this.followingPubkeys.clear();
     this.likedByMeIds.clear();
     this.reactionCounts.clear();
+    this.eventsByChannel.clear();
     console.log('🗑️ データストアをクリアしました');
   }
 }

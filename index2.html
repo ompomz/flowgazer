@@ -6,13 +6,416 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>flowgazer -kindness edition-</title>
     <link rel="icon" type="image/x-icon" href="https://ompomz.github.io/flowgazer/favicon.ico">
-    <link rel="stylesheet" href="style.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            -webkit-text-size-adjust: 100%;
+            text-size-adjust: 100%;
+        }
+
+        body {
+            font-weight: 400;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Helvetica Neue", Arial, sans-serif;
+            padding: .5rem;
+            line-height: 1.3;
+            background-color: #f7f7f7;
+            color: #666;
+            font-size: .9rem;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto 0 .5rem;
+            padding: .5rem;
+        }
+
+        a {
+            color: #666;
+            text-decoration: none;
+        }
+
+        h1 {
+            font-size: 1.2rem;
+            margin-bottom: .5rem;
+        }
+
+        /* フォーム要素 */
+        input,
+        textarea,
+        select {
+            font-size: .9rem;
+            font-family: inherit;
+            color: #666;
+            background-color: #fff;
+            transition: background-color 0.3s, color 0.3s;
+            padding: .5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        input[type="checkbox"] {
+            vertical-align: middle;
+        }
+
+        textarea {
+            resize: vertical;
+        }
+
+        /* ボタン */
+        .container button {
+            background-color: #ddd;
+            font-size: .8rem;
+            font-weight: 700;
+            text-align: center;
+            color: #fff;
+            white-space: nowrap;
+            padding: 0.25rem 0.75rem;
+            margin: 0;
+            min-width: 4rem;
+            min-height: 1.75rem;
+            border: none;
+            border-radius: 999px;
+            cursor: pointer;
+        }
+
+        .full-width {
+            width: 100%;
+        }
+
+        .flex-container {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            margin: 0;
+        }
+
+        .flex-container button,
+        .flex-container input,
+        .flex-container textarea,
+        .flex-container select {
+            flex-grow: 1;
+            margin: 0.25rem 0;
+        }
+
+        .flex-column {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .flex-wrap {
+            flex-wrap: wrap;
+        }
+
+        .flex-exbetween {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 0.5rem;
+        }
+
+        .setting-tabs-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            margin: 0.5rem 0 0 0;
+            column-gap: 0.25rem;
+            row-gap: 0.5rem;
+        }
+
+        /* チェックボックス */
+        .settings-checkbox-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.25rem;
+            margin: 0;
+        }
+
+        .settings-checkbox-row input {
+            flex-grow: 0 !important;
+            width: auto;
+            margin: 0;
+        }
+
+        .settings-checkbox-row label {
+            display: inline-flex;
+            align-items: center;
+            cursor: pointer;
+            white-space: nowrap;
+            margin-left: 0.5rem;
+            font-size: 0.85rem;
+        }
+
+        .settings-checkbox-row .no-margin-left {
+            margin-left: 0.25rem !important;
+        }
+
+        /* 特定入力 */
+        #kind-7-content-input {
+            width: 2.2rem;
+            height: 1.5rem;
+            text-align: center;
+            padding: 0;
+        }
+
+        #show-settings,
+        #hide-settings {
+            background-color: hsl(0, 0%, 60%);
+            margin: 0;
+        }
+
+        /* タブ */
+        #tab-buttons {
+            display: flex;
+            gap: 0.25rem;
+            align-items: center;
+        }
+
+        #tab-buttons button {
+            margin: 0;
+        }
+
+        .tab-button.active {
+            background: #66b3ff;
+        }
+
+        /* タイムライン */
+        ul {
+            list-style: none;
+            padding: 0;
+            margin: 0.5rem 0;
+        }
+
+        li.event {
+            word-break: break-all;
+            padding: .5rem .25rem;
+            border-top: 1px dashed #ddd;
+        }
+
+        .event-liked {
+            border-right: .3rem solid gold;
+        }
+
+        .npub-link,
+        .nostr-ref,
+        .pubkey-ref {
+            color: #66b3ff;
+        }
+
+        .custom-emoji {
+            height: 1.2rem;
+            vertical-align: bottom;
+        }
+
+        .post-content {
+            display: inline;
+        }
+
+        /* 表示制御 */
+        .hidden,
+        .hidden-section {
+            display: none;
+        }
+
+        /* ボタン系 */
+        #generate-trial-keypair-original {
+            background-color: #f9c;
+        }
+
+        #send-new-post {
+            background-color: #ffcc66;
+            margin: 0;
+        }
+
+        #subscribe-relay,
+        #apply-filter,
+        #clear-filter {
+            background-color: #ffcc66;
+            text-align: center;
+            padding: 4px 0;
+            max-width: 4rem;
+            width: 4rem;
+        }
+
+        /* ローディング */
+        #load-more {
+            background: #66b3ff;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        #load-more.loading::before {
+            content: "";
+            width: 0.9rem;
+            height: 0.9rem;
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3' stroke-linecap='round'><path d='M12 2a10 10 0 1 1-10 10' /></svg>");
+            background-size: contain;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* チュートリアル */
+        #open-tutorial-btn {
+            font-size: 1rem;
+            color: #00796b;
+            background-color: #e0f2f1;
+            padding: 0.25rem 2rem;
+            margin: 0 0 0.5rem 0;
+            border: none;
+            border-radius: 999px;
+            cursor: pointer;
+            font-weight: 700;
+            transition: background-color 0.2s;
+        }
+
+        #open-tutorial-btn:hover {
+            background-color: #b2dfdb;
+        }
+
+        #tutorial-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            background-color: rgba(247, 247, 247, .5);
+            display: none;
+            backdrop-filter: blur(5px);
+            transition: all 0.5s ease-in-out;
+        }
+
+        #tutorial-modal {
+            background-color: rgba(255, 255, 255, .8);
+            padding: 1.2rem 1.2rem .5rem 1.2rem;
+            border-radius: .6rem;
+            max-width: 600px;
+            width: 80%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, .2);
+            position: relative;
+        }
+
+        #image-container {
+            text-align: center;
+            margin-bottom: .5rem;
+        }
+
+        .tutorial-image {
+            display: none;
+            max-width: 100%;
+        }
+
+        .tutorial-image.active {
+            display: block;
+        }
+
+        #tutorial-navigation {
+            display: flex;
+            justify-content: space-between;
+            margin-top: .5rem;
+        }
+
+        #prev-button,
+        #next-button {
+            width: 2rem;
+            height: 2rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            font-weight: 700;
+            color: #e0f2f1;
+            background-color: rgba(0, 121, 107, .7);
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        #tutorial-close-button {
+            position: absolute;
+            top: .5rem;
+            right: .5rem;
+            font-size: .9rem;
+            font-weight: 700;
+            color: #e0f2f1;
+            background-color: #00796b;
+            padding: .25rem .5rem;
+            border-radius: 999px;
+            cursor: pointer;
+            border: none;
+        }
+
+        .dot-navigation {
+            text-align: center;
+        }
+
+        .dot {
+            height: 1rem;
+            width: 1rem;
+            background-color: #e0f2f1;
+            border-radius: 50%;
+            display: inline-block;
+            margin: 0 5px;
+            cursor: pointer;
+        }
+
+        .dot.active {
+            background-color: #00796b;
+        }
+
+        /* フッター */
+        .viewongithub {
+            margin-top: 0.5rem;
+            text-align: center;
+            padding-bottom: 3rem;
+        }
+
+        .viewongithub a {
+            color: #66b3ff !important;
+        }
+
+        /* レスポンシブ */
+        @media (max-width: 767px) {
+            .container {
+                max-width: 100%;
+                padding: 4px;
+                margin: 0;
+            }
+        }
+
+        @media (max-width: 400px) {
+            .flex-container button,
+            .flex-exbetween button {
+                font-size: 0.6rem !important;
+            }
+        }
+    </style>
 </head>
 
 <body>
     <div id="header-placeholder"></div>
     <div class="container">
-        <div class="flex-between-end">
+        <div class="flex-exbetween">
             <a href="https://ompomz.github.io/flowgazer/index2.html">
                 <h1>flowgazer -kindness edition-</h1>
             </a>
@@ -22,67 +425,87 @@
         <p>Nostrを「体験」してみてほしい！<br>このページでは、タイムラインを見たり、鍵ペアを作って投稿したり、ふぁぼったりすることができるよ。</p>
 
         <div class="flex-container">
-            <button id="generate-trial-keypair" onclick="generateAndLoginWithNewKeypair()">新しい鍵ペアを生成して試す！</button>
+            <button id="generate-trial-keypair-original"
+                onclick="generateAndLoginWithNewKeypair()">新しい鍵ペアを生成して試す！</button>
             <button class="btn-grow" onclick="showAuthUI()">すでに鍵をお持ちの方</button>
         </div>
 
-        <div class="flex-container"> <a id="npub-link" class="npub-link" target="_blank"></a>
+        <div class="flex-container">
+            <a id="npub-link" class="npub-link" target="_blank" style="display: none;"></a>
             <span id="not-logged-in">見るだけモード</span>
+
         </div>
 
-        <textarea id="new-post-content" rows="3" placeholder="いまなにしてる？" class="full-width"></textarea>
-        <button id="send-new-post" class="full-width">投稿</button>
+        <div style="margin-top: 0.25rem;">
+            <textarea id="new-post-content" rows="3" placeholder="いまなにしてる？" class="full-width"></textarea>
+            <button id="send-new-post" class="full-width">投稿</button>
+        </div>
 
-        <div class="flex-center">
+        <div class="setting-tabs-row">
             <button id="show-settings">詳細設定を表示</button>
             <button id="hide-settings" class="hidden">詳細設定を隠す</button>
-        </div>
 
-        <div id="advanced-settings" class="hidden">
-            <div class="flex-container">
-                <input id="relay-url" type="text" list="relay-suggestions">
-                <datalist id="relay-suggestions">
-                    <option value="wss://r.kojira.io/">
-                    <option value="wss://yabu.me/">
-                    <option value="wss://nostr.compile-error.net/">
-                    <option value="wss://relay-jp.nostr.wirednet.jp/">
-                    <option value="wss://relay.damus.io/">
-                    <option value="wss://nos.lol/">
-                    <option value="wss://relay.nostr.band/">
-                </datalist>
-                <button id="subscribe-relay">接続</button>
-            </div>
-
-            <div class="settings-checkbox-row flex-wrap">
-                <label for="auto-update-toggle" class="no-margin-left">自動更新</label>
-                <input type="checkbox" id="auto-update-toggle" checked>
-
-                <label for="filter-flowgazer-only">via flowgazer しぼりこみ</label>
-                <input type="checkbox" id="filter-flowgazer-only">
-
-                <label for="kind-7-content-input">ふぁぼマーク</label>
-                <input id="kind-7-content-input" type="text" maxlength="10" value="⭐">
-            </div>
-
-            <div class="flex-container">
-                <textarea id="hex-filter" rows="2" placeholder="投稿者しぼりこみ(npub1…,hex…)"></textarea>
-                <div class="flex-column">
-                    <button id="apply-filter">適用</button>
-                    <button id="clear-filter">クリア</button>
+            <div id="advanced-settings" style="width: 100%; margin:-0.25rem 0;" class="hidden">
+                <div class="flex-container">
+                    <input id="relay-url" type="text" list="relay-suggestions" placeholder="wss://...">
+                    <datalist id="relay-suggestions">
+                        <option value="wss://r.kojira.io/">
+                        <option value="wss://yabu.me/">
+                        <option value="wss://nostr.compile-error.net/">
+                        <option value="wss://relay-jp.nostr.wirednet.jp/">
+                        <option value="wss://relay.damus.io/">
+                        <option value="wss://nos.lol/">
+                        <option value="wss://relay.nostr.band/">
+                    </datalist>
+                    <button id="subscribe-relay">接続</button>
                 </div>
+
+                <div class="hidden-section flex-container flex-wrap">
+                    <select id="post-kind-selector" style="flex-grow: 0;">
+                        <option value="1">投稿モード：通常</option>
+                        <option value="42">投稿モード：チャンネル</option>
+                    </select>
+                    <select id="channel-list-selector" class="hidden">
+                        <option value="">-- チャンネルを選択 --</option>
+                    </select>
+                    <label for="toggle-kind42">チャンネル投稿</label>
+                    <input type="checkbox" id="toggle-kind42">
+                </div>
+
+                <div class="settings-checkbox-row flex-wrap">
+                    <label for="auto-update-toggle" class="no-margin-left">自動更新</label>
+                    <input type="checkbox" id="auto-update-toggle" checked>
+
+                    <label for="filter-flowgazer-only">flowgazer しぼりこみ</label>
+                    <input type="checkbox" id="filter-flowgazer-only">
+
+                    <label for="kind-7-content-input">ふぁぼマーク</label>
+                    <input id="kind-7-content-input" type="text" maxlength="10" value="⭐">
+                </div>
+
+                <div class="flex-container">
+                    <textarea id="hex-filter" rows="3" placeholder="投稿者しぼりこみ(npub1…,hex…)"></textarea>
+                    <div class="flex-column">
+                        <button id="apply-filter">適用</button>
+                        <button id="clear-filter">クリア</button>
+                    </div>
+                </div>
+
+            </div>
+
+            <div id="tab-buttons">
+                <button id="tab-global" class="tab-button active">みんな</button>
+                <button id="tab-following" class="tab-button">フォロー</button>
+                <button id="tab-channel" class="tab-button hidden">チャンネル</button>
+                <button id="tab-myposts" class="tab-button">自分</button>
+                <button id="tab-likes" class="tab-button">ふぁぼられ</button>
             </div>
         </div>
-        <div id="tab-buttons">
-            <button id="tab-global" class="tab-button active">みんな</button>
-            <button id="tab-following" class="tab-button">フォロー</button>
-            <button id="tab-myposts" class="tab-button">自分</button>
-            <button id="tab-likes" class="tab-button">ふぁぼられ</button>
-        </div>
+
         <ul id="timeline"></ul>
         <button id="load-more" class="full-width">もっと見る</button>
 
-        <p class="viewongithub"></p>
-    
+        <p class="viewongithub"><a href="https://ompomz.github.io/flowgazer/">normal edition</a></p>
     </div>
 
     <!-- 
@@ -92,275 +515,53 @@
     Licensed under WTFPL
     -->
 
-    <!-- 既存JS -->
+    <script src="https://ompomz.github.io/tweetsrecap/utility.js"></script>
     <script src="https://ompomz.github.io/header/loadHeader.js"></script>
     <script src="https://ompomz.github.io/flowgazer/tutorial.js"></script>
-    <script src="./auth.js"></script>
-    <script src="./auth-ui.js"></script>
     <script src="https://unpkg.com/nostr-tools@2.17.0/lib/nostr.bundle.js"></script>
 
-    <!-- 新設計JS -->
-    <script src="https://ompomz.github.io/flowgazer/relay-manager.js"></script>
-    <script src="https://ompomz.github.io/flowgazer/data-store.js"></script>
+    <script src="./auth.js"></script>
+    <script src="./auth-ui.js"></script>
+    <script src="./relay-manager.js"></script>
+    <script src="./data-store.js"></script>
     <script src="./view-state.js"></script>
-    <script src="https://ompomz.github.io/flowgazer/profile-fetcher.js"></script>
+    <script src="./profile-fetcher.js"></script>
     <script src="./timeline.js"></script>
     <script src="./app.js"></script>
-    <script src="https://ompomz.github.io/tweetsrecap/utility.js"></script>
 
     <script>
-        // 初期化確認
-        console.log('✅ スクリプト読み込み完了');
+        /**
+         * インデックス側での橋渡し
+         */
+        function generateAndLoginWithNewKeypair() {
+            if (typeof authEventHandlers !== 'undefined') {
+                authEventHandlers.generateTrial();
+            }
+        }
 
         document.addEventListener('DOMContentLoaded', async () => {
-            // インスタンスの存在確認
-            if (!window.dataStore || !window.viewState) {
-                console.error('❌ 初期化エラー');
-                return;
-            }
+            // グローバルな channelNameMap の初期化（app.jsで使っている場合）
+            window.channelNameMap = new Map();
 
-            // タイムラインインスタンス作成
+            // Timelineの初期化
             window.timeline = new Timeline(document.getElementById('timeline'));
 
-            // アプリ初期化
+            // app.js のインスタンス化（クラス形式の場合）
+            if (typeof App === 'function' && !window.app) {
+                window.app = new App();
+            }
+
+            // 初期化実行
             await window.app.init();
 
-            // --- 安全なイベントリスナー登録用のヘルパー関数 ---
-            const addEvent = (id, event, handler) => {
-                const el = document.getElementById(id);
-                if (el) el.addEventListener(event, handler);
-            };
-
-            // 投稿実行
-            addEvent('send-new-post', 'click', () => {
-                const content = document.getElementById('new-post-content').value;
-                const kindEl = document.getElementById('post-kind-selector');
-                const channelEl = document.getElementById('channel-list-selector');
-
-                const kind = kindEl ? parseInt(kindEl.value) : 1;
-                const channelId = channelEl ? channelEl.value : '';
-
-                if (content) {
-                    if (kind === 42 && !channelId) {
-                        alert("送信先のチャンネルを選んでください！");
-                        return;
-                    }
-                    window.app.sendPost(content, kind, channelId);
-                }
-            });
-
-            // Kind切り替え（要素がある場合のみ）
-            addEvent('post-kind-selector', 'change', (e) => {
-                const channelSelector = document.getElementById('channel-list-selector');
-                if (!channelSelector) return;
-
-                if (e.target.value === "42") {
-                    channelSelector.style.display = "inline";
-                    if (typeof fetchMyChannels === 'function') fetchMyChannels();
-                } else {
-                    channelSelector.style.display = "none";
-                }
-            });
-
-            // Ctrl+Enter で送信
-            addEvent('new-post-content', 'keydown', (e) => {
-                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                    e.preventDefault();
-                    const btn = document.getElementById('send-new-post');
-                    if (btn) btn.click();
-                }
-            });
-
-            // リレー接続
-            addEvent('subscribe-relay', 'click', async () => {
-                const urlInput = document.getElementById('relay-url');
-                const url = urlInput ? urlInput.value.trim() : '';
-
-                if (url) {
-                    // URLが入力されていれば、新規接続
-                    window.app.connectRelay(url);
-                } else {
-                    // URLが空なら、現在の接続で「最新の投稿を読み直す」動作にする
-                    console.log('🔄 タイムラインをリフレッシュします');
-
-                    // ローディング感を出すためにボタンを一時的に無効化
-                    const btn = document.getElementById('subscribe-relay');
-                    btn.disabled = true;
-                    btn.textContent = '接続';
-
-                    await window.app.initializeTimelineBaseline();
-
-                    btn.disabled = false;
-                    btn.textContent = '接続';
-                }
-            });
-
-            // タブ切り替え
-            document.querySelectorAll('.tab-button').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const tab = e.target.id.replace('tab-', '');
-                    window.app.switchTab(tab);
-                });
-            });
-
-            // フィルター適用
-            addEvent('apply-filter', 'click', () => {
-                const inputEl = document.getElementById('hex-filter');
-                if (!inputEl) return;
-                const input = inputEl.value;
-                const authors = input.split(/[ ,\n]/)
-                    .map(s => s.trim())
-                    .filter(s => s.length === 64 || s.startsWith('npub'))
-                    .map(s => {
-                        if (s.startsWith('npub')) {
-                            try { return NostrTools.nip19.decode(s).data; } catch (e) { return null; }
-                        }
-                        return s;
-                    })
-                    .filter(Boolean);
-
-                window.app.applyFilter(authors);
-                localStorage.setItem('hexFilterValue', input);
-            });
-
-            // フィルタークリア
-            addEvent('clear-filter', 'click', () => {
-                const inputEl = document.getElementById('hex-filter');
-                if (inputEl) inputEl.value = '';
-                window.app.applyFilter(null);
-                localStorage.removeItem('hexFilterValue');
-            });
-
-            // フォロー読み込み
-            addEvent('load-follows', 'click', () => {
-                if (!window.nostrAuth.isLoggedIn()) {
-                    alert('鍵の入力が必要です');
-                    if (typeof showAuthUI === 'function') showAuthUI();
-                    return;
-                }
-                const pubkeys = Array.from(window.dataStore.followingPubkeys);
-                if (pubkeys.length === 0) {
-                    alert('フォローリストが取得できていません');
-                    return;
-                }
-                const inputEl = document.getElementById('hex-filter');
-                if (inputEl) inputEl.value = pubkeys.join('\n');
-                alert(`${pubkeys.length}人のフォローを読み込みました`);
-            });
-
-            // しぼりこみ/自動更新系
-            addEvent('filter-flowgazer-only', 'change', (e) => window.app.toggleFlowgazerFilter(e.target.checked));
-            addEvent('toggle-kind42', 'change', (e) => window.app.toggleKind42Display(e.target.checked));
-            addEvent('auto-update-toggle', 'change', (e) => {
-                window.app.isAutoUpdate = e.target.checked;
-                if (e.target.checked) window.viewState.renderNow();
-            });
-
-            // もっと見る
-            addEvent('load-more', 'click', function () {
-                this.classList.add('loading');
-                window.app.loadMore();
-            });
-
-            // 詳細設定トグル
-            addEvent('show-settings', 'click', () => {
-                document.getElementById('advanced-settings')?.classList.remove('hidden');
-                document.getElementById('show-settings')?.classList.add('hidden');
-                document.getElementById('hide-settings')?.classList.remove('hidden');
-            });
-
-            addEvent('hide-settings', 'click', () => {
-                document.getElementById('advanced-settings')?.classList.add('hidden');
-                document.getElementById('hide-settings')?.classList.add('hidden');
-                document.getElementById('show-settings')?.classList.remove('hidden');
-            });
-
-            // ふぁぼ初期化
-            const favInput = document.getElementById('kind-7-content-input');
-            if (favInput) {
-                favInput.addEventListener('change', (e) => saveFavMark(e.target.value));
-                loadFavMark();
+            // ログイン状態を初回反映
+            if (window.app.updateLoginUI) {
+                window.app.updateLoginUI();
             }
 
-            // 設定復元
-            const savedFilter = localStorage.getItem('hexFilterValue');
-            if (savedFilter && document.getElementById('hex-filter')) {
-                document.getElementById('hex-filter').value = savedFilter;
-            }
-        });
-
-        // 新規鍵ペア生成
-        function generateAndLoginWithNewKeypair() {
-            const confirmed = confirm(
-                '新しい鍵ペアを生成します。\n' +
-                '生成された秘密鍵（nsec）は失くすと見つからないので\n' +
-                '大事に持っておいてね。'
-            );
-
-            if (!confirmed) return;
-
-            const seckey = window.NostrTools.generateSecretKey();
-            const nsec = window.NostrTools.nip19.nsecEncode(seckey);
-
-            // 利用開始処理
-            window.nostrAuth.loginWithNsec(nsec);
-
-            const loginBtn = document.querySelector('.btn-grow');
-            if (loginBtn) {
-                loginBtn.textContent = '秘密鍵はこちら';
-                loginBtn.style.backgroundColor = '#66b3ff';
-                loginBtn.style.color = '#fff';
-
-                // 動作は「設定モーダルを表示」のまま
-                loginBtn.onclick = (e) => {
-                    e.preventDefault();
-                    if (typeof showAuthUI === 'function') {
-                        showAuthUI();
-                    }
-                };
-            }
-
-            const genBtn = document.getElementById('generate-trial-keypair');
-            if (genBtn) {
-                genBtn.disabled = true;
-                genBtn.style.opacity = '0.6';
-            }
-
-            if (window.app) window.app.init();
-        }
-
-        // ふぁぼマーク保存
-        function saveFavMark(val) {
-            const chars = Array.from(val);
-            const singleChar = chars.length > 0 ? chars[0] : "+";
-            localStorage.setItem('favMark', singleChar);
-            const input = document.getElementById('kind-7-content-input');
-            if (input) input.value = singleChar;
-        }
-
-        function loadFavMark() {
-            const savedMark = localStorage.getItem('favMark');
-            const input = document.getElementById('kind-7-content-input');
-            if (savedMark && input) input.value = savedMark;
-        }
-
-        // ブラウザのタブに戻ってきたとき、またはアプリを切り替えて戻ってきたときの処理
-        let lastActiveTime = Date.now();
-
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible') {
-                const now = Date.now();
-                const idleTime = (now - lastActiveTime) / 1000;
-
-                console.log(`復帰: 離脱時間 ${idleTime}秒`);
-
-                if (idleTime > 30) {
-                    if (window.app && typeof window.app.initializeTimelineBaseline === 'function') {
-                        window.app.initializeTimelineBaseline();
-                    }
-                }
-            } else {
-                lastActiveTime = Date.now();
+            // チャンネルリストの取得（ログイン時のみ）
+            if (window.nostrAuth.isLoggedIn()) {
+                fetchMyChannels();
             }
         });
     </script>

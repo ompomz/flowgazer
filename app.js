@@ -13,6 +13,7 @@ class FlowgazerApp {
     this.flowgazerOnly = false;
     this.forbiddenWords = [];
     this.lastActiveTime = Date.now();
+    this.activeChannelId = null; // 現在表示中のchannelId
 
     // ===== データ取得済みフラグ =====
     this.tabDataFetched = {
@@ -24,7 +25,7 @@ class FlowgazerApp {
 
     // ===== Baseline方式用 =====
     this.isInitializing = false;
-    this.cursorSince = null; // Anchor Phaseで確定した基準時刻
+    this.cursorSince = Math.floor(Date.now() / 1000) - 300; // 300秒（5分）× 1 = 300
   }
 
   // ========================================
@@ -32,11 +33,14 @@ class FlowgazerApp {
   // ========================================
 
   async init() {
-
     console.log('🚀 flowgazer起動中...');
+
+    // DOMが存在する状態でイベントリスナーを先に登録
+    this.setupEventListeners();
 
     // ログインUI更新
     this.updateLoginUI();
+    this.updateTabVisibility(); // ← 追加
 
     // リレー接続
     const savedRelay = localStorage.getItem('relayUrl');
@@ -70,6 +74,271 @@ class FlowgazerApp {
     await this.initializeTimelineBaseline();
 
     console.log('✅ flowgazer起動完了');
+  }
+
+  // ========================================
+  // DOMイベントリスナー登録
+  // ========================================
+
+  /**
+   * null安全なイベントリスナー登録ヘルパー
+   * @private
+   */
+  _addEvent(id, eventType, handler) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener(eventType, handler);
+  }
+
+  /**
+   * すべてのDOMイベントリスナーを登録する
+   * ※ init()の末尾から呼ばれる（DOM確定・非同期初期化完了後）
+   */
+  setupEventListeners() {
+
+    // ----------------------------------------
+    // 投稿
+    // ----------------------------------------
+    this._addEvent('send-new-post', 'click', () => {
+      const content = document.getElementById('new-post-content')?.value;
+      const kindEl = document.getElementById('post-kind-selector');
+      const channelEl = document.getElementById('channel-list-selector');
+
+      const kind = kindEl ? parseInt(kindEl.value) : 1;
+      const channelId = channelEl ? channelEl.value : '';
+
+      if (content) {
+        if (kind === 42 && !channelId) {
+          alert('送信先のチャンネルを選んでください！');
+          return;
+        }
+        this.sendPost(content, kind, channelId);
+      }
+    });
+
+    // Ctrl+Enter で送信
+    this._addEvent('new-post-content', 'keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('send-new-post')?.click();
+      }
+    });
+
+    // ----------------------------------------
+    // Kind切り替え
+    // ----------------------------------------
+    this._addEvent('post-kind-selector', 'change', (e) => {
+      const channelSelector = document.getElementById('channel-list-selector');
+      if (!channelSelector) return;
+
+      if (e.target.value === '42') {
+        channelSelector.style.display = 'inline';
+        if (typeof fetchMyChannels === 'function') fetchMyChannels();
+      } else {
+        channelSelector.style.display = 'none';
+      }
+    });
+
+    // ----------------------------------------
+    // チャンネル選択 → 投稿先設定 & タブ切替を同時に行う
+    // ----------------------------------------
+    this._addEvent('channel-list-selector', 'change', (e) => {
+      const channelId = e.target.value;
+      if (!channelId) return;
+      // 選択されたチャンネルのタブを開く（投稿先も同じ値を参照するので追加処理不要）
+      this.switchToChannelTab(channelId);
+    });
+
+    // ----------------------------------------
+    // リレー接続
+    // ----------------------------------------
+    this._addEvent('subscribe-relay', 'click', async () => {
+      const urlInput = document.getElementById('relay-url');
+      const url = urlInput ? urlInput.value.trim() : '';
+
+      if (url) {
+        this.connectRelay(url);
+      } else {
+        // URLが空なら現在の接続でタイムラインをリフレッシュ
+        console.log('🔄 タイムラインをリフレッシュします');
+
+        const btn = document.getElementById('subscribe-relay');
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = '接続中...';
+        }
+
+        await this.initializeTimelineBaseline();
+
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '接続';
+        }
+      }
+    });
+
+    // ----------------------------------------
+    // タブ切り替え
+    // ----------------------------------------
+    document.querySelectorAll('.tab-button').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const tab = e.target.id.replace('tab-', '');
+
+        // チャンネルタブは専用処理
+        if (tab === 'channel') {
+          if (this.activeChannelId) {
+            this.switchToChannelTab(this.activeChannelId);
+          }
+          return;
+        }
+
+        this.switchTab(tab);
+      });
+    });
+
+    // ----------------------------------------
+    // フィルター適用・クリア
+    // ----------------------------------------
+    this._addEvent('apply-filter', 'click', () => {
+      const inputEl = document.getElementById('hex-filter');
+      if (!inputEl) return;
+      const input = inputEl.value;
+      const authors = input.split(/[ ,\n]/)
+        .map(s => s.trim())
+        .filter(s => s.length === 64 || s.startsWith('npub'))
+        .map(s => {
+          if (s.startsWith('npub')) {
+            try { return NostrTools.nip19.decode(s).data; } catch (e) { return null; }
+          }
+          return s;
+        })
+        .filter(Boolean);
+
+      this.applyFilter(authors);
+      localStorage.setItem('hexFilterValue', input);
+    });
+
+    this._addEvent('clear-filter', 'click', () => {
+      const inputEl = document.getElementById('hex-filter');
+      if (inputEl) inputEl.value = '';
+      this.applyFilter(null);
+      localStorage.removeItem('hexFilterValue');
+    });
+
+    // ----------------------------------------
+    // flowgazer絞り込みトグル
+    // ----------------------------------------
+    this._addEvent('filter-flowgazer-only', 'change', (e) => {
+      this.toggleFlowgazerFilter(e.target.checked);
+    });
+
+    // ----------------------------------------
+    // kind:42表示切り替え
+    // ----------------------------------------
+    const kind42Checkbox = document.getElementById('toggle-kind42');
+    if (kind42Checkbox) {
+      // ページ読み込み時にlocalStorageから復元して見た目を合わせる
+      const savedKind42 = localStorage.getItem('showKind42') === 'true';
+      kind42Checkbox.checked = savedKind42;
+
+      kind42Checkbox.addEventListener('change', (e) => {
+        this.toggleKind42Display(e.target.checked);
+      });
+    }
+
+    // ----------------------------------------
+    // 自動更新トグル
+    // ----------------------------------------
+    this._addEvent('auto-update-toggle', 'change', (e) => {
+      this.isAutoUpdate = e.target.checked;
+      if (e.target.checked) window.viewState.renderNow();
+    });
+
+    // ----------------------------------------
+    // もっと見る
+    // ----------------------------------------
+    this._addEvent('load-more', 'click', function () {
+      // NOTE: thisはボタン要素になるよう通常関数で定義
+      this.classList.add('loading');
+      window.app.loadMore();
+    });
+
+    // ----------------------------------------
+    // 詳細設定トグル
+    // ----------------------------------------
+    this._addEvent('show-settings', 'click', () => {
+      document.getElementById('advanced-settings')?.classList.remove('hidden');
+      document.getElementById('show-settings')?.classList.add('hidden');
+      document.getElementById('hide-settings')?.classList.remove('hidden');
+    });
+
+    this._addEvent('hide-settings', 'click', () => {
+      document.getElementById('advanced-settings')?.classList.add('hidden');
+      document.getElementById('hide-settings')?.classList.add('hidden');
+      document.getElementById('show-settings')?.classList.remove('hidden');
+    });
+
+    // ----------------------------------------
+    // ふぁぼマーク
+    // ----------------------------------------
+    const favInput = document.getElementById('kind-7-content-input');
+    if (favInput) {
+      favInput.addEventListener('change', (e) => this.saveFavMark(e.target.value));
+      this.loadFavMark();
+    }
+
+    // ----------------------------------------
+    // localStorage復元
+    // ----------------------------------------
+    const savedFilter = localStorage.getItem('hexFilterValue');
+    if (savedFilter) {
+      const hexFilterEl = document.getElementById('hex-filter');
+      if (hexFilterEl) hexFilterEl.value = savedFilter;
+    }
+
+    // ----------------------------------------
+    // visibilitychange（復帰時リフレッシュ）
+    // ----------------------------------------
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        const now = Date.now();
+        const idleTime = (now - this.lastActiveTime) / 1000;
+
+        console.log(`復帰: 離脱時間 ${idleTime}秒`);
+
+        if (idleTime > 30) {
+          this.initializeTimelineBaseline();
+        }
+      } else {
+        this.lastActiveTime = Date.now();
+      }
+    });
+
+    console.log('✅ イベントリスナー登録完了');
+  }
+
+  // ========================================
+  // ふぁぼマーク管理
+  // ========================================
+
+  /**
+   * ふぁぼマークを保存
+   * @param {string} val
+   */
+  saveFavMark(val) {
+    const chars = Array.from(val);
+    const singleChar = chars.length > 0 ? chars[0] : '+';
+    localStorage.setItem('favMark', singleChar);
+    const input = document.getElementById('kind-7-content-input');
+    if (input) input.value = singleChar;
+  }
+
+  /**
+   * 保存済みふぁぼマークをUIに反映
+   */
+  loadFavMark() {
+    const savedMark = localStorage.getItem('favMark');
+    const input = document.getElementById('kind-7-content-input');
+    if (savedMark && input) input.value = savedMark;
   }
 
   // ========================================
@@ -195,6 +464,7 @@ class FlowgazerApp {
    */
   executeStreamPhase() {
     console.log('📡 Stream Phase開始');
+    console.log('Current cursorSince:', this.cursorSince);
 
     const filters = this._buildStreamPhaseFilters();
 
@@ -292,7 +562,7 @@ class FlowgazerApp {
       }
     }
 
-    // === 4. ★ 新規追加：自分の投稿専用フィルタ ===
+    // === 4. 自分の投稿専用フィルタ ===
     // これにより、myposts がリアルタイムで更新される
     if (myPubkey) {
       filters.push({
@@ -385,7 +655,7 @@ class FlowgazerApp {
   }
 
   /**
-   * 修正版: 受け取ったリアクション等を取得
+   * 受け取ったリアクション等を取得
    */
   fetchReceivedLikes() {
     const myPubkey = window.nostrAuth.pubkey;
@@ -403,7 +673,6 @@ class FlowgazerApp {
       if (type === 'EVENT') {
         const added = window.dataStore.addEvent(event);
         if (added) {
-          // 第2引数にタブ名を指定して、そのタブの表示対象に入れる
           window.viewState.addHistoryEventToTab(event, 'likes');
           window.profileFetcher.request(event.pubkey);
         }
@@ -427,10 +696,17 @@ class FlowgazerApp {
     console.log('🔀 タブ切り替え:', tab);
 
     document.querySelectorAll('.tab-button').forEach(btn => {
-      btn.classList.toggle('active', btn.id === `tab-${tab}`);
+      if (window.viewState.isChannelTab(tab)) {
+        btn.classList.toggle('active', btn.id === 'tab-channel');
+      } else {
+        btn.classList.toggle('active', btn.id === `tab-${tab}`);
+      }
     });
 
-    window.viewState.switchTab(tab);
+    // チャンネルタブはswitchToChannelTabで処理済みなのでスキップ
+    if (!window.viewState.isChannelTab(tab)) {
+      window.viewState.switchTab(tab);
+    }
 
     if (!this.tabDataFetched[tab] && window.nostrAuth.isLoggedIn()) {
       if (tab === 'myposts') {
@@ -533,7 +809,6 @@ class FlowgazerApp {
       // Step 2: その期間のkind:6,42を全件取得
       await this.loadMoreStep2(tab, oldestTimestamp, oldestKind1);
 
-      // app.js の loadMore 関数内、Step 2 完了後あたりに追加
       if (tab === 'likes' && step1Result.success) {
         const tabState = window.viewState.tabs.likes;
         const oldestInBatch = step1Result.oldestTimestamp;
@@ -625,11 +900,25 @@ class FlowgazerApp {
   }
 
   /**
-   * LoadMore Step1用フィルタ構築 (kind:1のみ)
+   * LoadMore Step1用フィルタ構築
+   * 「そのタブの主データを取得するフィルタ」を返す
    * @private
    */
   _buildLoadMoreStep1Filter(tab, untilTimestamp) {
     const myPubkey = window.nostrAuth?.pubkey;
+
+    // ===== チャンネルタブ（kind:42、channelId指定）=====
+    if (window.viewState.isChannelTab(tab)) {
+      const channelId = window.viewState.getChannelId(tab);
+      return {
+        kinds: [42],
+        '#e': [channelId],
+        until: untilTimestamp - 1,
+        limit: 50
+      };
+    }
+
+    // ===== 通常タブ（kind:1ベース）=====
     const filter = {
       kinds: [1],
       until: untilTimestamp - 1,
@@ -638,27 +927,26 @@ class FlowgazerApp {
 
     switch (tab) {
       case 'global':
-        if (this.filterAuthors && this.filterAuthors.length > 0) {
+        if (this.filterAuthors?.length > 0) {
           filter.authors = this.filterAuthors;
         }
         break;
 
-      case 'following':
+      case 'following': {
         if (window.dataStore.followingPubkeys.size === 0) {
           console.warn('フォローリストが空です');
           return null;
         }
         const followingAuthors = Array.from(window.dataStore.followingPubkeys);
         if (myPubkey) {
-          if (window.dataStore.isFollowing(myPubkey)) {
-            filter.authors = followingAuthors;
-          } else {
-            filter.authors = followingAuthors.filter(pk => pk !== myPubkey);
-          }
+          filter.authors = window.dataStore.isFollowing(myPubkey)
+            ? followingAuthors
+            : followingAuthors.filter(pk => pk !== myPubkey);
         } else {
           filter.authors = followingAuthors;
         }
         break;
+      }
 
       case 'myposts':
         if (!myPubkey) return null;
@@ -666,9 +954,8 @@ class FlowgazerApp {
         break;
 
       case 'likes':
-        // likesタブではkind:7を取得
-        filter.kinds = [1, 6, 7];
         if (!myPubkey) return null;
+        filter.kinds = [1, 6, 7];
         filter['#p'] = [myPubkey];
         break;
 
@@ -680,16 +967,18 @@ class FlowgazerApp {
   }
 
   /**
-   * LoadMore Step2用フィルタ構築 (kind:6,42)
+   * LoadMore Step2用フィルタ構築（kind:6, 42の補完取得）
+   * チャンネルタブ・likesタブはStep2不要のためnullを返す
    * @private
    */
   _buildLoadMoreStep2Filter(tab, untilTimestamp, sinceTimestamp) {
     const myPubkey = window.nostrAuth?.pubkey;
 
-    // likesタブではStep2不要
-    if (tab === 'likes') {
-      return null;
-    }
+    // チャンネルタブはStep1（kind:42）のみで完結
+    if (window.viewState.isChannelTab(tab)) return null;
+
+    // likesタブはStep2不要
+    if (tab === 'likes') return null;
 
     const filter = {
       kinds: this.showKind42 ? [6, 42] : [6],
@@ -699,24 +988,23 @@ class FlowgazerApp {
 
     switch (tab) {
       case 'global':
-        if (this.filterAuthors && this.filterAuthors.length > 0) {
+        if (this.filterAuthors?.length > 0) {
           filter.authors = this.filterAuthors;
         }
         break;
 
-      case 'following':
+      case 'following': {
         if (window.dataStore.followingPubkeys.size === 0) return null;
         const followingAuthors = Array.from(window.dataStore.followingPubkeys);
         if (myPubkey) {
-          if (window.dataStore.isFollowing(myPubkey)) {
-            filter.authors = followingAuthors;
-          } else {
-            filter.authors = followingAuthors.filter(pk => pk !== myPubkey);
-          }
+          filter.authors = window.dataStore.isFollowing(myPubkey)
+            ? followingAuthors
+            : followingAuthors.filter(pk => pk !== myPubkey);
         } else {
           filter.authors = followingAuthors;
         }
         break;
+      }
 
       case 'myposts':
         if (!myPubkey) return null;
@@ -774,7 +1062,7 @@ class FlowgazerApp {
 
       event.tags.push(['client', 'flowgazer', '31990:a19caaa8404721584746fb0e174cf971a94e0f51baaf4c4e8c6e54fa88985eaf:1755917022711', 'wss://relay.nostr.band/']);
 
-      // 3. 署名（引数のtempNsecを渡す。空なら内部保持のsessionNsecやnsecが使われる）
+      // 3. 署名
       const signed = await window.nostrAuth.signEvent(event, tempNsec);
 
       window.relayManager.publish(signed);
@@ -785,7 +1073,7 @@ class FlowgazerApp {
       alert('送信完了！');
       document.getElementById('new-post-content').value = '';
 
-      // 4. 送信成功後のUI更新（書き込み垢のnpubを表示させるなど）
+      // 4. 送信成功後のUI更新
       this.updateLoginUI();
 
     } catch (err) {
@@ -798,7 +1086,6 @@ class FlowgazerApp {
    * ふぁぼを送信
    */
   async sendLike(targetEventId, targetPubkey) {
-    // ROMモードかつセッション鍵もない場合は、入力を促す
     if (!window.nostrAuth.canWrite()) {
       alert('ふぁぼるには秘密鍵でのサインインが必要です。');
       return;
@@ -817,7 +1104,6 @@ class FlowgazerApp {
         ]
       };
 
-      // セッション鍵があれば自動的にそれを使って署名される
       const signed = await window.nostrAuth.signEvent(event);
       window.relayManager.publish(signed);
       window.dataStore.addEvent(signed);
@@ -869,7 +1155,7 @@ class FlowgazerApp {
     const tempInput = document.getElementById('temp-nsec-input');
     const auth = window.nostrAuth;
 
-    // 1. 基本的なログイン状態の表示（観覧用または通常用）
+    // 1. 基本的なログイン状態の表示
     if (auth.isLoggedIn()) {
       const npub = window.NostrTools.nip19.npubEncode(auth.pubkey);
       npubLink.textContent = npub.substring(0, 20) + '...';
@@ -885,14 +1171,11 @@ class FlowgazerApp {
     if (tempInput) {
       if (auth.readOnly) {
         if (auth.sessionPubkey) {
-          // すでにセッション鍵（書き込み用）がセットされている場合
           const sNpub = window.NostrTools.nip19.npubEncode(auth.sessionPubkey);
           const shortSNpub = sNpub.substring(0, 8) + '...';
 
-          // 入力欄を隠し、ステータスを表示（inputの代わりにバッジ化）
           tempInput.style.display = 'none';
 
-          // ステータス表示用の要素がなければ作成
           let statusBadge = document.getElementById('session-write-status');
           if (!statusBadge) {
             statusBadge = document.createElement('a');
@@ -905,17 +1188,150 @@ class FlowgazerApp {
           statusBadge.title = `${sNpub}`;
           statusBadge.style.display = 'inline';
         } else {
-          // まだ鍵がセットされていない場合は入力欄を表示
           tempInput.style.display = 'inline-block';
           const statusBadge = document.getElementById('session-write-status');
           if (statusBadge) statusBadge.style.display = 'none';
         }
       } else {
-        // 通常ログイン時は一時入力欄は不要
         tempInput.style.display = 'none';
         const statusBadge = document.getElementById('session-write-status');
         if (statusBadge) statusBadge.style.display = 'none';
       }
+    }
+    this.updateTabVisibility();
+  }
+
+  updateTabVisibility() {
+    const auth = window.nostrAuth;
+    // ログインしているかどうかの判定結果をログに出す
+    const isLoggedIn = auth && typeof auth.isLoggedIn === 'function' && auth.isLoggedIn();
+
+    console.log("Checking Tabs - IsLoggedIn:", isLoggedIn);
+    console.log("Current Pubkey:", auth?.pubkey);
+
+    const tabButtons = document.getElementById('tab-buttons');
+    if (!tabButtons) {
+      console.error("Error: tab-buttons element not found!");
+      return;
+    }
+
+    // 判定
+    if (isLoggedIn) {
+      tabButtons.style.display = 'flex';
+      console.log("Tabs should be VISIBLE now.");
+    } else {
+      tabButtons.style.display = 'none';
+      console.log("Tabs are HIDDEN because isLoggedIn is false.");
+    }
+
+    // 各タブボタンの個別制御
+    const tabsToToggle = ['tab-following', 'tab-myposts', 'tab-likes'];
+    tabsToToggle.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = isLoggedIn ? '' : 'none';
+    });
+  }
+
+  /**
+   * チャンネルタブへ切り替え（初回は取得、2回目以降はキャッシュ利用）
+   * @param {string} channelId
+   */
+  async switchToChannelTab(channelId) {
+    const tabKey = `channel:${channelId}`;
+    this.activeChannelId = channelId;
+    this.currentTab = tabKey;
+
+    // チャンネルタブボタンのラベルを更新
+    const channelName = window.channelNameMap?.get(channelId) || channelId.substring(0, 8) + '...';
+    this._updateChannelTabButton(channelName);
+
+    // タブボタンのアクティブ状態を切り替え
+    document.querySelectorAll('.tab-button').forEach(btn => {
+      btn.classList.toggle('active', btn.id === 'tab-channel');
+    });
+
+    // ViewState にタブを生成させてから切り替え
+    window.viewState.getOrCreateChannelTab(channelId);
+    window.viewState.switchTab(tabKey);
+    window.timeline?.switchTab(this.currentTab);
+
+    // 初回のみリレーから取得
+    if (!this.tabDataFetched[tabKey]) {
+      this.tabDataFetched[tabKey] = true;
+      await this.fetchChannelHistory(channelId);
+    }
+
+    // Stream Phase にチャンネルフィルタを追加（再購読）
+    window.relayManager.unsubscribe('stream-channel');
+    this.executeChannelStreamPhase(channelId);
+  }
+
+  /**
+   * チャンネルの過去投稿を取得
+   * @param {string} channelId
+   */
+  async fetchChannelHistory(channelId) {
+    const tabKey = `channel:${channelId}`;
+    console.log(`📥 チャンネル履歴取得: ${channelId}`);
+
+    return new Promise((resolve) => {
+      window.relayManager.subscribe(`channel-history-${channelId}`, {
+        kinds: [42],
+        '#e': [channelId],
+        limit: 100
+      }, (type, event) => {
+        if (type === 'EVENT') {
+          const added = window.dataStore.addEvent(event);
+          if (added) {
+            window.viewState.addHistoryEventToTab(event, tabKey);
+            window.profileFetcher.request(event.pubkey);
+          }
+        } else if (type === 'EOSE') {
+          window.relayManager.unsubscribe(`channel-history-${channelId}`);
+          console.log(`✅ チャンネル履歴取得完了: ${channelId}`);
+          window.viewState.renderNow();
+          resolve();
+        }
+      });
+    });
+  }
+
+  /**
+   * チャンネル専用リアルタイム購読
+   * @param {string} channelId
+   */
+  executeChannelStreamPhase(channelId) {
+    const since = window.viewState.tabs[`channel:${channelId}`]?.cursor?.since
+      || Math.floor(Date.now() / 1000);
+
+    window.relayManager.subscribe('stream-channel', {
+      kinds: [42],
+      '#e': [channelId],
+      since
+    }, (type, event) => {
+      if (type === 'EVENT') {
+        const tabKey = `channel:${channelId}`;
+        const added = window.dataStore.addEvent(event);
+        if (added) {
+          window.viewState.addHistoryEventToTab(event, tabKey);
+          window.profileFetcher.request(event.pubkey);
+        }
+      }
+    });
+  }
+
+  /**
+   * チャンネルタブボタンのラベルを更新
+   * @param {string} name
+   */
+  _updateChannelTabButton(name) {
+    const btn = document.getElementById('tab-channel');
+    if (btn) {
+      // 長い名前は切り詰める
+      btn.textContent = name.length > 12 ? name.substring(0, 12) + '…' : name;
+
+      // style.displayをいじるのではなく、クラスで制御する
+      btn.classList.remove('hidden');
     }
   }
 }
@@ -931,7 +1347,6 @@ async function fetchMyChannels() {
 
   const subId = 'my-channels-' + Date.now();
 
-  // Step 1: kind:10005 を取得してチャンネルID一覧を得る
   window.relayManager.subscribe(subId, {
     kinds: [10005],
     authors: [myPubkey],
@@ -940,7 +1355,6 @@ async function fetchMyChannels() {
     if (type === 'EVENT' && event.kind === 10005) {
       console.log('✅ kind:10005 受信:', event.tags);
 
-      // eタグからチャンネルID一覧を抽出
       const channelIds = event.tags
         .filter(t => t[0] === 'e' && t[1])
         .map(t => t[1]);
@@ -954,7 +1368,6 @@ async function fetchMyChannels() {
 
       console.log(`📋 ${channelIds.length}個のチャンネルIDを取得`);
 
-      // Step 2: 各チャンネルの名前を解決
       await resolveChannelNames(channelIds);
 
       window.relayManager.unsubscribe(subId);
@@ -968,18 +1381,15 @@ async function fetchMyChannels() {
 
 /**
  * チャンネルID配列から名前を解決してプルダウンを更新
- * 優先順位: kind:41 → kind:40 → デフォルト名
- * @param {string[]} channelIds
  */
 async function resolveChannelNames(channelIds) {
   return new Promise((resolve) => {
     const channels = [];
-    const resolved = new Set(); // 名前が確定した channelId
+    const resolved = new Set();
     const subId41 = 'channel-meta-41-' + Date.now();
 
     console.log('🔍 チャンネル名解決開始（kind:41 優先）');
 
-    // --- Step 1: kind:41（metadata update）を取得 ---
     window.relayManager.subscribe(
       subId41,
       {
@@ -1025,7 +1435,6 @@ async function resolveChannelNames(channelIds) {
       }
     );
 
-    // --- Step 2: kind:40（channel create）で補完 ---
     function fetchKind40Fallback() {
       const unresolvedIds = channelIds.filter(id => !resolved.has(id));
 
@@ -1073,7 +1482,6 @@ async function resolveChannelNames(channelIds) {
       );
     }
 
-    // --- Step 3: それでも未解決ならデフォルト名 ---
     function finish() {
       channelIds.forEach(id => {
         if (!resolved.has(id)) {
@@ -1087,12 +1495,10 @@ async function resolveChannelNames(channelIds) {
       });
 
       localStorage.setItem('myChannels', JSON.stringify(channels));
-
       updateChannelDropdown(channels);
       resolve();
     }
 
-    // 保険のタイムアウト
     setTimeout(() => {
       console.log('⏱️ チャンネル名解決タイムアウト');
       finish();
@@ -1101,44 +1507,35 @@ async function resolveChannelNames(channelIds) {
 }
 
 /**
- * 取得したチャンネル情報をプルダウンに反映する
- * @param {Array} channels - [{id: string, name: string}, ...]
+ * チャンネル情報をプルダウンに反映する
  */
 function updateChannelDropdown(channels) {
   const channelSelect = document.getElementById('channel-list-selector');
   if (!channelSelect) return;
 
-  // 現在選択中の値を保持
   const currentValue = channelSelect.value;
-
-  // 初期化
   channelSelect.innerHTML = '<option value="">-- チャンネルを選択 --</option>';
 
   if (channels.length === 0) {
     const option = document.createElement('option');
-    option.value = "";
-    option.textContent = "チャンネルが見つかりませんでした";
+    option.value = '';
+    option.textContent = 'チャンネルが見つかりませんでした';
     option.disabled = true;
     channelSelect.appendChild(option);
     console.log('⚠️ 表示可能なチャンネルがありません');
     return;
   }
 
-  // チャンネル名でソート
   channels.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
-
-  // 選択肢に追加
   channels.forEach(channel => {
     const option = document.createElement('option');
     option.value = channel.id;
     option.textContent = channel.name;
-    // 前回選択していた値と一致するなら selected にする
-    if (channel.id === currentValue) {
-      option.selected = true;
-    }
+    if (channel.id === currentValue) option.selected = true;
     channelSelect.appendChild(option);
   });
 
+  // ※ channel-tab-selector は廃止したため、ここでの同期処理は不要
   console.log(`✅ プルダウンに ${channels.length} 件のチャンネルをセットしました`);
 }
 

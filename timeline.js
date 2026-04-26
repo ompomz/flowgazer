@@ -208,11 +208,45 @@ class Timeline {
 
         badge.style.cssText = 'color: #B3A1FF; font-weight: normal;';
         li.appendChild(badge);
+        li.appendChild(document.createElement('br'));
 
-        // 本文
-        li.appendChild(this.createContent(event));
+        // --- 本文（改行許可スタイルを適用） ---
+        const content = this.createContent(event);
+        // white-space: pre-wrap を指定することで \n を改行として表示し、端で折り返す設定になります
+        content.style.whiteSpace = 'pre-wrap';
+        li.appendChild(content);
 
         return li;
+    }
+
+    // pubkeyを元に、表示用の短い名前（@nameなど）を返す
+    resolveName(pubkey) {
+        // 1. dataStoreから「一番良い名前」を取得（ロジックを共通化！）
+        let name = window.dataStore.getDisplayName(pubkey);
+
+        // 2. 文字数（ピクセル幅）制限の処理
+        const ctx = this.measureCtx;
+        const maxWidth = this.maxNameWidthPx;
+
+        let result = "";
+        let width = 0;
+        const ellipsis = "…";
+        const ellipsisWidth = ctx.measureText(ellipsis).width;
+
+        // もしnpubなどではなく名前が取れている場合に備えて一文字ずつチェック
+        for (const char of name) {
+            const charWidth = ctx.measureText(char).width;
+
+            if (width + charWidth + ellipsisWidth > maxWidth) {
+                result += ellipsis;
+                return `@${result}`;
+            }
+
+            result += char;
+            width += charWidth;
+        }
+
+        return `@${result}`;
     }
 
     /**
@@ -239,6 +273,26 @@ class Timeline {
 
         // メタデータ
         li.appendChild(this.createMetadata(event));
+
+        // リプライ先（pタグ）の表示を追加
+        // 最初に見つかった p タグをリプライ先とみなす（または自分以外のpubkeyを探す）
+        const replyTag = event.tags.find(tag => tag[0] === "p");
+        if (replyTag) {
+            const targetPubkey = replyTag[1];
+
+            const replySpan = document.createElement('span');
+            replySpan.className = 'reply-indicator';
+            replySpan.appendChild(document.createTextNode(' '));
+
+            // リプライ先の名前をリンクにする
+            const targetName = this.resolveName(targetPubkey);
+            const targetLink = this.createAuthorLink(targetPubkey);
+            targetLink.textContent = targetName;
+            replySpan.appendChild(targetLink);
+
+            li.appendChild(replySpan);
+            li.appendChild(document.createTextNode(' '));
+        }
 
         // 本文
         const cwTag = event.tags.find(tag => tag[0] === "content-warning");
@@ -434,61 +488,197 @@ class Timeline {
      */
     createLongPressHandler(event) {
         let timer;
+        let startPos = { x: 0, y: 0 };
+        const THRESHOLD = 10;
 
-        const start = () => {
-            // 900ms 後に実行
-            timer = setTimeout(() => {
-                if (window.sendLikeEvent) {
-                    if (confirm('☆ふぁぼる？')) {
-                        window.sendLikeEvent(event.id, event.pubkey);
-                    }
+        const triggerAction = () => {
+            const menu = document.getElementById('long-press-menu');
+
+            // ふぁぼアイコンの反映
+            const customLikeIcon = document.getElementById('kind-7-content-input')?.value || "⭐";
+            const likeDisplay = document.getElementById('lp-like-icon');
+            if (likeDisplay) likeDisplay.textContent = customLikeIcon;
+
+            // 表示位置設定
+            menu.style.left = `${startPos.x}px`;
+            menu.style.top = `${startPos.y - 20}px`;
+            menu.style.display = 'flex';
+
+            // 初期選択状態（like）の設定
+            const items = menu.querySelectorAll('.lp-item');
+            items.forEach(i => i.classList.remove('selected'));
+            menu.querySelector('[data-action="like"]')?.classList.add('selected');
+
+            // --- 共通の閉じる処理 ---
+            const closeMenu = (e) => {
+                if (e && e.target && menu.contains(e.target)) return;
+                menu.style.display = 'none';
+                // リスナー解除
+                document.removeEventListener('pointerdown', closeMenu);
+                document.removeEventListener('keydown', handleKeyDown);
+                menu.onclick = null; // 委譲リスナーも掃除
+            };
+
+            // --- キーボード操作 ---
+            const handleKeyDown = (e) => {
+                if (e.key === 'Enter') {
+                    const selected = menu.querySelector('.lp-item.selected');
+                    if (selected) this.executeNostrAction(selected.getAttribute('data-action'), event);
+                    closeMenu();
+                } else if (e.key === 'Escape') closeMenu();
+            };
+
+            // --- イベント委譲によるクリック一括管理 ---
+            menu.onclick = (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+
+                // クリックされた要素から一番近い .lp-item を探す
+                const item = e.target.closest('.lp-item');
+                const action = item?.getAttribute('data-action');
+
+                if (action) {
+                    this.executeNostrAction(action, event);
+                    closeMenu();
                 }
-            }, 900);
+            };
+
+            setTimeout(() => {
+                document.addEventListener('pointerdown', closeMenu);
+                document.addEventListener('keydown', handleKeyDown);
+            }, 100);
+        };
+
+        const start = (e) => {
+            const touch = e.touches ? e.touches[0] : e;
+            startPos = { x: touch.clientX, y: touch.clientY };
+            timer = setTimeout(() => triggerAction(e), 400);
+        };
+
+        const move = (e) => {
+            if (!timer) return;
+            const touch = e.touches ? e.touches[0] : e;
+            const dist = Math.hypot(touch.clientX - startPos.x, touch.clientY - startPos.y);
+
+            // 設定したしきい値を超えて動いたらキャンセル
+            if (dist > THRESHOLD) {
+                clearTimeout(timer);
+                timer = null;
+            }
         };
 
         const cancel = () => {
             clearTimeout(timer);
+            timer = null;
         };
 
         return {
+            element: null,
             attach(element) {
-                // 開始
+                this.element = element;
                 element.addEventListener('mousedown', start);
                 element.addEventListener('touchstart', start, { passive: true });
 
-                // 解除（指を離した、マウスが外れた）
+                // 移動検知（しきい値判定用）
+                element.addEventListener('mousemove', move);
+                element.addEventListener('touchmove', move, { passive: true });
+
+                // 中断イベント
                 element.addEventListener('mouseup', cancel);
                 element.addEventListener('mouseleave', cancel);
                 element.addEventListener('touchend', cancel);
                 element.addEventListener('touchcancel', cancel);
 
-                // 動いたらキャンセル（スクロール対策）
-                // マウスを動かしたり、指をスライド（スクロール）させたら即座にタイマー停止
-                element.addEventListener('mousemove', cancel);
-                element.addEventListener('touchmove', cancel, { passive: true });
-
-                element._longPressHandlers = { start, cancel };
+                element._longPressHandlers = { start, move, cancel };
             },
-
             detach() {
-                const element = this.element;
-                if (!element || !element._longPressHandlers) return;
-
-                const { start, cancel } = element._longPressHandlers;
-                element.removeEventListener('mousedown', start);
-                element.removeEventListener('mouseup', cancel);
-                element.removeEventListener('mouseleave', cancel);
-                element.removeEventListener('mousemove', cancel);
-                element.removeEventListener('touchstart', start);
-                element.removeEventListener('touchend', cancel);
-                element.removeEventListener('touchmove', cancel);
-                element.removeEventListener('touchcancel', cancel);
-
-                delete element._longPressHandlers;
+                const el = this.element;
+                if (!el || !el._longPressHandlers) return;
+                const { start, move, cancel } = el._longPressHandlers;
+                el.removeEventListener('mousedown', start);
+                el.removeEventListener('touchstart', start);
+                el.removeEventListener('mousemove', move);
+                el.removeEventListener('touchmove', move);
+                el.removeEventListener('mouseup', cancel);
+                el.removeEventListener('mouseleave', cancel);
+                el.removeEventListener('touchend', cancel);
+                el.removeEventListener('touchcancel', cancel);
+                delete el._longPressHandlers;
                 clearTimeout(timer);
-            },
-            element: null
+            }
         };
+    }
+
+    /**
+     * Nostrアクション（like, repost, quote, reply）を実行
+     */
+    async executeNostrAction(action, originalEvent) {
+        // neventの生成（共通ロジック）
+        const nevent = window.NostrTools.nip19.neventEncode({
+            id: originalEvent.id,
+            relays: [window.relayManager.url]
+        });
+
+        switch (action) {
+            case 'like':
+                if (window.sendLikeEvent) window.sendLikeEvent(originalEvent.id, originalEvent.pubkey);
+                break;
+
+            case 'repost':
+                if (!confirm('RTしますか？')) return;
+
+                const isTextNote = originalEvent.kind === 1;
+                const repostKind = isTextNote ? 6 : 16;
+
+                const repostEv = {
+                    kind: repostKind,
+                    content: "",
+                    created_at: Math.floor(Date.now() / 1000),
+                    tags: [
+                        ["e", originalEvent.id, window.relayManager.url],
+                        ["p", originalEvent.pubkey]
+                    ]
+                };
+
+                if (!isTextNote) {
+                    repostEv.tags.push(["k", String(originalEvent.kind)]);
+                }
+
+                // クライアントタグ
+                repostEv.tags.push([
+                    'client',
+                    'flowgazer',
+                    '31990:a19caaa8404721584746fb0e174cf971a94e0f51baaf4c4e8c6e54fa88985eaf:1755917022711',
+                    'wss://relay.nostr.band/'
+                ]);
+
+                try {
+                    const signed = await window.nostrAuth.signEvent(repostEv);
+                    window.relayManager.publish(signed);
+                    // alertはUXを阻害する場合があるため、必要に応じてトースト通知等へ
+                    console.log('RT成功');
+                } catch (err) {
+                    console.error('RT失敗:', err);
+                    alert('RTに失敗しました');
+                }
+                break;
+
+            case 'quote':
+                // マネージャーを呼び出すだけ
+                window.ehagakiManager.open({
+                    quotes: [nevent],
+                    reply: null
+                });
+                break;
+
+            case 'reply':
+                // マネージャーを呼び出すだけ
+                window.ehagakiManager.open({
+                    reply: nevent,
+                    quotes: []
+                });
+                break;
+        }
     }
 
     // ========================================
