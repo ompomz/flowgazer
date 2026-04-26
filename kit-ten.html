@@ -309,7 +309,7 @@
             color: #66b3ff !important;
         }
 
-        @media (max-width: 767px) {
+        @media (max-width: 768px) {
             .container {
                 max-width: 100%;
                 padding: 4px;
@@ -320,6 +320,27 @@
         @media (max-width: 400px) {
             .container button {
                 font-size: 0.7rem !important;
+            }
+        }
+
+        /* モバイル（iPhone等）でズームを防ぎつつ、見た目のサイズを維持する */
+        @media screen and (max-width: 768px) {
+            #new-post-content {
+                /* ブラウザには16pxと認識させてズームを阻止 */
+                font-size: 16px !important;
+
+                /* 見た目だけを 0.9rem 相当（約14.4px）に縮小する */
+                /* 14.4 ÷ 16 = 0.9 */
+                transform: scale(0.9);
+
+                /* 縮小したときに左上に寄せるための起点指定 */
+                transform-origin: left top;
+
+                /* 縮小した分、横幅が足りなくなるのを補正（0.9で割る） */
+                width: 111.1% !important;
+
+                /* 余白などが崩れる場合は適宜調整 */
+                margin-bottom: -5px;
             }
         }
 
@@ -430,7 +451,7 @@
         <div>
             <button id="close-ehagaki-modal">✕ とじる</button>
             <iframe id="ehagaki-iframe"
-                src="https://lokuyow.github.io/ehagaki/?parentOrigin=https://ompomz.github.io/flowgazer/kit-ten.html"
+                src="https://lokuyow.github.io/ehagaki/?parentOrigin=http://127.0.0.1:5500/kit-ten.html"
                 allow="local-network-access; local-network; loopback-network" frameborder="0" width="600" height="400">
             </iframe>
         </div>
@@ -594,19 +615,24 @@
              */
             open(payload = null) {
                 const parentUrl = window.location.origin + window.location.pathname;
+                const url = new URL(`${this.ORIGIN}/ehagaki/`);
 
-                // 常に parentOrigin を付与してリロード（初期化）
-                this.iframe.src = `${this.ORIGIN}/ehagaki/?parentOrigin=${encodeURIComponent(parentUrl)}`;
-                this.modal.style.display = 'flex';
+                url.searchParams.set('parentOrigin', parentUrl);
 
-                // ペイロード（リプライ先など）がある場合は、readyを待ってから送るか、
-                // 簡易的に少し遅延させて送信（より確実な ready 待機は後ほど実装可能）
                 if (payload) {
-                    // iframeのロード完了を待ってから送信
-                    this.iframe.onload = () => {
-                        this.setContext(payload);
-                    };
+                    if (payload.reply) url.searchParams.set('reply', payload.reply);
+                    if (payload.quotes) {
+                        payload.quotes.forEach(q => url.searchParams.append('quote', q));
+                    }
+                    if (payload.content) url.searchParams.set('content', payload.content);
                 }
+
+                // ダークモード対応を入れるならここ
+                const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                url.searchParams.set('embedTheme', prefersDark ? 'dark' : 'light');
+
+                this.iframe.src = url.toString();
+                this.modal.style.display = 'flex';
             },
 
             /**
