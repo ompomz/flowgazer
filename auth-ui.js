@@ -169,12 +169,17 @@ function setupAuthEvents() {
             window.relayManager.unsubscribe('stream-phase');
             if (window.app?.executeStreamPhase) window.app.executeStreamPhase();
 
+            // ---- following タブ初期表示を構築（遡及登録 → 必要なら補完取得）----
+            if (window.app?.fetchFollowingInitial) {
+                await window.app.fetchFollowingInitial();
+            }
+
             // ---- onLogin の残り処理（タブフラグリセット・チャンネル取得）を実行 ----
             // ※ フォローリストは上で取得済みなので fetchInitialData() は呼ばない
             if (window.app) {
                 window.app.tabDataFetched.following = false;
-                window.app.tabDataFetched.myposts   = false;
-                window.app.tabDataFetched.likes     = false;
+                window.app.tabDataFetched.myposts = false;
+                window.app.tabDataFetched.likes = false;
                 window.app.updateLoginUI();
             }
             if (typeof fetchMyChannels === 'function') fetchMyChannels();

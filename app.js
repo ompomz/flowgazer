@@ -108,6 +108,87 @@ class FlowgazerApp {
   }
 
   // ========================================
+  // following タブ初期表示構築
+  // ========================================
+
+  /**
+   * kind:3 確定後に呼ぶ following タブの初期表示構築。
+   *
+   * Step 1: DataStore の既存イベントをフォローフィルタで遡及登録（追加リクエスト不要）
+   * Step 2: 遡及登録が THRESHOLD 件未満の場合のみ、following 専用 anchor-phase で補完取得
+   *
+   * @returns {Promise<void>}
+   */
+  async fetchFollowingInitial() {
+    const followingSet = window.dataStore.followingPubkeys;
+    if (followingSet.size === 0) {
+      console.log('📭 フォロー0人のため following 初期取得をスキップ');
+      return;
+    }
+
+    // ---- Step 1: 遡及登録 ----
+    // DataStore に取得済みの全イベントのうち、フォロー中 pubkey のものを
+    // following タブに登録する（追加ネットワークリクエスト不要）
+    let retroCount = 0;
+    for (const event of window.dataStore.getAllEvents()) {
+      if ([1, 6, 42].includes(event.kind) && followingSet.has(event.pubkey)) {
+        window.viewState.addHistoryEventToTab(event, 'following');
+        retroCount++;
+      }
+    }
+    console.log(`📋 following 遡及登録: ${retroCount}件`);
+
+    // 十分な件数があれば補完リクエスト不要
+    const THRESHOLD = 10;
+    if (retroCount >= THRESHOLD) {
+      window.viewState.renderNow();
+      return;
+    }
+
+    // ---- Step 2: following 専用 anchor-phase で補完 ----
+    console.log(`📡 following-anchor-phase 開始（遡及 ${retroCount}件 < ${THRESHOLD}件のため補完）`);
+    const authors = Array.from(followingSet);
+
+    return new Promise((resolve) => {
+      const events = [];
+      let resolved = false;
+      const TIMEOUT_MS = 10000;
+
+      const done = () => {
+        if (resolved) return;
+        resolved = true;
+        window.relayManager.unsubscribe('following-anchor-phase');
+        console.log(`✅ following-anchor-phase 完了: ${events.length}件取得`);
+        window.viewState.renderNow();
+        resolve();
+      };
+
+      const timeoutId = setTimeout(() => {
+        console.warn('⏱️ following-anchor-phase タイムアウト');
+        done();
+      }, TIMEOUT_MS);
+
+      window.relayManager.subscribe('following-anchor-phase', {
+        kinds: [1],
+        authors,
+        limit: 50
+      }, (type, event) => {
+        if (type === 'EVENT') {
+          const added = window.dataStore.addEvent(event);
+          if (added) {
+            events.push(event);
+            window.viewState.addHistoryEventToTab(event, 'following');
+            window.profileFetcher.request(event.pubkey);
+          }
+        } else if (type === 'EOSE') {
+          clearTimeout(timeoutId);
+          done();
+        }
+      });
+    });
+  }
+
+  // ========================================
   // DOMイベントリスナー登録
   // ========================================
 
@@ -652,14 +733,13 @@ class FlowgazerApp {
         window.dataStore.setFollowingList(pubkeys);
         window.profileFetcher.requestMultiple(pubkeys);
 
-        // ★ フォローリスト確定 → following フィルタを含めた Stream Phase に再構築
-        // cursorSince は既存の値を引き継ぐため、既読分を重複取得しない
+        // フォローリスト確定 → Stream Phase を following フィルタ込みで再起動
         console.log(`👥 フォローリスト確定 (${pubkeys.length}人) → Stream Phase 再起動`);
         window.relayManager.unsubscribe('stream-phase');
         this.executeStreamPhase();
 
-        // following タブを即時再描画
-        window.viewState.renderNow();
+        // following タブ初期表示を構築（遡及登録 → 必要なら補完取得）
+        this.fetchFollowingInitial();
       }
     });
 
