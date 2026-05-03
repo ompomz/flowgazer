@@ -102,9 +102,18 @@ function setupAuthEvents() {
         // ----------------------------------------
 
         /**
-         * ログイン成功後の共通処理。
-         * kind:3 (フォローリスト) の取得を試みて、
-         * 結果によらず取得完了後にモーダルを閉じる。
+         * ログイン成功後の共通処理（UIの責務のみ）。
+         *
+         * 【責務の整理】
+         * このメソッドは以下のUI処理のみを担当する:
+         * 1. ウェルカムメッセージの表示
+         * 2. 認証UIの状態更新
+         * 3. ローディング表示（ビジネス処理の完了を待つ間）
+         * 4. EventBus経由でビジネス処理の完了を待機
+         * 5. モーダルを閉じる
+         *
+         * ビジネスロジック（kind:3取得・StreamPhase再起動など）は
+         * app.js が EVENTS.AUTH_LOGIN_COMPLETED を受け取って処理する。
          *
          * @param {string} welcomeMsg - alert に表示するメッセージ（空文字なら表示しない）
          */
@@ -118,71 +127,22 @@ function setupAuthEvents() {
 
             if (welcomeMsg) alert(welcomeMsg);
 
+            // ---- 認証UIを先に更新 ----
             updateAuthUI();
-
-            // ---- UI 更新だけ先に行う ----
             if (window.app?.updateLoginUI) window.app.updateLoginUI();
 
-            // ---- kind:3 を待ちながらローディング表示 ----
+            // ---- ビジネス処理の完了を待つ間、ローディングを表示 ----
             handlers.showLoading('📡 フォロー情報を取得中...');
 
-            const TIMEOUT_MS = 8000;
-            let resolved = false;
-
+            // [変更] EventBus 経由でビジネス処理を起動し、完了を待つ。
+            // app.js が AUTH_LOGIN_COMPLETED を受け取り、kind:3取得・StreamPhase再起動などを行う。
+            // Promise を payload に載せることで、ビジネス処理の完了まで await できる。
             await new Promise((resolve) => {
-                const done = (hasFollowing) => {
-                    if (resolved) return;
-                    resolved = true;
-                    window.relayManager.unsubscribe('auth-following-check');
-                    console.log(`👥 kind:3 取得完了 (フォロー: ${hasFollowing ? 'あり' : 'なし'})`);
-                    resolve();
-                };
-
-                const timeoutId = setTimeout(() => {
-                    console.warn('⏱️ kind:3 タイムアウト → グローバルタイムラインで続行');
-                    done(false);
-                }, TIMEOUT_MS);
-
-                window.relayManager.subscribe('auth-following-check', {
-                    kinds: [3],
-                    authors: [myPubkey],
-                    limit: 1
-                }, (type, event) => {
-                    if (type === 'EVENT') {
-                        clearTimeout(timeoutId);
-                        // DataStore にフォローリストを反映
-                        const pubkeys = event.tags
-                            .filter(t => t[0] === 'p')
-                            .map(t => t[1]);
-                        window.dataStore.setFollowingList(pubkeys);
-                        window.profileFetcher.requestMultiple(pubkeys);
-                        done(pubkeys.length > 0);
-                    } else if (type === 'EOSE') {
-                        // EVENT が来ないまま EOSE → フォローなし or kind:3 未投稿
-                        clearTimeout(timeoutId);
-                        done(false);
-                    }
+                window.eventBus.emit(window.EVENTS.AUTH_LOGIN_COMPLETED, {
+                    pubkey: myPubkey,
+                    onComplete: resolve   // app.js 側が処理完了後に呼ぶコールバック
                 });
             });
-
-            // ---- フォロー情報確定後に Stream Phase を再起動 ----
-            window.relayManager.unsubscribe('stream-phase');
-            if (window.app?.executeStreamPhase) window.app.executeStreamPhase();
-
-            // ---- following タブ初期表示を構築（遡及登録 → 必要なら補完取得）----
-            if (window.app?.fetchFollowingInitial) {
-                await window.app.fetchFollowingInitial();
-            }
-
-            // ---- onLogin の残り処理（タブフラグリセット・チャンネル取得）を実行 ----
-            // ※ フォローリストは上で取得済みなので fetchInitialData() は呼ばない
-            if (window.app) {
-                window.app.tabDataFetched.following = false;
-                window.app.tabDataFetched.myposts = false;
-                window.app.tabDataFetched.likes = false;
-                window.app.updateLoginUI();
-            }
-            if (typeof fetchMyChannels === 'function') fetchMyChannels();
 
             window.viewState?.renderNow();
 

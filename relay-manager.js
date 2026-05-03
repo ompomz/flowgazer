@@ -7,7 +7,9 @@ class RelayManager {
   constructor() {
     this.ws = null;
     this.url = null;
-    this.subscriptions = new Map(); // subId -> handler
+    // [変更] subId -> { filters: Array, handler: Function }
+    // 旧: subId -> handler のみでフィルタを保持していなかった
+    this.subscriptions = new Map();
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 3;
     this.isConnecting = false;
@@ -38,9 +40,13 @@ class RelayManager {
           console.log('✅ リレー接続成功:', url);
           this.isConnecting = false;
           this.reconnectAttempts = 0;
-          
+
           // 既存の購読を再開
           this.resubscribeAll();
+
+          // [追加] 接続成功をアプリ層に通知（通信層はアプリ層を直接知らないためバス経由）
+          window.eventBus?.emit(window.EVENTS.RELAY_CONNECTED, { url });
+
           resolve();
         };
 
@@ -82,10 +88,11 @@ class RelayManager {
   handleMessage(data) {
     try {
       const [type, subId, event] = JSON.parse(data);
-      const handler = this.subscriptions.get(subId);
+      // [変更] subscriptions の値が { filters, handler } になったため .handler を参照
+      const sub = this.subscriptions.get(subId);
 
-      if (handler) {
-        handler(type, event, subId);
+      if (sub) {
+        sub.handler(type, event, subId);
       }
 
     } catch (err) {
@@ -105,8 +112,9 @@ class RelayManager {
     // フィルターの正規化（配列化）
     const filterArray = Array.isArray(filters) ? filters : [filters];
 
-    // ハンドラーを登録
-    this.subscriptions.set(subId, handler);
+    // [変更] フィルタとハンドラをセットで保持する
+    // 旧: this.subscriptions.set(subId, handler)
+    this.subscriptions.set(subId, { filters: filterArray, handler });
 
     // REQメッセージを送信
     const reqMsg = ['REQ', subId, ...filterArray];
@@ -120,13 +128,18 @@ class RelayManager {
    * 購読を解除
    */
   unsubscribe(subId) {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      this.subscriptions.delete(subId);
-      return;
+    // [変更] 切断中でも内部状態は必ず削除する
+    // 旧: 接続中でなければ削除のみ・接続中なら CLOSE 送信 → 削除、という2パスだったが、
+    //     どちらの場合も「内部状態の削除」は必須なので先に行う
+    const existed = this.subscriptions.has(subId);
+    this.subscriptions.delete(subId);
+
+    if (!existed) return;
+
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(['CLOSE', subId]));
     }
 
-    this.ws.send(JSON.stringify(['CLOSE', subId]));
-    this.subscriptions.delete(subId);
     console.log('📡 購読解除:', subId);
   }
 
@@ -140,18 +153,50 @@ class RelayManager {
 
   /**
    * すべての購読を再開（再接続時用）
+   *
+   * [変更] フィルタを保持するようになったため、再接続時に実際に REQ を再送できる。
+   * 旧実装はハンドラのみ保持でフィルタを持っておらず、REQ を再送できていなかった。
+   *
+   * 再送するのは「永続的な購読」のみ。一時的な購読（anchor-phase、load-more-* など）は
+   * 再送しない（再接続後に app.js 側で必要に応じて再起動される）。
    */
   resubscribeAll() {
-    console.log('🔄 購読を再開します...');
-    // 一旦保存
-    const subs = new Map(this.subscriptions);
-    this.subscriptions.clear();
+    if (this.subscriptions.size === 0) {
+      console.log('🔄 再購読対象なし');
+      return;
+    }
 
-    // 再購読（実際のフィルターは保持していないので、
-    // 呼び出し側で再度subscribeを呼ぶ必要がある）
-    // ここでは登録だけ戻す
-    subs.forEach((handler, subId) => {
-      this.subscriptions.set(subId, handler);
+    console.log(`🔄 購読を再開します... (${this.subscriptions.size}件)`);
+
+    // [変更] 一時的な購読は再送しない（subId のプレフィックスで判別）
+    const TRANSIENT_PREFIXES = [
+      'anchor-phase',
+      'load-more-',
+      'channel-history-',
+      'following-anchor-phase',
+      'auth-following-check',
+      'my-channels-',
+      'channel-meta-',
+    ];
+
+    const isTransient = (subId) =>
+      TRANSIENT_PREFIXES.some(prefix => subId.startsWith(prefix));
+
+    // パス1: 一時購読をMapから除去
+    const transientIds = [];
+    this.subscriptions.forEach((_, subId) => {
+      if (isTransient(subId)) transientIds.push(subId);
+    });
+    transientIds.forEach(subId => {
+      this.subscriptions.delete(subId);
+      console.log(`🔄 一時購読を破棄: ${subId}`);
+    });
+
+    // パス2: 永続購読の REQ を再送
+    this.subscriptions.forEach(({ filters }, subId) => {
+      const reqMsg = ['REQ', subId, ...filters];
+      this.ws.send(JSON.stringify(reqMsg));
+      console.log('🔄 購読再開:', subId);
     });
   }
 

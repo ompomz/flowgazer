@@ -571,6 +571,7 @@
     <script src="https://unpkg.com/nostr-tools@2.17.0/lib/nostr.bundle.js"></script>
 
     <!-- 新設計JS -->
+    <script src="./event-bus.js"></script>
     <script src="./relay-manager.js"></script>
     <script src="./data-store.js"></script>
     <script src="./view-state.js"></script>
@@ -590,9 +591,6 @@
             get modal() { return document.getElementById('ehagaki-modal'); },
             get iframe() { return document.getElementById('ehagaki-iframe'); },
 
-            /**
-             * モーダルを開き、必要であればコンテキスト（リプライ等）を設定する
-             */
             open(payload = null) {
                 const parentUrl = window.location.origin + window.location.pathname;
                 const url = new URL(`${this.ORIGIN}/ehagaki/`);
@@ -607,7 +605,6 @@
                     if (payload.content) url.searchParams.set('content', payload.content);
                 }
 
-                // ダークモード対応を入れるならここ
                 const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
                 url.searchParams.set('embedTheme', prefersDark ? 'dark' : 'light');
 
@@ -615,16 +612,10 @@
                 this.modal.style.display = 'flex';
             },
 
-            /**
-             * モーダルを閉じる
-             */
             close() {
                 this.modal.style.display = 'none';
             },
 
-            /**
-             * 子の iframe へメッセージを送信する（共通フォーマット）
-             */
             post(type, data = {}) {
                 if (!this.iframe.contentWindow) return;
 
@@ -637,9 +628,6 @@
                 this.iframe.contentWindow.postMessage(message, this.ORIGIN);
             },
 
-            /**
-             * 投稿コンテキスト（リプライ、引用、本文）を更新する
-             */
             setContext(payload) {
                 this.post('composer.setContext', {
                     requestId: `mgr-${Date.now()}`,
@@ -652,6 +640,91 @@
             }
         };
 
+        // =========================
+        // 🆕 storage委譲ハンドラ
+        // =========================
+        const STORAGE_PREFIX = 'ehagaki.embed.storage.v1:';
+
+        const ALLOWED_KEYS = new Set([
+            'locale',
+            'themeMode',
+            'darkMode',
+            'uploadEndpoint',
+            'clientTagEnabled',
+            'quoteNotificationEnabled',
+            'imageCompressionLevel',
+            'videoCompressionLevel',
+            'mediaFreePlacement',
+            'showMascot',
+            'showFlavorText',
+            'settingsPreferenceMetadata',
+            'firstVisit',
+            'sharedMediaProcessed',
+        ]);
+
+        function handleStorage(data) {
+            const mgr = window.ehagakiManager;
+
+            const respond = (msg) => {
+                mgr.iframe.contentWindow.postMessage({
+                    namespace: mgr.NS,
+                    version: mgr.VERSION,
+                    requestId: data.requestId,
+                    ...msg
+                }, mgr.ORIGIN);
+            };
+
+            // GET
+            if (data.type === 'storage.get') {
+                const values = {};
+
+                for (const key of data.payload.keys) {
+                    if (!ALLOWED_KEYS.has(key)) continue;
+                    values[key] = localStorage.getItem(STORAGE_PREFIX + key);
+                }
+
+                respond({
+                    type: 'storage.result',
+                    payload: { timestamp: Date.now(), values }
+                });
+            }
+
+            // SET
+            if (data.type === 'storage.set') {
+                const applied = [];
+
+                for (const [key, value] of Object.entries(data.payload.values)) {
+                    if (!ALLOWED_KEYS.has(key)) continue;
+                    if (typeof value !== 'string') continue;
+
+                    localStorage.setItem(STORAGE_PREFIX + key, value);
+                    applied.push(key);
+                }
+
+                respond({
+                    type: 'storage.result',
+                    payload: { timestamp: Date.now(), applied }
+                });
+            }
+
+            // REMOVE
+            if (data.type === 'storage.remove') {
+                const removed = [];
+
+                for (const key of data.payload.keys) {
+                    if (!ALLOWED_KEYS.has(key)) continue;
+
+                    localStorage.removeItem(STORAGE_PREFIX + key);
+                    removed.push(key);
+                }
+
+                respond({
+                    type: 'storage.result',
+                    payload: { timestamp: Date.now(), removed }
+                });
+            }
+        }
+
         // --- メイン初期化処理 ---
         document.addEventListener('DOMContentLoaded', async () => {
             if (!window.dataStore || !window.viewState) {
@@ -662,7 +735,6 @@
             window.timeline = new Timeline(document.getElementById('timeline'));
             await window.app.init();
 
-            // モーダル関連の固定イベントリスナー
             const openBtn = document.getElementById('open-ehagaki-modal');
             const closeBtn = document.getElementById('close-ehagaki-modal');
 
@@ -679,14 +751,18 @@
             const mgr = window.ehagakiManager;
             const auth = window.nostrAuth;
 
-            // 1. バリデーション
             if (event.origin !== mgr.ORIGIN) return;
             if (event.source !== mgr.iframe.contentWindow) return;
 
             const data = event.data;
             if (data?.namespace !== mgr.NS) return;
 
-            // 2. 用件に応じた応答
+            // 🆕 ここでstorageを先に処理（重要）
+            if (data.type?.startsWith('storage.')) {
+                handleStorage(data);
+                return;
+            }
+
             switch (data.type) {
                 case 'ready':
                     if (auth.pubkey) {
@@ -725,8 +801,6 @@
 
                 case 'post.success':
                     console.log('投稿成功:', data.payload);
-                    // 投稿成功時に自動で閉じる場合はここに追加
-                    // mgr.close();
                     break;
             }
         });

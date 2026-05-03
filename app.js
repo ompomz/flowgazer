@@ -35,6 +35,9 @@ class FlowgazerApp {
   async init() {
     console.log('🚀 flowgazer起動中...');
 
+    // EventBusハンドラを最初に登録する（他の初期化より前に受け取れるようにするため）
+    this._setupEventBusHandlers();
+
     // DOMが存在する状態でイベントリスナーを先に登録
     this.setupEventListeners();
 
@@ -74,16 +77,50 @@ class FlowgazerApp {
   }
 
   // ========================================
-  // ログイン後初期化（init() からも auth-ui.js からも呼ぶ）
+  // EventBusハンドラ登録
+  // ========================================
+
+  /**
+   * EventBus経由で受け取るイベントのハンドラを登録する。
+   * init() の先頭で呼ぶ。
+   *
+   * 登録するイベント:
+   *   AUTH_LOGIN_COMPLETED  - ログイン操作完了 → onAuthSuccessFromUI() を呼ぶ
+   *   RELAY_CONNECTED       - リレー接続成功 → 現状はログのみ（将来の再接続リカバリ用）
+   */
+  _setupEventBusHandlers() {
+    // ---- AUTH_LOGIN_COMPLETED ----
+    // auth-ui.js が emit し、app.js が受け取る。
+    // payload.onComplete を呼ぶことで auth-ui.js 側の await が解除され、モーダルが閉じる。
+    window.eventBus.on(window.EVENTS.AUTH_LOGIN_COMPLETED, async ({ pubkey, onComplete }) => {
+      console.log('📨 [EventBus] auth:login-completed 受信', pubkey.substring(0, 8) + '...');
+      try {
+        await this.onAuthSuccessFromUI();
+      } finally {
+        // 成功・失敗どちらでも必ず onComplete を呼び、モーダルのローディングを解除する
+        onComplete();
+      }
+    });
+
+    // ---- RELAY_CONNECTED ----
+    // relay-manager.js が emit し、app.js が受け取る。
+    // 現時点では初回接続は init() の await connectRelay() が制御するためここでは何もしない。
+    // 将来、予期しない切断からの再接続後にタイムラインをリカバリする処理をここに追加する。
+    window.eventBus.on(window.EVENTS.RELAY_CONNECTED, ({ url }) => {
+      console.log('📨 [EventBus] relay:connected 受信', url);
+      // TODO(Step3以降): 再接続時のリカバリ処理をここに実装する
+    });
+
+    console.log('✅ EventBusハンドラ登録完了');
+  }
+
+  // ========================================
+  // ログイン後初期化（リロード時）
   // ========================================
 
   /**
    * リロード時のログイン後初期化。
-   *
-   * 【呼び出し元の使い分け】
-   * ・リロード時  → init() からここを呼ぶ
-   * ・ログイン操作後 → auth-ui.js の onAuthSuccess() が直接処理する
-   *   （kind:3 を待ってからモーダルを閉じる必要があるため auth-ui.js 側で完結）
+   * init() から呼ばれる（ログイン操作後は EventBus 経由で onAuthSuccessFromUI が呼ばれる）。
    */
   async onLogin() {
     const myPubkey = window.nostrAuth.pubkey;
@@ -105,6 +142,112 @@ class FlowgazerApp {
     this.fetchInitialData();
 
     fetchMyChannels();
+  }
+
+  // ========================================
+  // ログイン操作後の初期化（auth-ui.js から呼ばれる）
+  // ========================================
+
+  /**
+   * auth-ui.js の onAuthSuccess から呼ばれるログイン後処理。
+   *
+   * 【onLogin との違い】
+   * ・onLogin        → リロード時。kind:3取得はfetchInitialData内で非同期に行う。
+   * ・onAuthSuccessFromUI → ログイン操作後。呼び出し元（auth-ui.js）が
+   *   kind:3取得の完了を await してからこのメソッドを呼ぶため、
+   *   フォローリストはすでにDataStoreに反映済みの状態で受け取る。
+   *
+   * このメソッドの責務:
+   * - タブフラグのリセット
+   * - StreamPhaseの再起動（フォローリスト反映済みの状態で）
+   * - followingタブの初期表示構築
+   * - チャンネルリスト取得
+   * - UI更新
+   *
+   * @returns {Promise<void>}
+   */
+  async onAuthSuccessFromUI() {
+    const myPubkey = window.nostrAuth.pubkey;
+    if (!myPubkey) {
+      console.warn('⚠️ onAuthSuccessFromUI: pubkey が未確定のためスキップ');
+      return;
+    }
+
+    console.log('🔑 onAuthSuccessFromUI: ログイン後処理開始', myPubkey.substring(0, 8) + '...');
+
+    // ---- kind:3 取得 → DataStore に反映 ----
+    // auth-ui.js はこのメソッドが完了するまで await するため、
+    // kind:3 取得完了（またはタイムアウト）後にモーダルが閉じられる。
+    await this._fetchAndApplyFollowList(myPubkey);
+
+    // タブのデータ取得済みフラグをリセット
+    this.tabDataFetched.following = false;
+    this.tabDataFetched.myposts   = false;
+    this.tabDataFetched.likes     = false;
+
+    // StreamPhase を フォローリスト反映済みの状態で再起動
+    window.relayManager.unsubscribe('stream-phase');
+    this.executeStreamPhase();
+
+    // following タブ初期表示を構築（遡及登録 → 必要なら補完取得）
+    await this.fetchFollowingInitial();
+
+    // チャンネルリスト取得
+    if (typeof fetchMyChannels === 'function') fetchMyChannels();
+
+    // UI更新
+    this.updateLoginUI();
+
+    console.log('✅ onAuthSuccessFromUI: 完了');
+  }
+
+  /**
+   * kind:3 を購読し、フォローリストを DataStore に反映する。
+   * EVENT または EOSE（タイムアウト含む）で resolve する。
+   *
+   * ログイン操作後専用。リロード時は fetchInitialData() が担う。
+   *
+   * @param {string} myPubkey
+   * @returns {Promise<void>}
+   * @private
+   */
+  _fetchAndApplyFollowList(myPubkey) {
+    const TIMEOUT_MS = 8000;
+    let resolved = false;
+
+    return new Promise((resolve) => {
+      const done = (hasFollowing) => {
+        if (resolved) return;
+        resolved = true;
+        window.relayManager.unsubscribe('auth-following-check');
+        console.log(`👥 kind:3 取得完了 (フォロー: ${hasFollowing ? 'あり' : 'なし'})`);
+        resolve();
+      };
+
+      const timeoutId = setTimeout(() => {
+        console.warn('⏱️ kind:3 タイムアウト → グローバルタイムラインで続行');
+        done(false);
+      }, TIMEOUT_MS);
+
+      window.relayManager.subscribe('auth-following-check', {
+        kinds: [3],
+        authors: [myPubkey],
+        limit: 1
+      }, (type, event) => {
+        if (type === 'EVENT') {
+          clearTimeout(timeoutId);
+          const pubkeys = event.tags
+            .filter(t => t[0] === 'p')
+            .map(t => t[1]);
+          window.dataStore.setFollowingList(pubkeys);
+          window.profileFetcher.requestMultiple(pubkeys);
+          done(pubkeys.length > 0);
+        } else if (type === 'EOSE') {
+          clearTimeout(timeoutId);
+          done(false);
+        }
+      });
+    });
   }
 
   // ========================================
