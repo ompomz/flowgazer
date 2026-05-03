@@ -369,11 +369,136 @@
                 font-size: 0.6rem !important;
             }
         }
+
+        /* コンテナ：指の座標（中心）を基準にする */
+        .lp-menu {
+            position: fixed;
+            z-index: 10000;
+            width: 0;
+            height: 0;
+            pointer-events: none;
+            /* 計算の根拠： 1. likeボタンの配置が top: -3rem 2. 指との隙間を 1rem あけたい ⇒ コンテナの中心（指の位置）を基準に、 likeボタンの「上端」が指の「+1rem」の位置に来るように調整します。 */
+            transform: translate(-1.5rem, 5rem);
+            animation: menu-pop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes menu-pop {
+            from {
+                opacity: 0;
+                /* translate の値を合わせつつ、スケールを小さく */
+                transform: translate(-1.5rem, 5rem) scale(0.5);
+            }
+
+            to {
+                opacity: 1;
+                /* ここを新しい数値に合わせる */
+                transform: translate(-1.5rem, 5rem) scale(1);
+            }
+        }
+
+        /* 共通スタイル：中心から移動させるために absolute にする */
+        .lp-item {
+            position: absolute;
+            width: 3rem;
+            height: 3rem;
+            background: #ffffff;
+            border-radius: 999px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            border: none;
+            transition: all 0.2s ease;
+            user-select: none;
+            pointer-events: auto;
+        }
+
+        /* SVGアイコンのサイズと色を自動調整 */
+        .lp-item svg {
+            width: 1.5rem;
+            height: 1.5rem;
+            display: block;
+            transition: transform 0.2s ease;
+        }
+
+        /* ふぁぼボタンだけはテキスト（絵文字）なので専用調整 */
+        #lp-like-icon {
+            font-family: "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+            font-size: 1.25rem;
+            line-height: 1;
+        }
+
+        /* 位置の個別設定 (中心からの距離) */
+        /* 上：like */
+        .lp-item[data-action="like"] {
+            top: -3rem;
+            left: 0;
+            color: #ffcc66;
+        }
+
+        /* 左：repost */
+        .lp-item[data-action="repost"] {
+            top: 0;
+            left: -3rem;
+            color: #66b3ff;
+        }
+
+        /* 右：quote */
+        .lp-item[data-action="quote"] {
+            top: 0;
+            left: 3rem;
+            color: #666666;
+        }
+
+        /* 下：reply */
+        .lp-item[data-action="reply"] {
+            top: 3rem;
+            left: 0;
+            color: #66b3ff;
+        }
+
+        /* 選択時のエフェクト */
+        .lp-item.selected {
+            background: #fff;
+            transform: scale(1.06);
+            box-shadow:
+                0 0 20px 12px rgba(120, 170, 255, 0.35),
+                0 0 40px 20px rgba(120, 170, 255, 0.25),
+        }
     </style>
 </head>
 
 <body>
     <div id="header-placeholder"></div>
+    <div id="long-press-menu" class="lp-menu" style="display: none;">
+        <div class="lp-item" data-action="like" id="lp-like-icon" title="ふぁぼ"></div>
+
+        <div class="lp-item" data-action="repost" title="RT">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="17 1 21 5 17 9"></polyline>
+                <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+                <polyline points="7 23 3 19 7 15"></polyline>
+                <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+            </svg>
+        </div>
+
+        <div class="lp-item" data-action="quote" title="引用" style="display: none;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 21c3 0 7-1 7-8V5H4v8h4c0 2-1 4-4 4v4zm13 0c3 0 7-1 7-8V5h-6v8h4c0 2-1 4-4 4v4z"></path>
+            </svg>
+        </div>
+
+        <div class="lp-item" data-action="reply" title="リプライ" style="display: none;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+        </div>
+    </div>
 
     <div class="container">
         <div class="flex-exbetween">
@@ -481,6 +606,7 @@
 
     <script src="./auth.js"></script>
     <script src="./auth-ui.js"></script>
+    <script src="./event-bus.js"></script>
     <script src="./relay-manager.js"></script>
     <script src="./data-store.js"></script>
     <script src="./view-state.js"></script>
