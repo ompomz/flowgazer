@@ -36,6 +36,12 @@ class ViewState {
     this.renderTimer = null;
     this.renderDelay = 300;
 
+    // ===== 描画コールバック =====
+    // app.js の init() から setRenderCallbacks() で注入する。
+    // ViewState は timeline.js / app.js を直接参照しない。
+    this._onScheduleRender = null; // () => void  遅延描画
+    this._onRenderNow     = null; // () => void  即時描画
+
     console.log('✅ ViewState初期化完了');
   }
 
@@ -365,24 +371,38 @@ class ViewState {
   }
 
   // ========================================
+  // 描画コールバック注入
+  // ========================================
+
+  /**
+   * 描画コールバックを注入する。app.js の init() から呼ぶ。
+   *
+   * ViewState は timeline.js / app.js を直接参照しないため、
+   * 描画のトリガーをコールバック経由で受け渡す。
+   *
+   * @param {Function} onScheduleRender - 遅延描画をリクエストするコールバック
+   * @param {Function} onRenderNow      - 即時描画をリクエストするコールバック
+   */
+  setRenderCallbacks(onScheduleRender, onRenderNow) {
+    this._onScheduleRender = onScheduleRender;
+    this._onRenderNow      = onRenderNow;
+    console.log('✅ ViewState: 描画コールバック注入完了');
+  }
+
+  // ========================================
   // 描画スケジューリング
   // ========================================
 
   scheduleRender() {
-    if (!window.app?.isAutoUpdate) return;
     clearTimeout(this.renderTimer);
     this.renderTimer = setTimeout(() => {
-      if (window.timeline && typeof window.timeline.refresh === 'function') {
-        window.timeline.refresh();
-      }
+      this._onScheduleRender?.();
     }, this.renderDelay);
   }
 
   renderNow() {
     clearTimeout(this.renderTimer);
-    if (window.timeline && typeof window.timeline.refresh === 'function') {
-      window.timeline.refresh();
-    }
+    this._onRenderNow?.();
   }
 
   // ========================================

@@ -29,8 +29,8 @@ class EventBus {
     /** @type {Map<string, Function[]>} */
     this.listeners = new Map();
 
-    /** デバッグログを出力するか（本番では false にする） */
-    this.debug = true;
+    /** デバッグログを出力するか */
+    this.debug = false;
   }
 
   /**

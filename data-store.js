@@ -59,11 +59,15 @@ class DataStore {
 
   /**
    * イベントをカテゴリ分類 (インデックス作成のみ)
+   *
+   * 【設計原則】
+   * このメソッドは認証状態（誰がログインしているか）を知らない。
+   * 「自分がふぁぼった」の判定は呼び出し側（app.js）が行い、
+   * markAsLikedByMe() で通知する形に分離している。
+   *
    * @private
    */
   _categorizeEvent(event) {
-    const myPubkey = window.nostrAuth?.pubkey;
-
     // kind別インデックス
     if (!this.eventsByKind.has(event.kind)) {
       this.eventsByKind.set(event.kind, new Set());
@@ -108,17 +112,6 @@ class DataStore {
         this.eventsByReferencedPubkey.get(tag[1]).add(event.id);
       }
     });
-
-    // === ユーザー固有の分類 ===
-    if (!myPubkey) return;
-
-    // 自分がふぁぼったイベント
-    if (event.kind === 7 && event.pubkey === myPubkey) {
-      const targetEventId = event.tags.find(t => t[0] === 'e')?.[1];
-      if (targetEventId) {
-        this.likedByMeIds.add(targetEventId);
-      }
-    }
 
     // リアクションカウント更新
     if (event.kind === 6 || event.kind === 7) {
@@ -334,6 +327,19 @@ class DataStore {
    */
   getReactionCount(eventId) {
     return this.reactionCounts.get(eventId) || { reposts: 0, reactions: 0 };
+  }
+
+  /**
+   * 自分がふぁぼったイベントとして登録する。
+   *
+   * DataStore は認証状態を知らないため、kind:7 イベントが
+   * 「自分の投稿か」の判定は呼び出し側（app.js）が行い、
+   * このメソッドで結果だけを通知する。
+   *
+   * @param {string} eventId - ふぁぼ対象のイベントID（eタグの値）
+   */
+  markAsLikedByMe(eventId) {
+    this.likedByMeIds.add(eventId);
   }
 
   /**

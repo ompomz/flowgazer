@@ -4,6 +4,204 @@
  * Baseline方式対応版
  */
 
+// ========================================
+// SubscriptionBuilder
+// 購読フィルタの構築ロジックを集約するクラス。
+// appState (FlowgazerApp) と dataStore への参照を受け取り、
+// フィルタオブジェクトを返すことだけを責務とする。
+// ========================================
+
+class SubscriptionBuilder {
+  /**
+   * @param {FlowgazerApp} appState - cursorSince / showKind42 / filterAuthors の参照元
+   * @param {DataStore} dataStore
+   */
+  constructor(appState, dataStore) {
+    this.appState = appState;
+    this.dataStore = dataStore;
+  }
+
+  /**
+   * Stream Phase 用フィルタ配列を構築する
+   * @param {string|null} myPubkey
+   * @returns {Object[]}
+   */
+  buildStreamPhaseFilters(myPubkey) {
+    const { cursorSince, showKind42, filterAuthors } = this.appState;
+    const filters = [];
+
+    // === 1. グローバルフィルタ ===
+    const globalFilter = {
+      kinds: showKind42 ? [1, 6, 42] : [1, 6],
+      since: cursorSince
+    };
+    if (filterAuthors && filterAuthors.length > 0) {
+      globalFilter.authors = filterAuthors;
+    }
+    filters.push(globalFilter);
+
+    // === 2. フォローしている人の投稿フィルタ ===
+    if (this.dataStore.followingPubkeys.size > 0) {
+      const followingAuthors = Array.from(this.dataStore.followingPubkeys);
+      let filteredFollowing;
+
+      if (myPubkey) {
+        filteredFollowing = this.dataStore.isFollowing(myPubkey)
+          ? followingAuthors
+          : followingAuthors.filter(pk => pk !== myPubkey);
+      } else {
+        filteredFollowing = followingAuthors;
+      }
+
+      if (filteredFollowing.length > 0) {
+        filters.push({
+          kinds: showKind42 ? [1, 6, 42] : [1, 6],
+          authors: filteredFollowing,
+          since: cursorSince
+        });
+      }
+    }
+
+    // === 3. 自分宛のリアクション ===
+    if (myPubkey) {
+      filters.push({ kinds: [7], '#p': [myPubkey], since: cursorSince });
+      filters.push({ kinds: [6], '#p': [myPubkey], since: cursorSince });
+      filters.push({ kinds: [1], '#p': [myPubkey], since: cursorSince });
+
+      const myPostIds = Array.from(this.dataStore.getEventIdsByAuthor(myPubkey));
+      if (myPostIds.length > 0) {
+        filters.push({
+          kinds: [6, 7],
+          '#e': myPostIds.slice(0, 100),
+          since: cursorSince
+        });
+      }
+    }
+
+    // === 4. 自分の投稿専用フィルタ（myposts のリアルタイム更新）===
+    if (myPubkey) {
+      filters.push({
+        kinds: [1, 42],
+        authors: [myPubkey],
+        since: cursorSince
+      });
+    }
+
+    return filters;
+  }
+
+  /**
+   * LoadMore Step1 用フィルタ（タブ主データを until 指定で取得）を構築する
+   * @param {string} tab
+   * @param {number} untilTimestamp
+   * @param {string|null} myPubkey
+   * @returns {Object|null} フィルタオブジェクト。対象外タブの場合は null
+   */
+  buildLoadMoreStep1Filter(tab, untilTimestamp, myPubkey) {
+    // ===== チャンネルタブ（kind:42、channelId指定）=====
+    if (window.viewState.isChannelTab(tab)) {
+      const channelId = window.viewState.getChannelId(tab);
+      return {
+        kinds: [42],
+        '#e': [channelId],
+        until: untilTimestamp - 1,
+        limit: 50
+      };
+    }
+
+    // ===== 通常タブ（kind:1ベース）=====
+    const filter = {
+      kinds: [1],
+      until: untilTimestamp - 1,
+      limit: 50
+    };
+
+    switch (tab) {
+      case 'global':
+        if (this.appState.filterAuthors?.length > 0) {
+          filter.authors = this.appState.filterAuthors;
+        }
+        break;
+
+      case 'following': {
+        if (this.dataStore.followingPubkeys.size === 0) {
+          console.warn('フォローリストが空です');
+          return null;
+        }
+        const followingAuthors = Array.from(this.dataStore.followingPubkeys);
+        filter.authors = myPubkey && !this.dataStore.isFollowing(myPubkey)
+          ? followingAuthors.filter(pk => pk !== myPubkey)
+          : followingAuthors;
+        break;
+      }
+
+      case 'myposts':
+        if (!myPubkey) return null;
+        filter.authors = [myPubkey];
+        break;
+
+      case 'likes':
+        if (!myPubkey) return null;
+        filter.kinds = [1, 6, 7];
+        filter['#p'] = [myPubkey];
+        break;
+
+      default:
+        return null;
+    }
+
+    return filter;
+  }
+
+  /**
+   * LoadMore Step2 用フィルタ（kind:6, 42 の補完取得）を構築する
+   * チャンネルタブ・likes タブは Step2 不要のため null を返す
+   * @param {string} tab
+   * @param {number} untilTimestamp
+   * @param {number} sinceTimestamp
+   * @param {string|null} myPubkey
+   * @returns {Object|null}
+   */
+  buildLoadMoreStep2Filter(tab, untilTimestamp, sinceTimestamp, myPubkey) {
+    if (window.viewState.isChannelTab(tab)) return null;
+    if (tab === 'likes') return null;
+
+    const { showKind42, filterAuthors } = this.appState;
+    const filter = {
+      kinds: showKind42 ? [6, 42] : [6],
+      until: untilTimestamp - 1,
+      since: sinceTimestamp
+    };
+
+    switch (tab) {
+      case 'global':
+        if (filterAuthors?.length > 0) {
+          filter.authors = filterAuthors;
+        }
+        break;
+
+      case 'following': {
+        if (this.dataStore.followingPubkeys.size === 0) return null;
+        const followingAuthors = Array.from(this.dataStore.followingPubkeys);
+        filter.authors = myPubkey && !this.dataStore.isFollowing(myPubkey)
+          ? followingAuthors.filter(pk => pk !== myPubkey)
+          : followingAuthors;
+        break;
+      }
+
+      case 'myposts':
+        if (!myPubkey) return null;
+        filter.authors = [myPubkey];
+        break;
+
+      default:
+        return null;
+    }
+
+    return filter;
+  }
+}
+
 class FlowgazerApp {
   constructor() {
     // ===== アプリケーション状態 =====
@@ -26,6 +224,15 @@ class FlowgazerApp {
     // ===== Baseline方式用 =====
     this.isInitializing = false;
     this.cursorSince = Math.floor(Date.now() / 1000) - 300; // 300秒（5分）× 1 = 300
+
+    // ===== 再接続リカバリ用 =====
+    // 初回接続（init の await connectRelay）と再接続を区別するフラグ
+    this._initialConnectionDone = false;
+
+    // ===== 購読フィルタ構築 =====
+    // DataStoreはこの時点で window.dataStore として確定しているが、
+    // init() 先頭で明示的に代入して依存を明確にする
+    this.subscriptionBuilder = null;
   }
 
   // ========================================
@@ -34,6 +241,27 @@ class FlowgazerApp {
 
   async init() {
     console.log('🚀 flowgazer起動中...');
+
+    // SubscriptionBuilder を初期化（DataStore が確定してから）
+    this.subscriptionBuilder = new SubscriptionBuilder(this, window.dataStore);
+
+    // ViewState に描画コールバックを注入する。
+    // ViewState は timeline.js / app.js を直接知らないため、
+    // 両者を知っている app.js がここで橋渡しする。
+    window.viewState.setRenderCallbacks(
+      // onScheduleRender: isAutoUpdate が ON のときだけ timeline.refresh() を呼ぶ
+      () => {
+        if (this.isAutoUpdate && window.timeline) {
+          window.timeline.refresh();
+        }
+      },
+      // onRenderNow: 常に即時 refresh（force=true で isAutoUpdate を無視）
+      () => {
+        if (window.timeline) {
+          window.timeline.refresh(true);
+        }
+      }
+    );
 
     // EventBusハンドラを最初に登録する（他の初期化より前に受け取れるようにするため）
     this._setupEventBusHandlers();
@@ -104,11 +332,19 @@ class FlowgazerApp {
 
     // ---- RELAY_CONNECTED ----
     // relay-manager.js が emit し、app.js が受け取る。
-    // 現時点では初回接続は init() の await connectRelay() が制御するためここでは何もしない。
-    // 将来、予期しない切断からの再接続後にタイムラインをリカバリする処理をここに追加する。
+    // 初回接続は init() の await connectRelay() が制御するため、
+    // 2回目以降（予期しない切断からの再接続）のみリカバリを実行する。
     window.eventBus.on(window.EVENTS.RELAY_CONNECTED, ({ url }) => {
       console.log('📨 [EventBus] relay:connected 受信', url);
-      // TODO(Step3以降): 再接続時のリカバリ処理をここに実装する
+
+      if (this._initialConnectionDone) {
+        // 再接続検知 → Anchor Phase + Stream Phase を再起動してタイムラインを復元
+        console.log('🔄 再接続検知 → タイムラインリカバリ開始');
+        this.initializeTimelineBaseline();
+      }
+
+      // 初回接続フラグを立てる（次回から再接続として扱う）
+      this._initialConnectionDone = true;
     });
 
     console.log('✅ EventBusハンドラ登録完了');
@@ -721,12 +957,14 @@ class FlowgazerApp {
     console.log('📡 Stream Phase開始');
     console.log('Current cursorSince:', this.cursorSince);
 
-    const filters = this._buildStreamPhaseFilters();
+    const myPubkey = window.nostrAuth.isLoggedIn() ? window.nostrAuth.pubkey : null;
+    const filters = this.subscriptionBuilder.buildStreamPhaseFilters(myPubkey);
 
     window.relayManager.subscribe('stream-phase', filters, (type, event) => {
       if (type === 'EVENT') {
         const added = window.dataStore.addEvent(event);
         if (added) {
+          this._notifyLikedByMe(event, myPubkey);
           window.viewState.onEventReceived(event);
           window.profileFetcher.request(event.pubkey);
         }
@@ -735,99 +973,6 @@ class FlowgazerApp {
         window.profileFetcher.flushNow();
       }
     });
-  }
-
-  /**
-   * Stream Phase用フィルタ構築
-   * @private
-   */
-  _buildStreamPhaseFilters() {
-    const filters = [];
-    const myPubkey = window.nostrAuth.isLoggedIn() ? window.nostrAuth.pubkey : null;
-
-    // === 1. グローバルフィルタ ===
-    const globalFilter = {
-      kinds: this.showKind42 ? [1, 6, 42] : [1, 6],
-      since: this.cursorSince
-    };
-
-    // authors が指定されている場合は、それを優先
-    if (this.filterAuthors && this.filterAuthors.length > 0) {
-      globalFilter.authors = this.filterAuthors;
-    }
-
-    filters.push(globalFilter);
-
-    // === 2. フォローしている人の投稿フィルタ ===
-    if (window.dataStore.followingPubkeys.size > 0) {
-      const followingAuthors = Array.from(window.dataStore.followingPubkeys);
-
-      let filteredFollowing;
-
-      if (myPubkey) {
-        const iFollowMyself = window.dataStore.isFollowing(myPubkey);
-
-        if (iFollowMyself) {
-          // 自分をフォローしている → 自分を除外しない
-          filteredFollowing = followingAuthors;
-        } else {
-          // 自分をフォローしていない → 自分を除外する（従来通り）
-          filteredFollowing = followingAuthors.filter(pk => pk !== myPubkey);
-        }
-      } else {
-        filteredFollowing = followingAuthors;
-      }
-
-      if (filteredFollowing.length > 0) {
-        filters.push({
-          kinds: this.showKind42 ? [1, 6, 42] : [1, 6],
-          authors: filteredFollowing,
-          since: this.cursorSince
-        });
-      }
-    }
-
-    // === 3. 自分宛のリアクション（従来通り） ===
-    if (myPubkey) {
-      filters.push({
-        kinds: [7],
-        '#p': [myPubkey],
-        since: this.cursorSince
-      });
-
-      filters.push({
-        kinds: [6],
-        '#p': [myPubkey],
-        since: this.cursorSince
-      });
-
-      filters.push({
-        kinds: [1],
-        '#p': [myPubkey],
-        since: this.cursorSince
-      });
-
-      const myPostIds = Array.from(window.dataStore.getEventIdsByAuthor(myPubkey));
-      if (myPostIds.length > 0) {
-        filters.push({
-          kinds: [6, 7],
-          '#e': myPostIds.slice(0, 100),
-          since: this.cursorSince
-        });
-      }
-    }
-
-    // === 4. 自分の投稿専用フィルタ ===
-    // これにより、myposts がリアルタイムで更新される
-    if (myPubkey) {
-      filters.push({
-        kinds: [1, 42],
-        authors: [myPubkey],
-        since: this.cursorSince
-      });
-    }
-
-    return filters;
   }
 
   // ========================================
@@ -892,8 +1037,11 @@ class FlowgazerApp {
       authors: [myPubkey]
     }, (type, event) => {
       if (type === 'EVENT') {
-        window.dataStore.addEvent(event);
-        window.viewState.onEventReceived(event);
+        const added = window.dataStore.addEvent(event);
+        if (added) {
+          this._notifyLikedByMe(event, myPubkey);
+          window.viewState.onEventReceived(event);
+        }
       }
     });
   }
@@ -957,7 +1105,7 @@ class FlowgazerApp {
   // ========================================
 
   /**
-   * タブを切り替え
+   * タブ切り替え
    * @param {string} tab
    */
   switchTab(tab) {
@@ -977,18 +1125,51 @@ class FlowgazerApp {
       window.viewState.switchTab(tab);
     }
 
-    if (!this.tabDataFetched[tab] && window.nostrAuth.isLoggedIn()) {
-      if (tab === 'myposts') {
-        this.fetchMyPostsHistory();
-        this.tabDataFetched.myposts = true;
-      } else if (tab === 'likes') {
-        this.fetchReceivedLikes();
-        this.tabDataFetched.likes = true;
-      }
-    }
+    this._ensureTabDataFetched(tab);
 
     if (window.timeline) {
       window.timeline.switchTab(tab);
+    }
+  }
+
+  /**
+   * タブの初回データ取得を保証する。
+   * ログイン済みかつ未取得のタブに対してのみデータ取得を実行する。
+   * @param {string} tab
+   * @private
+   */
+  _ensureTabDataFetched(tab) {
+    if (this.tabDataFetched[tab] || !window.nostrAuth.isLoggedIn()) return;
+
+    const fetchers = {
+      myposts: () => this.fetchMyPostsHistory(),
+      likes:   () => this.fetchReceivedLikes(),
+    };
+
+    if (fetchers[tab]) {
+      fetchers[tab]();
+      this.tabDataFetched[tab] = true;
+    }
+  }
+
+  /**
+   * kind:7 イベントが自分のふぁぼであれば DataStore に通知する。
+   *
+   * DataStore は認証状態を知らないため、「自分の投稿か」の判定を
+   * app.js がここで一元的に行い、markAsLikedByMe() で結果だけを渡す。
+   *
+   * @param {Object} event - 追加済みの Nostr イベント
+   * @param {string|null} myPubkey
+   * @private
+   */
+  _notifyLikedByMe(event, myPubkey) {
+    if (!myPubkey) return;
+    if (event.kind !== 7) return;
+    if (event.pubkey !== myPubkey) return;
+
+    const targetEventId = event.tags.find(t => t[0] === 'e')?.[1];
+    if (targetEventId) {
+      window.dataStore.markAsLikedByMe(targetEventId);
     }
   }
 
@@ -1111,8 +1292,9 @@ class FlowgazerApp {
   async loadMoreStep1(tab, untilTimestamp) {
     return new Promise((resolve) => {
       const events = [];
+      const myPubkey = window.nostrAuth?.pubkey;
 
-      const filter = this._buildLoadMoreStep1Filter(tab, untilTimestamp);
+      const filter = this.subscriptionBuilder.buildLoadMoreStep1Filter(tab, untilTimestamp, myPubkey);
       if (!filter) {
         resolve({ success: false });
         return;
@@ -1146,7 +1328,8 @@ class FlowgazerApp {
    */
   async loadMoreStep2(tab, untilTimestamp, sinceTimestamp) {
     return new Promise((resolve) => {
-      const filter = this._buildLoadMoreStep2Filter(tab, untilTimestamp, sinceTimestamp);
+      const myPubkey = window.nostrAuth?.pubkey;
+      const filter = this.subscriptionBuilder.buildLoadMoreStep2Filter(tab, untilTimestamp, sinceTimestamp, myPubkey);
       if (!filter) {
         resolve();
         return;
@@ -1166,125 +1349,6 @@ class FlowgazerApp {
         }
       });
     });
-  }
-
-  /**
-   * LoadMore Step1用フィルタ構築
-   * 「そのタブの主データを取得するフィルタ」を返す
-   * @private
-   */
-  _buildLoadMoreStep1Filter(tab, untilTimestamp) {
-    const myPubkey = window.nostrAuth?.pubkey;
-
-    // ===== チャンネルタブ（kind:42、channelId指定）=====
-    if (window.viewState.isChannelTab(tab)) {
-      const channelId = window.viewState.getChannelId(tab);
-      return {
-        kinds: [42],
-        '#e': [channelId],
-        until: untilTimestamp - 1,
-        limit: 50
-      };
-    }
-
-    // ===== 通常タブ（kind:1ベース）=====
-    const filter = {
-      kinds: [1],
-      until: untilTimestamp - 1,
-      limit: 50
-    };
-
-    switch (tab) {
-      case 'global':
-        if (this.filterAuthors?.length > 0) {
-          filter.authors = this.filterAuthors;
-        }
-        break;
-
-      case 'following': {
-        if (window.dataStore.followingPubkeys.size === 0) {
-          console.warn('フォローリストが空です');
-          return null;
-        }
-        const followingAuthors = Array.from(window.dataStore.followingPubkeys);
-        if (myPubkey) {
-          filter.authors = window.dataStore.isFollowing(myPubkey)
-            ? followingAuthors
-            : followingAuthors.filter(pk => pk !== myPubkey);
-        } else {
-          filter.authors = followingAuthors;
-        }
-        break;
-      }
-
-      case 'myposts':
-        if (!myPubkey) return null;
-        filter.authors = [myPubkey];
-        break;
-
-      case 'likes':
-        if (!myPubkey) return null;
-        filter.kinds = [1, 6, 7];
-        filter['#p'] = [myPubkey];
-        break;
-
-      default:
-        return null;
-    }
-
-    return filter;
-  }
-
-  /**
-   * LoadMore Step2用フィルタ構築（kind:6, 42の補完取得）
-   * チャンネルタブ・likesタブはStep2不要のためnullを返す
-   * @private
-   */
-  _buildLoadMoreStep2Filter(tab, untilTimestamp, sinceTimestamp) {
-    const myPubkey = window.nostrAuth?.pubkey;
-
-    // チャンネルタブはStep1（kind:42）のみで完結
-    if (window.viewState.isChannelTab(tab)) return null;
-
-    // likesタブはStep2不要
-    if (tab === 'likes') return null;
-
-    const filter = {
-      kinds: this.showKind42 ? [6, 42] : [6],
-      until: untilTimestamp - 1,
-      since: sinceTimestamp
-    };
-
-    switch (tab) {
-      case 'global':
-        if (this.filterAuthors?.length > 0) {
-          filter.authors = this.filterAuthors;
-        }
-        break;
-
-      case 'following': {
-        if (window.dataStore.followingPubkeys.size === 0) return null;
-        const followingAuthors = Array.from(window.dataStore.followingPubkeys);
-        if (myPubkey) {
-          filter.authors = window.dataStore.isFollowing(myPubkey)
-            ? followingAuthors
-            : followingAuthors.filter(pk => pk !== myPubkey);
-        } else {
-          filter.authors = followingAuthors;
-        }
-        break;
-      }
-
-      case 'myposts':
-        if (!myPubkey) return null;
-        filter.authors = [myPubkey];
-        break;
-
-      default:
-        return null;
-    }
-
-    return filter;
   }
 
   // ========================================
@@ -1376,6 +1440,7 @@ class FlowgazerApp {
       const signed = await window.nostrAuth.signEvent(event);
       window.relayManager.publish(signed);
       window.dataStore.addEvent(signed);
+      this._notifyLikedByMe(signed, window.nostrAuth.pubkey);
       window.viewState.onEventReceived(signed);
       window.viewState.renderNow();
 

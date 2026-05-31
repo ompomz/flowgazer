@@ -30,6 +30,21 @@ class Timeline {
     }
 
     // ========================================
+    // 自動更新状態の取得
+    // ========================================
+
+    /**
+     * 自動更新が有効かどうかを返す。
+     * app.js への直接依存を1箇所に集約するためのヘルパー。
+     * app が存在しない（テスト等）場合は true を返す。
+     * @returns {boolean}
+     * @private
+     */
+    _isAutoUpdate() {
+        return window.app?.isAutoUpdate ?? true;
+    }
+
+    // ========================================
     // タブ管理
     // ========================================
 
@@ -47,8 +62,16 @@ class Timeline {
     // レンダリング
     // ========================================
 
+    /**
+     * タイムラインを再描画する。
+     *
+     * @param {boolean} force - true のとき isAutoUpdate を無視して強制描画する。
+     *   - タブ切り替え・renderNow（即時描画）など、ユーザー操作起点の場合は true を渡す。
+     *   - scheduleRender（遅延描画）経由の場合は app.js 側コールバックで isAutoUpdate を
+     *     判定済みのため、ここでは常に true として呼ばれる。
+     */
     refresh(force = false) {
-        if (!force && !window.app?.isAutoUpdate) {
+        if (!force && !this._isAutoUpdate()) {
             console.log('⏸️ 自動更新OFF: 描画スキップ');
             return;
         }
