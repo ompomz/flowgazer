@@ -213,6 +213,11 @@ class FlowgazerApp {
     this.lastActiveTime = Date.now();
     this.activeChannelId = null; // 現在表示中のchannelId
 
+    // kind:42（チャンネル投稿）の表示フラグ。
+    // localStorage から復元することで、リロード後も設定が維持される。
+    // view-state.js の _applyFilters にはオプションとして都度渡す。
+    this.showKind42 = localStorage.getItem('showKind42') === 'true';
+
     // ===== データ取得済みフラグ =====
     this.tabDataFetched = {
       global: false,
@@ -283,7 +288,7 @@ class FlowgazerApp {
     const savedChannels = localStorage.getItem('myChannels');
     if (savedChannels) {
       try {
-        updateChannelDropdown(JSON.parse(savedChannels));
+        this._updateChannelDropdown(JSON.parse(savedChannels));
         console.log('📁 保存されたチャンネルリストを復元しました');
       } catch (e) {
         console.error('❌ チャンネル復元失敗:', e);
@@ -357,6 +362,15 @@ class FlowgazerApp {
   /**
    * リロード時のログイン後初期化。
    * init() から呼ばれる（ログイン操作後は EventBus 経由で onAuthSuccessFromUI が呼ばれる）。
+   *
+   * 【なぜ onAuthSuccessFromUI と2系統あるか】
+   * - onLogin（リロード時）: kind:3 取得を非同期で裏側に走らせる設計。
+   *   ページ表示を妨げないため fetchInitialData() 内で購読コールバックとして処理する。
+   * - onAuthSuccessFromUI（ログイン操作後）: kind:3 取得の完了を await してからモーダルを閉じる設計。
+   *   ユーザーがログインボタンを押したあと、フォロータブが即座に表示されることを保証するため。
+   *
+   * 2系統を統合するには「表示を妨げない」要件と「完了を待つ」要件を
+   * 同時に満たす仕組みが必要で、現時点では意図的に分けている。
    */
   async onLogin() {
     const myPubkey = window.nostrAuth.pubkey;
@@ -377,7 +391,7 @@ class FlowgazerApp {
     // フォローリスト取得 → 確定後に Stream Phase 再起動（fetchInitialData内で行う）
     this.fetchInitialData();
 
-    fetchMyChannels();
+    this.fetchMyChannels();
   }
 
   // ========================================
@@ -429,7 +443,7 @@ class FlowgazerApp {
     await this.fetchFollowingInitial();
 
     // チャンネルリスト取得
-    if (typeof fetchMyChannels === 'function') fetchMyChannels();
+    this.fetchMyChannels();
 
     // UI更新
     this.updateLoginUI();
@@ -623,7 +637,7 @@ class FlowgazerApp {
 
       if (e.target.value === '42') {
         channelSelector.style.display = 'inline';
-        if (typeof fetchMyChannels === 'function') fetchMyChannels();
+        this.fetchMyChannels();
       } else {
         channelSelector.style.display = 'none';
       }
@@ -727,9 +741,8 @@ class FlowgazerApp {
     // ----------------------------------------
     const kind42Checkbox = document.getElementById('toggle-kind42');
     if (kind42Checkbox) {
-      // ページ読み込み時にlocalStorageから復元して見た目を合わせる
-      const savedKind42 = localStorage.getItem('showKind42') === 'true';
-      kind42Checkbox.checked = savedKind42;
+      // コンストラクタで復元済みの this.showKind42 をチェックボックスに反映する
+      kind42Checkbox.checked = this.showKind42;
 
       kind42Checkbox.addEventListener('change', (e) => {
         this.toggleKind42Display(e.target.checked);
@@ -972,7 +985,7 @@ class FlowgazerApp {
         console.log('📡 Stream Phase EOSE受信');
         window.profileFetcher.flushNow();
       }
-    });
+    }, { persistent: true });
   }
 
   // ========================================
@@ -1029,7 +1042,7 @@ class FlowgazerApp {
         // following タブ初期表示を構築（遡及登録 → 必要なら補完取得）
         this.fetchFollowingInitial();
       }
-    });
+    }, { persistent: true });
 
     // 2. 自分のふぁぼ取得
     window.relayManager.subscribe('my-likes', {
@@ -1043,7 +1056,7 @@ class FlowgazerApp {
           window.viewState.onEventReceived(event);
         }
       }
-    });
+    }, { persistent: true });
   }
 
   /**
@@ -1651,7 +1664,7 @@ class FlowgazerApp {
           window.profileFetcher.request(event.pubkey);
         }
       }
-    });
+    }, { persistent: true });
   }
 
   /**
@@ -1668,209 +1681,192 @@ class FlowgazerApp {
       btn.classList.remove('hidden');
     }
   }
-}
 
-/**
- * 自分のチャンネルリストを取得し、各チャンネルの名前を解決する
- */
-async function fetchMyChannels() {
-  const myPubkey = window.nostrAuth?.pubkey;
-  if (!myPubkey) return;
+  // ========================================
+  // チャンネル管理
+  // ========================================
 
-  console.log('📡 チャンネルリスト取得開始...');
+  /**
+   * 自分のチャンネルリストを取得し、各チャンネルの名前を解決する
+   */
+  async fetchMyChannels() {
+    const myPubkey = window.nostrAuth?.pubkey;
+    if (!myPubkey) return;
 
-  const subId = 'my-channels-' + Date.now();
+    console.log('📡 チャンネルリスト取得開始...');
 
-  window.relayManager.subscribe(subId, {
-    kinds: [10005],
-    authors: [myPubkey],
-    limit: 1
-  }, async (type, event) => {
-    if (type === 'EVENT' && event.kind === 10005) {
-      console.log('✅ kind:10005 受信:', event.tags);
+    const subId = 'my-channels-' + Date.now();
 
-      const channelIds = event.tags
-        .filter(t => t[0] === 'e' && t[1])
-        .map(t => t[1]);
+    window.relayManager.subscribe(subId, {
+      kinds: [10005],
+      authors: [myPubkey],
+      limit: 1
+    }, async (type, event) => {
+      if (type === 'EVENT' && event.kind === 10005) {
+        console.log('✅ kind:10005 受信:', event.tags);
 
-      if (channelIds.length === 0) {
-        console.warn('⚠️ チャンネルが見つかりませんでした');
-        updateChannelDropdown([]);
+        const channelIds = event.tags
+          .filter(t => t[0] === 'e' && t[1])
+          .map(t => t[1]);
+
+        if (channelIds.length === 0) {
+          console.warn('⚠️ チャンネルが見つかりませんでした');
+          this._updateChannelDropdown([]);
+          window.relayManager.unsubscribe(subId);
+          return;
+        }
+
+        console.log(`📋 ${channelIds.length}個のチャンネルIDを取得`);
+
+        await this._resolveChannelNames(channelIds);
+
         window.relayManager.unsubscribe(subId);
-        return;
       }
 
-      console.log(`📋 ${channelIds.length}個のチャンネルIDを取得`);
-
-      await resolveChannelNames(channelIds);
-
-      window.relayManager.unsubscribe(subId);
-    }
-
-    if (type === 'EOSE') {
-      window.relayManager.unsubscribe(subId);
-    }
-  });
-}
-
-/**
- * チャンネルID配列から名前を解決してプルダウンを更新
- */
-async function resolveChannelNames(channelIds) {
-  return new Promise((resolve) => {
-    const channels = [];
-    const resolved = new Set();
-    const subId41 = 'channel-meta-41-' + Date.now();
-
-    console.log('🔍 チャンネル名解決開始（kind:41 優先）');
-
-    window.relayManager.subscribe(
-      subId41,
-      {
-        kinds: [41],
-        '#e': channelIds
-      },
-      (type, event) => {
-        if (type === 'EVENT') {
-          const channelId = event.tags.find(t => t[0] === 'e')?.[1];
-          if (!channelId || !channelIds.includes(channelId)) return;
-
-          try {
-            const metadata = JSON.parse(event.content);
-            const name = metadata.name || `Channel ${channelId.substring(0, 8)}`;
-            window.channelNameMap.set(channelId, name);
-
-            const existing = channels.find(c => c.id === channelId);
-            if (!existing || event.created_at > existing.created_at) {
-              if (existing) {
-                existing.name = name;
-                existing.created_at = event.created_at;
-                existing.source = '41';
-              } else {
-                channels.push({
-                  id: channelId,
-                  name,
-                  created_at: event.created_at,
-                  source: '41'
-                });
-              }
-              resolved.add(channelId);
-              console.log(`✅ kind:41 から解決: ${name}`);
-            }
-          } catch (err) {
-            console.error('❌ kind:41 パース失敗:', err);
-          }
-        }
-
-        if (type === 'EOSE') {
-          window.relayManager.unsubscribe(subId41);
-          fetchKind40Fallback();
-        }
+      if (type === 'EOSE') {
+        window.relayManager.unsubscribe(subId);
       }
-    );
+    });
+  }
 
-    function fetchKind40Fallback() {
-      const unresolvedIds = channelIds.filter(id => !resolved.has(id));
+  /**
+   * チャンネルID配列から名前を解決してプルダウンを更新
+   * @private
+   */
+  async _resolveChannelNames(channelIds) {
+    return new Promise((resolve) => {
+      const channels = [];
+      const resolved = new Set();
+      const subId41 = 'channel-meta-41-' + Date.now();
 
-      if (unresolvedIds.length === 0) {
-        finish();
-        return;
-      }
-
-      console.log(`🔁 kind:40 で補完 (${unresolvedIds.length} 件)`);
-
-      const subId40 = 'channel-meta-40-' + Date.now();
+      console.log('🔍 チャンネル名解決開始（kind:41 優先）');
 
       window.relayManager.subscribe(
-        subId40,
-        {
-          kinds: [40],
-          ids: unresolvedIds
-        },
+        subId41,
+        { kinds: [41], '#e': channelIds },
         (type, event) => {
-          if (type === 'EVENT' && unresolvedIds.includes(event.id)) {
+          if (type === 'EVENT') {
+            const channelId = event.tags.find(t => t[0] === 'e')?.[1];
+            if (!channelId || !channelIds.includes(channelId)) return;
+
             try {
               const metadata = JSON.parse(event.content);
-              const name = metadata.name || `Channel ${event.id.substring(0, 8)}`;
-              window.channelNameMap.set(event.id, name);
+              const name = metadata.name || `Channel ${channelId.substring(0, 8)}`;
+              window.channelNameMap.set(channelId, name);
 
-              channels.push({
-                id: event.id,
-                name,
-                created_at: event.created_at,
-                source: '40'
-              });
-
-              resolved.add(event.id);
-              console.log(`✅ kind:40 から解決: ${name}`);
+              const existing = channels.find(c => c.id === channelId);
+              if (!existing || event.created_at > existing.created_at) {
+                if (existing) {
+                  existing.name = name;
+                  existing.created_at = event.created_at;
+                  existing.source = '41';
+                } else {
+                  channels.push({ id: channelId, name, created_at: event.created_at, source: '41' });
+                }
+                resolved.add(channelId);
+                console.log(`✅ kind:41 から解決: ${name}`);
+              }
             } catch (err) {
-              console.error('❌ kind:40 パース失敗:', err);
+              console.error('❌ kind:41 パース失敗:', err);
             }
           }
 
           if (type === 'EOSE') {
-            window.relayManager.unsubscribe(subId40);
-            finish();
+            window.relayManager.unsubscribe(subId41);
+            fetchKind40Fallback();
           }
         }
       );
-    }
 
-    function finish() {
-      channelIds.forEach(id => {
-        if (!resolved.has(id)) {
-          channels.push({
-            id,
-            name: `Channel ${id.substring(0, 8)}...`,
-            created_at: 0,
-            source: 'default'
-          });
+      const fetchKind40Fallback = () => {
+        const unresolvedIds = channelIds.filter(id => !resolved.has(id));
+
+        if (unresolvedIds.length === 0) {
+          finish();
+          return;
         }
-      });
 
-      localStorage.setItem('myChannels', JSON.stringify(channels));
-      updateChannelDropdown(channels);
-      resolve();
-    }
+        console.log(`🔁 kind:40 で補完 (${unresolvedIds.length} 件)`);
 
-    setTimeout(() => {
-      console.log('⏱️ チャンネル名解決タイムアウト');
-      finish();
-    }, 5000);
-  });
-}
+        const subId40 = 'channel-meta-40-' + Date.now();
 
-/**
- * チャンネル情報をプルダウンに反映する
- */
-function updateChannelDropdown(channels) {
-  const channelSelect = document.getElementById('channel-list-selector');
-  if (!channelSelect) return;
+        window.relayManager.subscribe(
+          subId40,
+          { kinds: [40], ids: unresolvedIds },
+          (type, event) => {
+            if (type === 'EVENT' && unresolvedIds.includes(event.id)) {
+              try {
+                const metadata = JSON.parse(event.content);
+                const name = metadata.name || `Channel ${event.id.substring(0, 8)}`;
+                window.channelNameMap.set(event.id, name);
 
-  const currentValue = channelSelect.value;
-  channelSelect.innerHTML = '<option value="">-- チャンネルを選択 --</option>';
+                channels.push({ id: event.id, name, created_at: event.created_at, source: '40' });
+                resolved.add(event.id);
+                console.log(`✅ kind:40 から解決: ${name}`);
+              } catch (err) {
+                console.error('❌ kind:40 パース失敗:', err);
+              }
+            }
 
-  if (channels.length === 0) {
-    const option = document.createElement('option');
-    option.value = '';
-    option.textContent = 'チャンネルが見つかりませんでした';
-    option.disabled = true;
-    channelSelect.appendChild(option);
-    console.log('⚠️ 表示可能なチャンネルがありません');
-    return;
+            if (type === 'EOSE') {
+              window.relayManager.unsubscribe(subId40);
+              finish();
+            }
+          }
+        );
+      };
+
+      const finish = () => {
+        channelIds.forEach(id => {
+          if (!resolved.has(id)) {
+            channels.push({ id, name: `Channel ${id.substring(0, 8)}...`, created_at: 0, source: 'default' });
+          }
+        });
+
+        localStorage.setItem('myChannels', JSON.stringify(channels));
+        this._updateChannelDropdown(channels);
+        resolve();
+      };
+
+      setTimeout(() => {
+        console.log('⏱️ チャンネル名解決タイムアウト');
+        finish();
+      }, 5000);
+    });
   }
 
-  channels.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
-  channels.forEach(channel => {
-    const option = document.createElement('option');
-    option.value = channel.id;
-    option.textContent = channel.name;
-    if (channel.id === currentValue) option.selected = true;
-    channelSelect.appendChild(option);
-  });
+  /**
+   * チャンネル情報をプルダウンに反映する
+   * @private
+   */
+  _updateChannelDropdown(channels) {
+    const channelSelect = document.getElementById('channel-list-selector');
+    if (!channelSelect) return;
 
-  // ※ channel-tab-selector は廃止したため、ここでの同期処理は不要
-  console.log(`✅ プルダウンに ${channels.length} 件のチャンネルをセットしました`);
+    const currentValue = channelSelect.value;
+    channelSelect.innerHTML = '<option value="">-- チャンネルを選択 --</option>';
+
+    if (channels.length === 0) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = 'チャンネルが見つかりませんでした';
+      option.disabled = true;
+      channelSelect.appendChild(option);
+      console.log('⚠️ 表示可能なチャンネルがありません');
+      return;
+    }
+
+    channels.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+    channels.forEach(channel => {
+      const option = document.createElement('option');
+      option.value = channel.id;
+      option.textContent = channel.name;
+      if (channel.id === currentValue) option.selected = true;
+      channelSelect.appendChild(option);
+    });
+
+    console.log(`✅ プルダウンに ${channels.length} 件のチャンネルをセットしました`);
+  }
 }
 
 // ========================================

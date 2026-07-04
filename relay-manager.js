@@ -102,8 +102,18 @@ class RelayManager {
 
   /**
    * イベントを購読
+   *
+   * @param {string}          subId    - 購読ID（一意な文字列）
+   * @param {Object|Object[]} filters  - Nostr フィルタ
+   * @param {Function}        handler  - イベントハンドラ (type, event) => void
+   * @param {Object}          [options]
+   * @param {boolean}         [options.persistent=false]
+   *   true のとき「永続購読」として扱い、再接続時に REQ を自動再送する。
+   *   false（デフォルト）のとき「一時購読」として扱い、再接続時に破棄される。
+   *   永続購読にすべき例: stream-phase / stream-channel / following-list / my-likes
+   *   一時購読にすべき例: anchor-phase / load-more-* / channel-history-*
    */
-  subscribe(subId, filters, handler) {
+  subscribe(subId, filters, handler, { persistent = false } = {}) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.warn('⚠️ リレー未接続のため購読できません');
       return false;
@@ -112,9 +122,8 @@ class RelayManager {
     // フィルターの正規化（配列化）
     const filterArray = Array.isArray(filters) ? filters : [filters];
 
-    // [変更] フィルタとハンドラをセットで保持する
-    // 旧: this.subscriptions.set(subId, handler)
-    this.subscriptions.set(subId, { filters: filterArray, handler });
+    // フィルタ・ハンドラ・永続フラグをセットで保持する
+    this.subscriptions.set(subId, { filters: filterArray, handler, persistent });
 
     // REQメッセージを送信
     const reqMsg = ['REQ', subId, ...filterArray];
@@ -128,9 +137,7 @@ class RelayManager {
    * 購読を解除
    */
   unsubscribe(subId) {
-    // [変更] 切断中でも内部状態は必ず削除する
-    // 旧: 接続中でなければ削除のみ・接続中なら CLOSE 送信 → 削除、という2パスだったが、
-    //     どちらの場合も「内部状態の削除」は必須なので先に行う
+    // 切断中でも内部状態は必ず削除する
     const existed = this.subscriptions.has(subId);
     this.subscriptions.delete(subId);
 
@@ -152,13 +159,11 @@ class RelayManager {
   }
 
   /**
-   * すべての購読を再開（再接続時用）
+   * 永続購読を再開（再接続時用）
    *
-   * [変更] フィルタを保持するようになったため、再接続時に実際に REQ を再送できる。
-   * 旧実装はハンドラのみ保持でフィルタを持っておらず、REQ を再送できていなかった。
-   *
-   * 再送するのは「永続的な購読」のみ。一時的な購読（anchor-phase、load-more-* など）は
-   * 再送しない（再接続後に app.js 側で必要に応じて再起動される）。
+   * persistent: true で登録された購読のみ REQ を再送する。
+   * persistent: false の一時購読は Map から除去して破棄する。
+   * 再接続後に必要な一時購読は app.js 側で改めて起動される。
    */
   resubscribeAll() {
     if (this.subscriptions.size === 0) {
@@ -168,24 +173,10 @@ class RelayManager {
 
     console.log(`🔄 購読を再開します... (${this.subscriptions.size}件)`);
 
-    // [変更] 一時的な購読は再送しない（subId のプレフィックスで判別）
-    const TRANSIENT_PREFIXES = [
-      'anchor-phase',
-      'load-more-',
-      'channel-history-',
-      'following-anchor-phase',
-      'auth-following-check',
-      'my-channels-',
-      'channel-meta-',
-    ];
-
-    const isTransient = (subId) =>
-      TRANSIENT_PREFIXES.some(prefix => subId.startsWith(prefix));
-
-    // パス1: 一時購読をMapから除去
+    // パス1: 一時購読（persistent: false）を Map から除去
     const transientIds = [];
-    this.subscriptions.forEach((_, subId) => {
-      if (isTransient(subId)) transientIds.push(subId);
+    this.subscriptions.forEach(({ persistent }, subId) => {
+      if (!persistent) transientIds.push(subId);
     });
     transientIds.forEach(subId => {
       this.subscriptions.delete(subId);
