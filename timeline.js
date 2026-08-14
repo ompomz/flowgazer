@@ -204,6 +204,12 @@ class Timeline {
         li.className = 'event event-channel';
         li.id = event.id;
 
+        // 🆕 自分がすでにふぁぼっているチャンネル投稿なら右端を光らせる
+        // （kind:1のcreatePostElementと同じロジック。event.id自身のふぁぼ状態を見る）
+        if (window.dataStore.isLikedByMe(event.id)) {
+            li.classList.add('event-liked');
+        }
+
         // 長押しハンドラー
         const longPressHandler = this.createLongPressHandler(event);
         longPressHandler.attach(li);
@@ -490,6 +496,15 @@ class Timeline {
     createLikeElement(event) {
         const li = document.createElement('li');
         li.className = 'event event-like';
+
+        // 🆕 このリアクション通知（kind:7イベント）自体を自分がふぁぼっている場合、
+        // event-liked クラスで右端をハイライトする。
+        // Nostr仕様上、kind:7イベントのidを対象にさらに自分がkind:7を送ることは可能なため、
+        // createPostElement / createChannelMessageElement と同じロジック（event.idそのもの）が使える。
+        // targetId（プレビュー中の元投稿）ではなく event.id を見る点に注意。
+        if (window.dataStore.isLikedByMe(event.id)) {
+            li.classList.add('event-liked');
+        }
 
         // 長押しハンドラー
         const longPressHandler = this.createLongPressHandler(event);
