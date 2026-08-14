@@ -225,12 +225,18 @@ class Timeline {
 
         // チャンネルバッジ（クリック可能）
         li.appendChild(this.createChannelBadge(channelId, relayHint));
-        li.appendChild(document.createElement('br'));
 
-        // --- 本文（改行許可スタイルを適用） ---
+        // 改行表示ONかつ本文に改行を含む場合、本文の直前で改行する
+        if (this._shouldBreakBeforeContent(event)) {
+            li.appendChild(document.createElement('br'));
+        }
+
+        // --- 本文 ---
+        // 改行表示のON/OFFは #timeline.pre-wrap-enabled クラスの有無で
+        // CSS側（.post-content の white-space）を切り替える。
+        // 個別要素にstyleを直接指定すると詳細度でCSSクラスに勝ってしまうため、
+        // ここではインラインstyleを付けない。
         const content = this.createContent(event);
-        // white-space: pre-wrap を指定することで \n を改行として表示し、端で折り返す設定になります
-        content.style.whiteSpace = 'pre-wrap';
         li.appendChild(content);
 
         return li;
@@ -283,7 +289,7 @@ class Timeline {
      */
     updateChannelBadge(channelId, name) {
         if (!channelId) return;
-        const selector = `.channel-badge[data-channel-id="${CSS.escape(channelId)}"]`;
+        const selector = `.-badgchannele[data-channel-id="${CSS.escape(channelId)}"]`;
         this.container.querySelectorAll(selector).forEach(badge => {
             badge.textContent = `*${name} `;
         });
@@ -362,6 +368,11 @@ class Timeline {
 
             li.appendChild(replySpan);
             li.appendChild(document.createTextNode(' '));
+        }
+
+        // 改行表示ONかつ本文に改行を含む場合、本文の直前で改行する
+        if (this._shouldBreakBeforeContent(event)) {
+            li.appendChild(document.createElement('br'));
         }
 
         // 本文
@@ -768,7 +779,7 @@ class Timeline {
     }
 
     // ========================================
-    // 共通要素作成（変更なし）
+    // 共通要素作成
     // ========================================
 
     createMetadata(event) {
@@ -780,6 +791,17 @@ class Timeline {
         span.appendChild(author);
         span.appendChild(document.createTextNode(' > '));
         return span;
+    }
+
+    /**
+     * 改行表示ONかつ本文に \n を含む場合に true。
+     * メタデータ（名前 > やチャンネルバッジ）の直後で <br> を挟むかどうかの判定に使う。
+     * @param {Object} event
+     * @returns {boolean}
+     * @private
+     */
+    _shouldBreakBeforeContent(event) {
+        return !!(window.app?.preWrapEnabled && (event.content || '').includes('\n'));
     }
 
     createTimestamp(event) {

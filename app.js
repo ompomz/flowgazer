@@ -218,6 +218,10 @@ class FlowgazerApp {
     // view-state.js の _applyFilters にはオプションとして都度渡す。
     this.showKind42 = localStorage.getItem('showKind42') === 'true';
 
+    // 改行表示（pre-wrap）設定。localStorageから復元する。
+    // デフォルトはOFF（従来のkind:1投稿の表示に合わせる）。
+    this.preWrapEnabled = localStorage.getItem('preWrapEnabled') === 'true';
+
     // ===== データ取得済みフラグ =====
     this.tabDataFetched = {
       global: false,
@@ -755,6 +759,23 @@ class FlowgazerApp {
     }
 
     // ----------------------------------------
+    // 改行表示（pre-wrap）トグル
+    // ----------------------------------------
+    const preWrapCheckbox = document.getElementById('pre-wrap-toggle');
+    if (preWrapCheckbox) {
+      // コンストラクタで復元済みの値をチェックボックスとタイムラインに反映
+      preWrapCheckbox.checked = this.preWrapEnabled;
+      this._applyPreWrapClass(this.preWrapEnabled);
+
+      preWrapCheckbox.addEventListener('change', (e) => {
+        this.togglePreWrap(e.target.checked);
+      });
+    } else {
+      // チェックボックスが無くても保存済み設定はタイムラインへ反映しておく
+      this._applyPreWrapClass(this.preWrapEnabled);
+    }
+
+    // ----------------------------------------
     // 自動更新トグル
     // ----------------------------------------
     this._addEvent('auto-update-toggle', 'change', (e) => {
@@ -1242,6 +1263,25 @@ class FlowgazerApp {
     // Stream Phaseを再開
     window.relayManager.unsubscribe('stream-phase');
     this.executeStreamPhase();
+  }
+
+  /**
+   * #timeline へ pre-wrap-enabled クラスを付け外しする
+   * @private
+   */
+  _applyPreWrapClass(enabled) {
+    document.getElementById('timeline')?.classList.toggle('pre-wrap-enabled', enabled);
+  }
+
+  /**
+   * 改行表示（pre-wrap）のON/OFFを切り替える
+   * @param {boolean} enabled
+   */
+  togglePreWrap(enabled) {
+    this.preWrapEnabled = enabled;
+    localStorage.setItem('preWrapEnabled', enabled.toString());
+    this._applyPreWrapClass(enabled);
+    console.log(`📝 改行表示(pre-wrap): ${enabled ? 'ON' : 'OFF'}`);
   }
 
   // ========================================

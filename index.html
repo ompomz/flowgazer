@@ -264,6 +264,14 @@
             display: inline;
         }
 
+        #timeline .post-content {
+            white-space: normal;
+        }
+
+        #timeline.pre-wrap-enabled .post-content {
+            white-space: pre-wrap;
+        }
+
         .hidden-section,
         .hidden {
             display: none;
@@ -559,6 +567,9 @@
                 <div class="settings-checkbox-row flex-wrap">
                     <label for="auto-update-toggle" class="no-margin-left">自動更新</label>
                     <input type="checkbox" id="auto-update-toggle" checked>
+                    
+                    <label for="pre-wrap-toggle">改行表示</label>
+                    <input type="checkbox" id="pre-wrap-toggle">
 
                     <label for="filter-flowgazer-only">flowgazer しぼりこみ</label>
                     <input type="checkbox" id="filter-flowgazer-only">
