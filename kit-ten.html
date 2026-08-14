@@ -484,8 +484,11 @@
             </div>
 
             <div class="settings-checkbox-row">
-                <label for="auto-update-toggle" class="no-margin-left">自動更新</label>
-                <input type="checkbox" id="auto-update-toggle" checked>
+                <label for="pre-wrap-toggle" class="no-margin-left">改行表示</label>
+                <input type="checkbox" id="pre-wrap-toggle">
+
+                <label for="auto-update-toggle" style="display: none;">自動更新</label>
+                <input type="checkbox" id="auto-update-toggle" checked class="hidden">
 
                 <label for="filter-flowgazer-only" style="display: none;">flowgazerしぼりこみ</label>
                 <input type="checkbox" id="filter-flowgazer-only" class="hidden">
@@ -855,15 +858,25 @@
                 }, mgr.ORIGIN);
             };
 
-            // uploadDestinations などのストアからのデータ取得要求に対するフォールバック応答
-            // 親側でIDBを持たない場合でも、空の配列やオブジェクトを返してタイムアウトを防ぐ
+            // 1. uploadDestinations ストアからの取得要求に対して、タイムアウトさせないためのスナップショット構造を返す
             if (data.type === 'idb.getAll' || data.type === 'idb.get') {
-                // 必要であれば localStorage から復元しても良いが、
-                // まずはタイムアウト回避のため空の結果（または初期値）を返す
-                replyToIframe('idb.result', { timestamp: Date.now(), result: [] });
+                if (data.payload?.store === 'uploadDestinations') {
+                    // eHagaki が求めているデフォルトのアップロード先設定のモック構造
+                    replyToIframe('idb.result', {
+                        timestamp: Date.now(),
+                        result: [], // またはデフォルトのアップロード先オブジェクト
+                        snapshot: {
+                            destinations: [],
+                            defaultId: null
+                        }
+                    });
+                } else {
+                    replyToIframe('idb.result', { timestamp: Date.now(), result: [] });
+                }
                 return;
             }
 
+            // 2. 書き込み・削除系
             if (data.type === 'idb.set' || data.type === 'idb.delete' || data.type === 'idb.clear') {
                 replyToIframe('idb.result', { timestamp: Date.now(), success: true });
                 return;
