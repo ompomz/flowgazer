@@ -3,7 +3,7 @@
 このプロジェクトは [motherfucking-nostr-client](https://github.com/jiftechnify/motherfucking-nostr-client) を元にしています。  
 オリジナルの作者は かすてらふぃ さんです。
 
-一部のコードはAIによる補助・生成を利用しています。
+全てのコードがAIにより生成されたものです。
 
 #### 使用している外部ライブラリ
 
@@ -13,6 +13,10 @@
 
 このプロジェクトはオリジナルと同じWTFPLライセンスで公開しています。  
 詳細はLICENSEファイルを参照してください。
+
+#### [flowgazer/kit-ten](https://ompomz.github.io/flowgazer/kit-ten.html)で埋め込んでいる投稿専用クライアント
+
+- [eHagaki](https://github.com/lokuyow/ehagaki)
 
 ---
 

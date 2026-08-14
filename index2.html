@@ -487,14 +487,14 @@
         }
 
         /* 右：quote */
-        .lp-item[data-action="quote"] {
+        .lp-item[data-action="copy"] {
             top: 0;
             left: 3rem;
             color: #666666;
         }
 
         /* 下：reply */
-        .lp-item[data-action="reply"] {
+        .lp-item[data-action="lumilumi"] {
             top: 3rem;
             left: 0;
             color: #66b3ff;
@@ -526,20 +526,23 @@
             </svg>
         </div>
 
-        <div class="lp-item" data-action="quote" title="引用" style="display: none;">
+        <div class="lp-item" data-action="copy" title="neventコピー">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                 stroke-linecap="round" stroke-linejoin="round">
                 <path d="M3 21c3 0 7-1 7-8V5H4v8h4c0 2-1 4-4 4v4zm13 0c3 0 7-1 7-8V5h-6v8h4c0 2-1 4-4 4v4z"></path>
             </svg>
         </div>
 
-        <div class="lp-item" data-action="reply" title="リプライ" style="display: none;">
+        <div class="lp-item" data-action="lumilumi" title="lumilumiで開く">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                 stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <line x1="10" y1="14" x2="21" y2="3"></line>
             </svg>
         </div>
     </div>
+
     <div class="container">
         <div class="flex-exbetween">
             <a href="https://ompomz.github.io/flowgazer/index2.html">
@@ -581,7 +584,7 @@
                         <option value="wss://relay-jp.nostr.wirednet.jp/">
                         <option value="wss://relay.damus.io/">
                         <option value="wss://nos.lol/">
-                        <option value="wss://relay.nostr.band/">
+                        <option value="wss://relay.primal.net/">
                     </datalist>
                     <button id="subscribe-relay">接続</button>
                 </div>
@@ -667,8 +670,9 @@
         }
 
         document.addEventListener('DOMContentLoaded', async () => {
-            // グローバルな channelNameMap の初期化（app.jsで使っている場合）
+            // グローバルな channelNameMap の初期化
             window.channelNameMap = new Map();
+            window.channelMetaMap = new Map(); // 念のためこちらも入れておくと安心
 
             // Timelineの初期化
             window.timeline = new Timeline(document.getElementById('timeline'));
@@ -687,8 +691,13 @@
             }
 
             // チャンネルリストの取得（ログイン時のみ）
+            // 修正: window.app 経由で呼ぶ、またはメソッドが存在するか安全にチェックする
             if (window.nostrAuth.isLoggedIn()) {
-                fetchMyChannels();
+                if (typeof fetchMyChannels === 'function') {
+                    fetchMyChannels();
+                } else if (window.app && typeof window.app.fetchMyChannels === 'function') {
+                    window.app.fetchMyChannels();
+                }
             }
         });
     </script>

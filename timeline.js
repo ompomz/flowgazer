@@ -14,9 +14,12 @@ class Timeline {
         // チャンネル名キャッシュ
         this.channelNameMap = window.channelNameMap || new Map();
         // フィルターオプション
+        // showKind42 は app.js（FlowgazerApp）が localStorage から復元した値を初期値として引き継ぐ。
+        // これをしないと、ページ読み込み直後は「トグルON」でも表示フィルタ上は false 扱いになってしまう。
         this.filterOptions = {
             flowgazerOnly: false,
-            authors: null
+            authors: null,
+            showKind42: window.app?.showKind42 || false
         };
 
         // 1. Canvasを作成して、測るためのペン(measureCtx)を保存する
@@ -214,23 +217,14 @@ class Timeline {
         // メタデータ
         li.appendChild(this.createMetadata(event));
 
-        // チャンネルマーク
-        const badge = document.createElement('span');
+        // channelId と relay ヒントを e タグから取得（root優先。無ければ最初の e タグ）
+        const channelTag = event.tags?.find(t => t[0] === 'e' && t[3] === 'root')
+            || event.tags?.find(t => t[0] === 'e');
+        const channelId = channelTag?.[1] || null;
+        const relayHint = channelTag?.[2] || null;
 
-        // channelId（取れなければ null）
-        const channelId = event.tags?.find(t => t[0] === 'e')?.[1];
-
-        // チャンネル名が取得できている場合だけ置き換える
-        if (channelId && this.channelNameMap instanceof Map && this.channelNameMap.has(channelId)) {
-            const channelName = this.channelNameMap.get(channelId);
-            badge.textContent = `*${channelName} `;
-        } else {
-            // 今まで通り
-            badge.textContent = '*kind:42 ';
-        }
-
-        badge.style.cssText = 'color: #B3A1FF; font-weight: normal;';
-        li.appendChild(badge);
+        // チャンネルバッジ（クリック可能）
+        li.appendChild(this.createChannelBadge(channelId, relayHint));
         li.appendChild(document.createElement('br'));
 
         // --- 本文（改行許可スタイルを適用） ---
@@ -240,6 +234,59 @@ class Timeline {
         li.appendChild(content);
 
         return li;
+    }
+
+    /**
+     * チャンネルバッジを生成する。
+     * - 名前解決済みなら channelNameMap から表示、未解決なら app.js に解決をリクエストする
+     * - クリックで eHagaki のパブリックチャットへコンテキスト切り替え（app.js経由）
+     * @param {string|null} channelId
+     * @param {string|null} relayHint - eタグ3番目の要素
+     * @returns {HTMLElement}
+     */
+    createChannelBadge(channelId, relayHint) {
+        const badge = document.createElement('span');
+        badge.className = 'channel-badge';
+        badge.style.cssText =
+            'color: #B3A1FF; font-weight: normal; cursor: text; text-decoration: none; text-underline-offset: 2px;';
+
+        if (channelId) {
+            badge.dataset.channelId = channelId;
+            if (relayHint) badge.dataset.channelRelay = relayHint;
+        }
+
+        if (channelId && this.channelNameMap instanceof Map && this.channelNameMap.has(channelId)) {
+            badge.textContent = `*${this.channelNameMap.get(channelId)} `;
+        } else {
+            badge.textContent = '*kind:42 ';
+            // 未解決チャンネルの名前解決をリクエスト（多重購読防止はapp.js側で行う）
+            if (channelId) {
+                window.app?.ensureChannelResolved?.(channelId, relayHint);
+            }
+        }
+
+        if (channelId) {
+            badge.addEventListener('click', (e) => {
+                e.stopPropagation();
+                window.app?.openChannelInEhagaki?.(channelId, relayHint);
+            });
+        }
+
+        return badge;
+    }
+
+    /**
+     * チャンネル名解決完了後、すでにDOMに存在するバッジのテキストだけを更新する。
+     * 全体 refresh() を呼ばずに済むため、他タブの描画状態を壊さない。
+     * @param {string} channelId
+     * @param {string} name
+     */
+    updateChannelBadge(channelId, name) {
+        if (!channelId) return;
+        const selector = `.channel-badge[data-channel-id="${CSS.escape(channelId)}"]`;
+        this.container.querySelectorAll(selector).forEach(badge => {
+            badge.textContent = `*${name} `;
+        });
     }
 
     // pubkeyを元に、表示用の短い名前（@nameなど）を返す
@@ -700,6 +747,22 @@ class Timeline {
                     reply: nevent,
                     quotes: []
                 });
+                break;
+
+            case 'copy':
+                // neventをコピー
+                try {
+                    await navigator.clipboard.writeText(`${nevent}`);
+                    alert('neventをコピーしました');
+                } catch (err) {
+                    console.error('neventコピー失敗:', err);
+                    alert('neventのコピーに失敗しました');
+                }
+                break;
+
+            case 'lumilumi':
+                // lumilumiで開く
+                window.open(`https://lumilumi.app/${nevent}`, '_blank');
                 break;
         }
     }

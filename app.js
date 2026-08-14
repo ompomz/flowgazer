@@ -238,6 +238,11 @@ class FlowgazerApp {
     // DataStoreはこの時点で window.dataStore として確定しているが、
     // init() 先頭で明示的に代入して依存を明確にする
     this.subscriptionBuilder = null;
+
+    // ===== 未解決チャンネル（kind:40/41）解決用 =====
+    // タイムライン上で遭遇した未解決チャンネルIDの多重購読を防ぐためのセット。
+    // channelNameMap にキャッシュされるまでの間だけ保持する。
+    this._pendingChannelResolutions = new Set();
   }
 
   // ========================================
@@ -385,8 +390,8 @@ class FlowgazerApp {
 
     // タブのデータ取得済みフラグをリセット
     this.tabDataFetched.following = false;
-    this.tabDataFetched.myposts   = false;
-    this.tabDataFetched.likes     = false;
+    this.tabDataFetched.myposts = false;
+    this.tabDataFetched.likes = false;
 
     // フォローリスト取得 → 確定後に Stream Phase 再起動（fetchInitialData内で行う）
     this.fetchInitialData();
@@ -432,8 +437,8 @@ class FlowgazerApp {
 
     // タブのデータ取得済みフラグをリセット
     this.tabDataFetched.following = false;
-    this.tabDataFetched.myposts   = false;
-    this.tabDataFetched.likes     = false;
+    this.tabDataFetched.myposts = false;
+    this.tabDataFetched.likes = false;
 
     // StreamPhase を フォローリスト反映済みの状態で再起動
     window.relayManager.unsubscribe('stream-phase');
@@ -916,8 +921,11 @@ class FlowgazerApp {
       }, TIMEOUT_MS);
 
       // --- フィルタの構築 ---
+      // showKind42 が true の場合、起動直後の一覧にもチャンネル投稿(kind:42)を含める。
+      // これをしないと、Stream Phase（cursorSince以降の新着のみ対象）が動くまで
+      // 過去のkind:42が一切表示されない状態になってしまう。
       const filter = {
-        kinds: [1],
+        kinds: this.showKind42 ? [1, 42] : [1],
         limit: 150
       };
 
@@ -1156,7 +1164,7 @@ class FlowgazerApp {
 
     const fetchers = {
       myposts: () => this.fetchMyPostsHistory(),
-      likes:   () => this.fetchReceivedLikes(),
+      likes: () => this.fetchReceivedLikes(),
     };
 
     if (fetchers[tab]) {
@@ -1836,9 +1844,9 @@ class FlowgazerApp {
   }
 
   /**
-   * チャンネル情報をプルダウンに反映する
-   * @private
-   */
+    * チャンネル情報をプルダウンに反映する
+    * @private
+    */
   _updateChannelDropdown(channels) {
     const channelSelect = document.getElementById('channel-list-selector');
     if (!channelSelect) return;
@@ -1867,6 +1875,128 @@ class FlowgazerApp {
 
     console.log(`✅ プルダウンに ${channels.length} 件のチャンネルをセットしました`);
   }
+
+  // ========================================
+  // 未解決チャンネル（kind:40/41）の動的解決
+  // ========================================
+
+  /**
+   * タイムライン上で遭遇した未解決のチャンネルIDについて、
+   * kind:41（優先）→ kind:40（フォールバック）の順でメタデータを解決する。
+   *
+   * 【重複防止】
+   * - channelNameMap にすでにキャッシュ済みなら即return（成功・失敗問わず一度解決したら再取得しない）
+   * - _pendingChannelResolutions に含まれる（解決中）なら即return
+   * これにより、同じタブに同一チャンネルの投稿が複数流れてきても購読は1回だけになる。
+   *
+   * @param {string} channelId
+   * @param {string|null} relayHint - eタグ3番目の要素（relay hint）。将来のマルチリレー対応用に保持するのみで、
+   *                                  現状の購読先は接続中の単一リレーに限る。
+   */
+  ensureChannelResolved(channelId, relayHint = null) {
+    if (!channelId) return;
+    if (window.channelNameMap.has(channelId)) return;
+    if (this._pendingChannelResolutions.has(channelId)) return;
+
+    this._pendingChannelResolutions.add(channelId);
+    console.log(`🔍 未解決チャンネルを解決中: ${channelId.substring(0, 8)}...`);
+
+    const TIMEOUT_MS = 5000;
+    const uniq = `${channelId.substring(0, 8)}-${Date.now()}`;
+    let best = null; // { name, about, picture, created_at }
+
+    const finish = () => {
+      this._pendingChannelResolutions.delete(channelId);
+
+      const finalName = best?.name || `Channel ${channelId.substring(0, 8)}`;
+      window.channelNameMap.set(channelId, finalName);
+      window.channelMetaMap.set(channelId, {
+        name: finalName,
+        about: best?.about || null,
+        picture: best?.picture || null,
+        relayHint: relayHint || null
+      });
+
+      // すでにDOMに存在するバッジがあれば全体再描画せずテキストだけ更新
+      window.timeline?.updateChannelBadge(channelId, finalName);
+      console.log(`✅ チャンネル解決完了: ${finalName}`);
+    };
+
+    // ---- kind:41（チャンネル更新イベント）優先 ----
+    const subId41 = `channel-resolve-41-${uniq}`;
+    const timeout41 = setTimeout(() => {
+      window.relayManager.unsubscribe(subId41);
+      fetchKind40Fallback();
+    }, TIMEOUT_MS);
+
+    window.relayManager.subscribe(subId41, { kinds: [41], '#e': [channelId] }, (type, event) => {
+      if (type === 'EVENT') {
+        try {
+          const metadata = JSON.parse(event.content);
+          if (!best || event.created_at > best.created_at) {
+            best = {
+              name: metadata.name || `Channel ${channelId.substring(0, 8)}`,
+              about: metadata.about || null,
+              picture: metadata.picture || null,
+              created_at: event.created_at
+            };
+          }
+        } catch (e) {
+          console.error('❌ kind:41 パース失敗:', e);
+        }
+      } else if (type === 'EOSE') {
+        clearTimeout(timeout41);
+        window.relayManager.unsubscribe(subId41);
+        if (best) {
+          finish();
+        } else {
+          fetchKind40Fallback();
+        }
+      }
+    });
+
+    // ---- kind:40（チャンネル作成イベント）フォールバック ----
+    const fetchKind40Fallback = () => {
+      const subId40 = `channel-resolve-40-${uniq}`;
+      const timeout40 = setTimeout(() => {
+        window.relayManager.unsubscribe(subId40);
+        finish();
+      }, TIMEOUT_MS);
+
+      window.relayManager.subscribe(subId40, { kinds: [40], ids: [channelId] }, (type, event) => {
+        if (type === 'EVENT' && event.id === channelId) {
+          try {
+            const metadata = JSON.parse(event.content);
+            best = {
+              name: metadata.name || `Channel ${channelId.substring(0, 8)}`,
+              about: metadata.about || null,
+              picture: metadata.picture || null,
+              created_at: event.created_at
+            };
+          } catch (e) {
+            console.error('❌ kind:40 パース失敗:', e);
+          }
+        } else if (type === 'EOSE') {
+          clearTimeout(timeout40);
+          window.relayManager.unsubscribe(subId40);
+          finish();
+        }
+      });
+    };
+  }
+
+  /**
+   * タイムラインのチャンネルバッジがクリックされたときの入口。
+   * eHagakiManager（kit-ten.html側で定義）に処理を委譲する。
+   * app.js は eHagaki 側のpostMessage仕様を直接知らず、ehagakiManagerが仲介する。
+   *
+   * @param {string} channelId
+   * @param {string|null} relayHint
+   */
+  openChannelInEhagaki(channelId, relayHint = null) {
+    if (!channelId) return;
+    window.ehagakiManager?.openChannelContext?.(channelId, relayHint);
+  }
 }
 
 // ========================================
@@ -1874,6 +2004,7 @@ class FlowgazerApp {
 // ========================================
 
 window.channelNameMap = new Map();
+window.channelMetaMap = new Map(); // チャンネルの about / picture / relayHint 等の補助情報
 
 window.app = new FlowgazerApp();
 console.log('✅ FlowgazerApp初期化完了');

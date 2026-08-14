@@ -155,7 +155,7 @@
       case 'like': await window.sendLikeEvent(id, pk); break;
       case 'repost': await sendRepost(id, pk); break;
       case 'quote':
-        await navigator.clipboard.writeText(`nostr:${nevent}`);
+        await navigator.clipboard.writeText(`${nevent}`);
         alert('neventをコピーしました');
         break;
       case 'reply': window.open(`https://lumilumi.app/${nevent}`, '_blank'); break;
