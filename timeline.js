@@ -529,6 +529,8 @@ class Timeline {
             const wrapper = document.createElement('span');
             wrapper.style.cssText =
                 'display: inline-block; height: 1.5rem; vertical-align: middle; margin: 0 0.25rem;';
+            // マウスオーバー時にショートコード（:kawaii_cat: など）をブラウザ標準ツールチップで表示
+            wrapper.title = content;
 
             const emojiElement =
                 this.createCustomEmoji(content, event.tags || []);
@@ -974,6 +976,7 @@ class Timeline {
             const img = document.createElement('img');
             img.src = emojiTag[2];
             img.alt = shortcode;
+            img.title = shortcode; // 本文中の絵文字にもツールチップを付与
             img.className = 'custom-emoji';
             return img;
         }

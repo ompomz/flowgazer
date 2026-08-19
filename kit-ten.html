@@ -599,8 +599,12 @@
             NS: 'ehagaki.embed',
             VERSION: 1,
 
-            get modal() { return document.getElementById('ehagaki-modal'); },
-            get iframe() { return document.getElementById('ehagaki-iframe'); },
+            // 🆕 チャンネル投稿モードで開いている場合の channelId を保持する。
+            // post.success 受信時にタイムラインの該当チャンネルタブを自動で開くために使う。
+            _activeChannelId: null,
+
+            get modal() {return document.getElementById('ehagaki-modal');},
+            get iframe() {return document.getElementById('ehagaki-iframe');},
 
             /**
              * 一意な requestId を生成する。
@@ -650,6 +654,8 @@
 
             close() {
                 this.modal.style.display = 'none';
+                // 🆕 モーダルを閉じたらチャンネルコンテキストの記憶もクリア
+                this._activeChannelId = null;
             },
 
             post(type, data = {}) {
@@ -714,6 +720,9 @@
             openChannelContext(channelId, relayHint = null) {
                 if (!channelId) return;
 
+                // 🆕 post.success時にどのチャンネルタブを開くべきか判定するために保存
+                this._activeChannelId = channelId;
+
                 // hex channelId は eHagaki に渡せないため nevent1... へ変換する
                 const reference = this._encodeChannelReference(channelId);
                 if (!reference) return;
@@ -755,6 +764,9 @@
              * モーダルが開いていない場合は何もしない（reload不要のため）。
              */
             closeChannelContext() {
+                // 🆕 モーダルの開閉に関わらず、パブリックチャットモード解除時は記憶をクリア
+                this._activeChannelId = null;
+
                 if (this.modal.style.display !== 'flex') return;
 
                 this.post('composer.setContext', {
@@ -973,7 +985,13 @@
 
                 case 'post.success':
                     console.log('投稿成功:', data.payload);
-                    // 🆕 投稿成功したら自動でモーダルを閉じる
+
+                    // 🆕 チャンネル投稿モードだった場合、そのチャンネルタブを自動で開く
+                    if (mgr._activeChannelId) {
+                        window.app?.switchToChannelTab?.(mgr._activeChannelId);
+                    }
+
+                    // 🆕 投稿成功したら自動でモーダルを閉じる（close()内で_activeChannelIdもリセットされる）
                     window.ehagakiManager.close();
                     break;
 
@@ -1000,7 +1018,6 @@
                 // 🆕 iframe内でユーザーが手動でcomposer contextを変更した場合の通知
                 case 'composer.contextUpdated':
                     console.log('🔄 iframe側でコンテキスト変更:', data.payload);
-                    // 必要に応じて親側のUIや状態（activeChannelId等）と同期する余地あり
                     break;
             }
         });

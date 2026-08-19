@@ -247,6 +247,16 @@ class FlowgazerApp {
     // タイムライン上で遭遇した未解決チャンネルIDの多重購読を防ぐためのセット。
     // channelNameMap にキャッシュされるまでの間だけ保持する。
     this._pendingChannelResolutions = new Set();
+
+    // ===== 見つけたチャンネル（タイムライン上で動的解決されたチャンネル）の土台 =====
+    // 自分のチャンネルリスト（kind:10005由来。fetchMyChannels/_resolveChannelNamesが管理）とは別に、
+    // ensureChannelResolved() が解決に成功したチャンネルをここに蓄積する。
+    // channelId -> { name, about, picture }
+    this.discoveredChannels = new Map();
+
+    // プルダウン再描画用に、直近の「自分のチャンネル」配列を保持する。
+    // discoveredChannels が更新されるたびに _renderChannelDropdown() から参照する。
+    this._myChannelsCache = [];
   }
 
   // ========================================
@@ -1884,17 +1894,54 @@ class FlowgazerApp {
   }
 
   /**
-    * チャンネル情報をプルダウンに反映する
+    * チャンネル情報（自分のチャンネル）をプルダウンに反映する。
+    * 実際の描画は _renderChannelDropdown() に委譲し、ここでは
+    * 「自分のチャンネル」配列をキャッシュして再描画をトリガーするだけに徹する。
+    * こうすることで、discoveredChannels が後から増えた際にも
+    * fetchMyChannels 側を再実行せず同じキャッシュで再描画できる。
     * @private
+    * @param {Array} channels - 自分のチャンネル（kind:10005由来）
     */
   _updateChannelDropdown(channels) {
+    this._myChannelsCache = channels || [];
+    this._renderChannelDropdown();
+  }
+
+  /**
+   * 「自分のチャンネル」と「見つけたチャンネル（discoveredChannels）」を合成し、
+   * optgroupで分けてプルダウンに描画する。
+   *
+   * 【優先順位】
+   * 同じchannelIdが両方に存在する場合、自分のチャンネル側を優先し、
+   * 見つけたチャンネル側からは除外する（重複表示を避けるため）。
+   *
+   * @private
+   */
+  _renderChannelDropdown() {
     const channelSelect = document.getElementById('channel-list-selector');
     if (!channelSelect) return;
 
     const currentValue = channelSelect.value;
-    channelSelect.innerHTML = '<option value="">-- チャンネルを選択 --</option>';
+    const myChannels = this._myChannelsCache || [];
+    const myChannelIds = new Set(myChannels.map(c => c.id));
 
-    if (channels.length === 0) {
+    // discoveredChannels のうち、自分のチャンネルと重複しないものだけ抽出
+    const discovered = Array.from(this.discoveredChannels.entries())
+      .filter(([id]) => !myChannelIds.has(id))
+      .map(([id, meta]) => ({
+        id,
+        name: meta.name || `Channel ${id.substring(0, 8)}`
+      }));
+
+    channelSelect.innerHTML = '';
+
+    // プレースホルダー
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = '-- チャンネルを選択 --';
+    channelSelect.appendChild(placeholder);
+
+    if (myChannels.length === 0 && discovered.length === 0) {
       const option = document.createElement('option');
       option.value = '';
       option.textContent = 'チャンネルが見つかりませんでした';
@@ -1904,16 +1951,43 @@ class FlowgazerApp {
       return;
     }
 
-    channels.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
-    channels.forEach(channel => {
-      const option = document.createElement('option');
-      option.value = channel.id;
-      option.textContent = channel.name;
-      if (channel.id === currentValue) option.selected = true;
-      channelSelect.appendChild(option);
-    });
+    // ===== 自分のチャンネル =====
+    if (myChannels.length > 0) {
+      const ownGroup = document.createElement('optgroup');
+      ownGroup.label = '自分のチャンネル';
 
-    console.log(`✅ プルダウンに ${channels.length} 件のチャンネルをセットしました`);
+      [...myChannels]
+        .sort((a, b) => a.name.localeCompare(b.name, 'ja'))
+        .forEach(channel => {
+          const option = document.createElement('option');
+          option.value = channel.id;
+          option.textContent = channel.name;
+          if (channel.id === currentValue) option.selected = true;
+          ownGroup.appendChild(option);
+        });
+
+      channelSelect.appendChild(ownGroup);
+    }
+
+    // ===== 見つけたチャンネル =====
+    if (discovered.length > 0) {
+      const discoveredGroup = document.createElement('optgroup');
+      discoveredGroup.label = '見つけたチャンネル';
+
+      discovered
+        .sort((a, b) => a.name.localeCompare(b.name, 'ja'))
+        .forEach(channel => {
+          const option = document.createElement('option');
+          option.value = channel.id;
+          option.textContent = channel.name;
+          if (channel.id === currentValue) option.selected = true;
+          discoveredGroup.appendChild(option);
+        });
+
+      channelSelect.appendChild(discoveredGroup);
+    }
+
+    console.log(`✅ プルダウン再描画: 自分=${myChannels.length}件 / 見つけた=${discovered.length}件`);
   }
 
   // ========================================
@@ -1956,6 +2030,16 @@ class FlowgazerApp {
         picture: best?.picture || null,
         relayHint: relayHint || null
       });
+
+      // 「見つけたチャンネル」リストにも登録する（プルダウン反映用）
+      this.discoveredChannels.set(channelId, {
+        name: finalName,
+        about: best?.about || null,
+        picture: best?.picture || null
+      });
+
+      // 🆕 プルダウンに即座に反映する
+      this._renderChannelDropdown();
 
       // すでにDOMに存在するバッジがあれば全体再描画せずテキストだけ更新
       window.timeline?.updateChannelBadge(channelId, finalName);
