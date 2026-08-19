@@ -659,15 +659,34 @@ class FlowgazerApp {
         this.fetchMyChannels();
       } else {
         channelSelector.style.display = 'none';
+
+        // 未ログイン時、チャンネルタブ等（グローバル以外）にいる場合は
+        // 通常投稿モードに戻すタイミングでグローバルタイムラインに強制的に戻す。
+        // ログイン中はタブ状態を維持し、何もしない。
+        if (!window.nostrAuth.isLoggedIn() && this.currentTab !== 'global') {
+          this.switchTab('global');
+        }
       }
     });
+
 
     // ----------------------------------------
     // チャンネル選択 → 投稿先設定 & タブ切替を同時に行う
     // ----------------------------------------
     this._addEvent('channel-list-selector', 'change', (e) => {
       const channelId = e.target.value;
-      if (!channelId) return;
+
+      if (!channelId) {
+        // 🆕 「-- チャンネルを選択 --」に戻された場合。
+        // 未ログイン時、チャンネルタブ等（グローバル以外）にいる場合は
+        // post-kind-selectorが「通常」に戻ったときと同様に、グローバルタイムラインへ強制的に戻す。
+        // ログイン中はタブ状態を維持し、何もしない。
+        if (!window.nostrAuth.isLoggedIn() && this.currentTab !== 'global') {
+          this.switchTab('global');
+        }
+        return;
+      }
+
       // 選択されたチャンネルのタブを開く（投稿先も同じ値を参照するので追加処理不要）
       this.switchToChannelTab(channelId);
     });
