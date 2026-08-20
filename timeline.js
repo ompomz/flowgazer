@@ -123,6 +123,7 @@ class Timeline {
             case 1:
                 return this.createPostElement(event);
             case 6:
+            case 16:
                 return this.createRepostElement(event);
             case 7:
                 return this.createLikeElement(event);

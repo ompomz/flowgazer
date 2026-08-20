@@ -32,7 +32,7 @@ class SubscriptionBuilder {
 
     // === 1. グローバルフィルタ ===
     const globalFilter = {
-      kinds: showKind42 ? [1, 6, 42] : [1, 6],
+      kinds: showKind42 ? [1, 6, 16, 42] : [1, 6, 16],
       since: cursorSince
     };
     if (filterAuthors && filterAuthors.length > 0) {
@@ -55,7 +55,7 @@ class SubscriptionBuilder {
 
       if (filteredFollowing.length > 0) {
         filters.push({
-          kinds: showKind42 ? [1, 6, 42] : [1, 6],
+          kinds: showKind42 ? [1, 6, 16, 42] : [1, 6, 16],
           authors: filteredFollowing,
           since: cursorSince
         });
@@ -65,13 +65,13 @@ class SubscriptionBuilder {
     // === 3. 自分宛のリアクション ===
     if (myPubkey) {
       filters.push({ kinds: [7], '#p': [myPubkey], since: cursorSince });
-      filters.push({ kinds: [6], '#p': [myPubkey], since: cursorSince });
+      filters.push({ kinds: [6, 16], '#p': [myPubkey], since: cursorSince });
       filters.push({ kinds: [1], '#p': [myPubkey], since: cursorSince });
 
       const myPostIds = Array.from(this.dataStore.getEventIdsByAuthor(myPubkey));
       if (myPostIds.length > 0) {
         filters.push({
-          kinds: [6, 7],
+          kinds: [6, 16, 7],
           '#e': myPostIds.slice(0, 100),
           since: cursorSince
         });
@@ -81,7 +81,7 @@ class SubscriptionBuilder {
     // === 4. 自分の投稿専用フィルタ（myposts のリアルタイム更新）===
     if (myPubkey) {
       filters.push({
-        kinds: [1, 42],
+        kinds: [1, 16, 42],
         authors: [myPubkey],
         since: cursorSince
       });
@@ -142,7 +142,7 @@ class SubscriptionBuilder {
 
       case 'likes':
         if (!myPubkey) return null;
-        filter.kinds = [1, 6, 7];
+        filter.kinds = [1, 6, 16, 7];
         filter['#p'] = [myPubkey];
         break;
 
@@ -168,7 +168,7 @@ class SubscriptionBuilder {
 
     const { showKind42, filterAuthors } = this.appState;
     const filter = {
-      kinds: showKind42 ? [6, 42] : [6],
+      kinds: showKind42 ? [6, 16, 42] : [6, 16],
       until: untilTimestamp - 1,
       since: sinceTimestamp
     };
@@ -1156,7 +1156,7 @@ class FlowgazerApp {
     console.log('📥 通知（likesタブ用）を独立取得中...');
 
     const filter = {
-      kinds: [1, 6, 7],
+      kinds: [1, 6, 16, 7],
       '#p': [myPubkey],
       limit: 50
     };

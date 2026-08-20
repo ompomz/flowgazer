@@ -65,6 +65,7 @@ class DataStore {
    * 「自分がふぁぼった」の判定は呼び出し側（app.js）が行い、
    * markAsLikedByMe() で通知する形に分離している。
    *
+   * @param {Object} event - Nostrイベント
    * @private
    */
   _categorizeEvent(event) {
@@ -114,7 +115,7 @@ class DataStore {
     });
 
     // リアクションカウント更新
-    if (event.kind === 6 || event.kind === 7) {
+    if (event.kind === 6 || event.kind === 16 || event.kind === 7) {
       this._updateReactionCount(event);
     }
   }
@@ -132,7 +133,7 @@ class DataStore {
     }
 
     const counts = this.reactionCounts.get(targetId);
-    if (event.kind === 6) {
+    if (event.kind === 6 || event.kind === 16) {
       counts.reposts++;
     } else if (event.kind === 7) {
       counts.reactions++;
@@ -261,11 +262,11 @@ class DataStore {
   }
 
   /**
- * 指定した pubkey の最新の kind:X イベントを返す
- * @param {string} pubkey
- * @param {number} kind
- * @returns {Object|null}
- */
+   * 指定した pubkey の最新の kind:X イベントを返す
+   * @param {string} pubkey
+   * @param {number} kind
+   * @returns {Object|null}
+   */
   getLatestEventByKind(pubkey, kind) {
     const eventIds = this.eventsByAuthor.get(pubkey);
     if (!eventIds) return null;

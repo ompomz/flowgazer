@@ -115,7 +115,7 @@ class ViewState {
     const tabs = [];
 
     // global, following の判定
-    if ([1, 6, 42].includes(event.kind)) {
+    if ([1, 6, 16, 42].includes(event.kind)) {
       tabs.push('global');
 
       if (window.dataStore.isFollowing(event.pubkey)) {
@@ -128,7 +128,7 @@ class ViewState {
       if ([1, 42].includes(event.kind) && event.pubkey === myPubkey) {
         tabs.push('myposts');
       }
-      if (event.kind === 6 && event.pubkey === myPubkey) {
+      if ((event.kind === 6 || event.kind === 16) && event.pubkey === myPubkey) {
         tabs.push('myposts');
       }
     }
@@ -136,7 +136,7 @@ class ViewState {
     // likes タブの判定
     if (myPubkey) {
       const targetPubkey = event.tags.find(t => t[0] === 'p')?.[1];
-      if ([7, 6, 1, 42].includes(event.kind) && targetPubkey === myPubkey) {
+      if ([7, 6, 16, 1, 42].includes(event.kind) && targetPubkey === myPubkey) {
         tabs.push('likes');
       }
     }
@@ -239,10 +239,10 @@ class ViewState {
     }
 
     const kindFilters = {
-      global: [1, 6, 42],
-      following: [1, 6, 42],
-      myposts: [1, 6, 42],
-      likes: [7, 6, 1, 42]
+      global: [1, 6, 16, 42],
+      following: [1, 6, 16, 42],
+      myposts: [1, 6, 16, 42],
+      likes: [7, 6, 16, 1, 42]
     };
 
     if (!kindFilters[tab]?.includes(event.kind)) return false;
