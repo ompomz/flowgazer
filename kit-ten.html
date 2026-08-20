@@ -531,12 +531,29 @@
         </div>
 
         <div class="flex-container" style="margin-top: 0.25rem;">
+
             <textarea id="new-post-content" rows="1" placeholder="いまなにしてる？" style="max-width: 24.625rem;"></textarea>
-            <button id="send-new-post">投稿</button>
+
+            <!-- URLクリーナーボタン -->
+            <button id="clean-url-action" style="display: none;">
+                削ると？
+            </button>
+
+            <button id="send-new-post">
+                投稿
+            </button>
 
             <button style="margin-right: 3rem;"
-                onclick="const m = document.getElementById('push-menu'); const c = document.getElementById('menu-content'); if (m.style.marginTop === '0px') { m.style.marginTop = '-13.5rem'; c.style.display = 'none'; } else { m.style.marginTop = '0px'; c.style.display = 'flex'; }">設定</button>
+                onclick="const m = document.getElementById('push-menu'); const c = document.getElementById('menu-content'); if (m.style.marginTop === '0px') { m.style.marginTop = '-13.5rem'; c.style.display = 'none'; } else { m.style.marginTop = '0px'; c.style.display = 'flex'; }">
+                設定
+            </button>
+
         </div>
+    </div>
+
+    <!-- URLプレビュー -->
+    <div id="clean-url-result" style="display: none; margin-top: 0.25rem;">
+        <a style="color: #66b3ff; padding-left: 0.5rem;" id="clean-url-preview-link" href="#" target="_blank" rel="noopener noreferrer"></a>
     </div>
 
     <div class="container">
@@ -603,8 +620,8 @@
             // post.success 受信時にタイムラインの該当チャンネルタブを自動で開くために使う。
             _activeChannelId: null,
 
-            get modal() {return document.getElementById('ehagaki-modal');},
-            get iframe() {return document.getElementById('ehagaki-iframe');},
+            get modal() { return document.getElementById('ehagaki-modal'); },
+            get iframe() { return document.getElementById('ehagaki-iframe'); },
 
             /**
              * 一意な requestId を生成する。
@@ -1033,6 +1050,392 @@
             }
         });
     </script>
+
+    <script>
+        /* =========================================================
+           URLクリーナー「削ると？」
+           ========================================================= */
+
+        console.log("URLクリーナー読み込みOK");
+
+
+        const CLEAN_URL_PARAMS = new Set([
+            "si",
+            "fbclid",
+            "gclid",
+            "dclid",
+            "msclkid",
+            "mc_cid",
+            "mc_eid",
+            "_ga",
+            "_gl",
+            "igshid",
+            "ref_src",
+            "ref_url",
+            "yclid",
+            "mkt_tok",
+            "trk",
+            "trkCampaign",
+            "trkInfo"
+        ]);
+
+
+        /*
+         * 削除対象かどうか
+         */
+        function shouldRemoveCleanUrlParam(name) {
+
+            const lowerName = name.toLowerCase();
+
+            // utm_source / utm_medium / utm_campaign など
+            if (lowerName.startsWith("utm_")) {
+                return true;
+            }
+
+            return CLEAN_URL_PARAMS.has(name)
+                || CLEAN_URL_PARAMS.has(lowerName);
+        }
+
+
+        /*
+         * URLを削る
+         */
+        function cleanUrl(urlString) {
+
+            const url = new URL(urlString);
+
+            const removed = [];
+
+            for (const [key] of [...url.searchParams.entries()]) {
+
+                if (shouldRemoveCleanUrlParam(key)) {
+
+                    removed.push(key);
+
+                    url.searchParams.delete(key);
+                }
+            }
+
+            return {
+                url: url.toString(),
+                removed: removed
+            };
+        }
+
+
+        /*
+         * 投稿本文からURLを探す
+         */
+        function findUrlsInPost(text) {
+
+            const urlRegex = /https?:\/\/[^\s<>"']+/gi;
+
+            return [...text.matchAll(urlRegex)].map(match => ({
+                url: match[0],
+                index: match.index
+            }));
+        }
+
+
+        /*
+         * URL末尾の句読点などを除去
+         */
+        function normalizeDetectedUrl(url) {
+
+            return url.replace(
+                /[。、，．,.!?！？)）\]}」』]+$/g,
+                ""
+            );
+        }
+
+
+        /*
+         * 投稿本文から「削れるURL」を探す
+         */
+        function findCleanableUrls(text) {
+
+            const urls = findUrlsInPost(text);
+
+            const cleanable = [];
+
+            for (const item of urls) {
+
+                const normalizedUrl =
+                    normalizeDetectedUrl(item.url);
+
+                try {
+
+                    const result =
+                        cleanUrl(normalizedUrl);
+
+                    if (result.removed.length > 0) {
+
+                        cleanable.push({
+                            originalUrl: normalizedUrl,
+                            cleanedUrl: result.url,
+                            removed: result.removed,
+                            index: item.index
+                        });
+
+                    }
+
+                } catch (error) {
+
+                    console.debug(
+                        "URLを解析できませんでした:",
+                        normalizedUrl
+                    );
+
+                }
+            }
+
+            return cleanable;
+        }
+
+
+        /* =========================================================
+           DOM
+           ========================================================= */
+
+        const newPostContent =
+            document.getElementById("new-post-content");
+
+        const cleanUrlAction =
+            document.getElementById("clean-url-action");
+
+        const cleanUrlResult =
+            document.getElementById("clean-url-result");
+
+        const cleanUrlPreviewLink =
+            document.getElementById("clean-url-preview-link");
+
+
+        /*
+         * 現在プレビューしているURL
+         */
+        let currentCleanUrlData = null;
+
+
+        /* =========================================================
+           投稿欄の監視
+           ========================================================= */
+
+        function updateCleanUrlButton() {
+
+            const text =
+                newPostContent.value;
+
+            const cleanableUrls =
+                findCleanableUrls(text);
+
+
+            /*
+             * 削れるURLがない
+             */
+            if (cleanableUrls.length === 0) {
+
+                cleanUrlAction.style.display =
+                    "none";
+
+                cleanUrlResult.style.display =
+                    "none";
+
+                currentCleanUrlData = null;
+
+                return;
+            }
+
+
+            /*
+             * 削れるURLがある
+             */
+            cleanUrlAction.style.display =
+                "inline-block";
+
+
+            /*
+             * 投稿内容が変わったら
+             * 前回のプレビューをリセット
+             */
+            cleanUrlAction.textContent =
+                "削ると？";
+
+            cleanUrlResult.style.display =
+                "none";
+
+            currentCleanUrlData = null;
+        }
+
+
+        /* =========================================================
+           「削ると？」 / 「削る」
+           ========================================================= */
+
+        cleanUrlAction.addEventListener(
+            "click",
+            function () {
+
+                /*
+                 * すでにプレビュー中なら
+                 * 「削る」ボタンとして動作
+                 */
+                if (currentCleanUrlData) {
+
+                    applyCleanUrl();
+
+                    return;
+                }
+
+
+                const cleanableUrls =
+                    findCleanableUrls(
+                        newPostContent.value
+                    );
+
+
+                if (cleanableUrls.length === 0) {
+
+                    updateCleanUrlButton();
+
+                    return;
+                }
+
+
+                /*
+                 * 現在は最初のURLを対象にする
+                 */
+                currentCleanUrlData =
+                    cleanableUrls[0];
+
+
+                /*
+                 * プレビューリンクを作る
+                 */
+                cleanUrlPreviewLink.href =
+                    currentCleanUrlData.cleanedUrl;
+
+                cleanUrlPreviewLink.textContent =
+                    currentCleanUrlData.cleanedUrl;
+
+
+                /*
+                 * プレビュー表示
+                 */
+                cleanUrlResult.style.display =
+                    "block";
+
+
+                /*
+                 * ボタンを「削る」に変更
+                 */
+                cleanUrlAction.textContent =
+                    "削る";
+            }
+        );
+
+
+        /* =========================================================
+           「削る」
+           ========================================================= */
+
+        function applyCleanUrl() {
+
+            if (!currentCleanUrlData) {
+                return;
+            }
+
+
+            const original =
+                currentCleanUrlData.originalUrl;
+
+            const cleaned =
+                currentCleanUrlData.cleanedUrl;
+
+            const text =
+                newPostContent.value;
+
+
+            const index =
+                text.indexOf(original);
+
+
+            /*
+             * 投稿欄の内容が変更されていた場合
+             */
+            if (index === -1) {
+
+                updateCleanUrlButton();
+
+                return;
+            }
+
+
+            /*
+             * URLだけを置き換える
+             */
+            newPostContent.value =
+                text.slice(0, index)
+                + cleaned
+                + text.slice(
+                    index + original.length
+                );
+
+
+            /*
+             * 既存のinput監視処理を発火
+             */
+            newPostContent.dispatchEvent(
+                new Event("input", {
+                    bubbles: true
+                })
+            );
+
+
+            /*
+             * UIをリセット
+             */
+            cleanUrlResult.style.display =
+                "none";
+
+            currentCleanUrlData =
+                null;
+
+
+            /*
+             * ボタンも再び「削ると？」へ
+             *
+             * ただし、まだ別の削れるURLが
+             * 残っている可能性があるので、
+             * updateCleanUrlButton() に任せる。
+             */
+            updateCleanUrlButton();
+
+
+            /*
+             * 投稿欄にフォーカス
+             */
+            newPostContent.focus();
+        }
+
+
+        /* =========================================================
+           投稿欄の入力を監視
+           ========================================================= */
+
+        newPostContent.addEventListener(
+            "input",
+            updateCleanUrlButton
+        );
+
+
+        /* =========================================================
+           初期状態
+           ========================================================= */
+
+        updateCleanUrlButton();
+
+    </script>
+
 </body>
 
 </html>
