@@ -762,16 +762,16 @@ class Timeline {
                 break;
 
             case 'quote':
-                // マネージャーを呼び出すだけ
-                window.ehagakiManager.open({
+                // マネージャーを呼び出すだけ（ehagakiManagerが存在しないHTMLでも安全に動くようオプショナルチェイニング化）
+                window.ehagakiManager?.open?.({
                     quotes: [nevent],
                     reply: null
                 });
                 break;
 
             case 'reply':
-                // マネージャーを呼び出すだけ
-                window.ehagakiManager.open({
+                // マネージャーを呼び出すだけ（ehagakiManagerが存在しないHTMLでも安全に動くようオプショナルチェイニング化）
+                window.ehagakiManager?.open?.({
                     reply: nevent,
                     quotes: []
                 });
