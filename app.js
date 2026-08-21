@@ -627,6 +627,13 @@ class FlowgazerApp {
       const kindEl = document.getElementById('post-kind-selector');
       const channelEl = document.getElementById('channel-list-selector');
 
+      // 一時書き込み鍵（ROMモード時の #temp-nsec-input）。
+      // lite.html等、要素が存在するページでのみ値を読み取る。
+      // 存在しないページ（kit-ten.html等）では null のままとなり、
+      // sendPost側の「tempNsecが無ければ無視する」既存ロジックがそのまま効く。
+      const tempNsecEl = document.getElementById('temp-nsec-input');
+      const tempNsec = tempNsecEl ? tempNsecEl.value.trim() || null : null;
+
       const kind = kindEl ? parseInt(kindEl.value) : 1;
       const channelId = channelEl ? channelEl.value : '';
 
@@ -635,7 +642,7 @@ class FlowgazerApp {
           alert('送信先のチャンネルを選んでください！');
           return;
         }
-        this.sendPost(content, kind, channelId);
+        this.sendPost(content, kind, channelId, tempNsec);
       }
     });
 

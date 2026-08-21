@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>flowgazer lite</title>
+  <style>
+    html {
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
+
+    :root {
+      --primary: #0078D4;
+      --primary-hover: #106EBE;
+      --bg: #F3F2F1;
+      --surface: #FFFFFF;
+      --border: #E1DFDD;
+      --text: #999;
+      --text-soft: #aaa;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-weight: 400;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Helvetica Neue", Arial, sans-serif;
+      padding: .5rem;
+      line-height: 1.3;
+      background-color: var(--bg);
+      color: var(--text);
+      font-size: .9rem;
+    }
+
+    .container {
+      max-width: 600px;
+      margin-left: .5rem;
+      margin-right: auto;
+      padding: .5rem;
+    }
+
+    a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+
+    input,
+    textarea {
+      transition: border-color 0.3s, background-color 0.3s;
+      cursor: pointer;
+      font-size: .9rem;
+      padding: .5rem;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      background-color: var(--surface);
+    }
+
+    input:focus,
+    textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    input[type="checkbox"] {
+      padding: 0;
+      margin: 0;
+      vertical-align: middle;
+      appearance: checkbox;
+      -webkit-appearance: checkbox;
+    }
+
+    textarea {
+      resize: none;
+      overflow: hidden;
+      font-weight: 400;
+      font-family: inherit;
+    }
+
+    .container button {
+      white-space: nowrap;
+      font-size: .8rem;
+      font-weight: 600;
+      padding: 4px 16px;
+      border: none;
+      border-radius: 999px;
+      cursor: pointer;
+      background-color: var(--border);
+      color: var(--text);
+    }
+
+    /* --- Layout Containers --- */
+    .flex-container {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      margin: .5rem 0;
+    }
+
+    .between-container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: .5rem 0;
+    }
+
+    .flex-container input,
+    .flex-container textarea,
+    .between-container input {
+      flex-grow: 1;
+      margin: 0;
+    }
+
+    /* --- Specific Elements --- */
+    #relay-url {
+      height: 2.25rem;
+    }
+
+    #new-post-content {
+      height: 2.25rem;
+      margin-left: -0.5rem;
+    }
+
+    #npub-link {
+      display: none;
+    }
+
+    /* --- Advanced Settings --- */
+    #advanced-settings>div:first-child {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-left: 0.25rem;
+      flex-wrap: wrap;
+    }
+
+    #advanced-settings label {
+      margin-left: 1rem;
+    }
+
+    #advanced-settings label[for="auto-update-toggle"] {
+      margin-left: 0;
+    }
+
+    #filter-flowgazer-only,
+    label[for="filter-flowgazer-only"] {
+      display: none;
+    }
+
+    #kind-7-content-input {
+      width: 2.5rem;
+      height: 1.5rem;
+      text-align: center;
+      font-size: 0.9rem;
+      vertical-align: middle;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      display: inline-block;
+      padding: 0;
+    }
+
+    /* フィルタボタン縦並び用コンテナ */
+    .flex-container>div:has(#apply-filter) {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    /* --- Post & Footer Area --- */
+    form[onsubmit*="false"] {
+      display: inline;
+    }
+
+    #temp-nsec-input {
+      display: none;
+      max-width: 3.5rem;
+      margin-right: 0.5rem;
+    }
+
+    .viewongithub {
+      text-align: center;
+      padding-bottom: 4rem;
+    }
+
+    /* --- Components --- */
+    .full-width {
+      width: 100%;
+    }
+
+    #tab-buttons {
+      display: flex;
+      margin: 0 0 -6px 0;
+      justify-content: center;
+    }
+
+    #tab-buttons .tab-button {
+      flex: 1;
+      border: none;
+      background: var(--border);
+      border-radius: 0;
+      color: var(--text-soft);
+    }
+
+    #tab-buttons .tab-button.active {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    #load-more {
+      background: var(--primary);
+      color: #fff;
+      margin: 0.5rem 0;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #subscribe-relay,
+    #show-settings,
+    #hide-settings,
+    #send-new-post {
+      text-align: center;
+      padding: 4px 0;
+      width: 6rem;
+    }
+
+    /* --- Utility --- */
+    .hidden {
+      display: none;
+    }
+
+    /* --- Timeline Event Styles --- */
+    ul {
+      list-style: none;
+      margin-top: 0.5rem;
+      min-height: 1px;
+    }
+
+    li.event {
+      word-break: break-all;
+      padding: .5rem .25rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .post-content {
+      display: inline
+    }
+
+    .event-liked {
+      border-right: .3rem solid var(--primary);
+    }
+
+    .npub-link,
+    .nostr-ref,
+    .pubkey-ref {
+      color: var(--primary);
+    }
+
+    .custom-emoji {
+      height: 1.2rem;
+      vertical-align: bottom;
+    }
+
+    @media (max-width:767px) {
+      .container {
+        max-width: 100%;
+        padding: 4px;
+        margin: 0;
+      }
+    }
+
+    .post-options {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      margin: 0.5rem 0;
+    }
+
+    .post-options select {
+      height: 2.25rem;
+      padding: 0 0.5rem;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    /* --- 長押しメニュー（index.html から移植。共有版 timeline.js が参照するDOM構造） --- */
+    /* コンテナ：指の座標（中心）を基準にする */
+    .lp-menu {
+      position: fixed;
+      z-index: 10000;
+      width: 0;
+      height: 0;
+      pointer-events: none;
+      /* 計算の根拠： 1. likeボタンの配置が top: -3rem 2. 指との隙間を 1rem あけたい ⇒ コンテナの中心（指の位置）を基準に、 likeボタンの「上端」が指の「+1rem」の位置に来るように調整します。 */
+      transform: translate(-1.5rem, 5rem);
+      animation: menu-pop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    @keyframes menu-pop {
+      from {
+        opacity: 0;
+        /* translate の値を合わせつつ、スケールを小さく */
+        transform: translate(-1.5rem, 5rem) scale(0.5);
+      }
+
+      to {
+        opacity: 1;
+        /* ここを新しい数値に合わせる */
+        transform: translate(-1.5rem, 5rem) scale(1);
+      }
+    }
+
+    /* 共通スタイル：中心から移動させるために absolute にする */
+    .lp-item {
+      position: absolute;
+      width: 3rem;
+      height: 3rem;
+      background: #ffffff;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+      border: none;
+      transition: all 0.2s ease;
+      user-select: none;
+      pointer-events: auto;
+    }
+
+    /* SVGアイコンのサイズと色を自動調整 */
+    .lp-item svg {
+      width: 1.5rem;
+      height: 1.5rem;
+      display: block;
+      transition: transform 0.2s ease;
+    }
+
+    /* ふぁぼボタンだけはテキスト（絵文字）なので専用調整 */
+    #lp-like-icon {
+      font-family: "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+      font-size: 1.25rem;
+      line-height: 1;
+    }
+
+    /* 位置の個別設定 (中心からの距離) */
+    /* 上：like */
+    .lp-item[data-action="like"] {
+      top: -3rem;
+      left: 0;
+      color: #ffcc66;
+    }
+
+    /* 左：repost */
+    .lp-item[data-action="repost"] {
+      top: 0;
+      left: -3rem;
+      color: #66b3ff;
+    }
+
+    /* 右：copy（neventコピー） */
+    .lp-item[data-action="copy"] {
+      top: 0;
+      left: 3rem;
+      color: #666666;
+    }
+
+    /* 下：lumilumi */
+    .lp-item[data-action="lumilumi"] {
+      top: 3rem;
+      left: 0;
+      color: #66b3ff;
+    }
+
+    /* 選択時のエフェクト */
+    .lp-item.selected {
+      background: #fff;
+      transform: scale(1.06);
+      box-shadow:
+        0 0 20px 12px rgba(120, 170, 255, 0.35),
+        0 0 40px 20px rgba(120, 170, 255, 0.25),
+    }
+
+    a.pubkey-ref {
+      color: var(--primary) !important;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- 長押しメニュー（index.html から移植。共有版 timeline.js の createLongPressHandler が参照する） -->
+  <div id="long-press-menu" class="lp-menu" style="display: none;">
+    <div class="lp-item" data-action="like" id="lp-like-icon" title="ふぁぼ"></div>
+
+    <div class="lp-item" data-action="repost" title="RT">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+        stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="17 1 21 5 17 9"></polyline>
+        <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+        <polyline points="7 23 3 19 7 15"></polyline>
+        <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+      </svg>
+    </div>
+
+    <div class="lp-item" data-action="copy" title="neventコピー">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+        stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 21c3 0 7-1 7-8V5H4v8h4c0 2-1 4-4 4v4zm13 0c3 0 7-1 7-8V5h-6v8h4c0 2-1 4-4 4v4z"></path>
+      </svg>
+    </div>
+
+    <div class="lp-item" data-action="lumilumi" title="lumilumiで開く">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+        stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+        <polyline points="15 3 21 3 21 9"></polyline>
+        <line x1="10" y1="14" x2="21" y2="3"></line>
+      </svg>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="flex-container">
+      <button onclick="showAuthUI()">🔑</button>
+      <input id="relay-url" type="text" list="relay-suggestions">
+      <datalist id="relay-suggestions">
+        <option value="wss://r.kojira.io/">
+        <option value="wss://yabu.me/">
+        <option value="wss://nostr.compile-error.net/">
+        <option value="wss://relay-jp.nostr.wirednet.jp/">
+        <option value="wss://relay.damus.io/">
+        <option value="wss://nos.lol/">
+        <option value="wss://relay.nostr.band/">
+      </datalist>
+      <button id="subscribe-relay">connect</button>
+    </div>
+    <div class="between-container">
+      <a id="npub-link" class="npub-link" target="_blank"></a><span id="not-logged-in">ROM</span>
+      <button id="show-settings">option</button>
+      <button id="hide-settings" class="hidden">option</button>
+    </div>
+
+    <button id="generate-trial-keypair" class="hidden" onclick="generateAndLoginWithNewKeypair()">
+      新しい鍵ペアを生成して試す！
+    </button>
+
+    <div id="advanced-settings" class="hidden">
+
+      <div>
+        <label for="auto-update-toggle">autoload</label>
+        <input type="checkbox" id="auto-update-toggle" checked>
+
+        <label for="filter-flowgazer-only">via flowgazer しぼりこみ</label>
+        <input type="checkbox" id="filter-flowgazer-only">
+
+        <label for="toggle-kind42">view kind:42</label>
+        <input type="checkbox" id="toggle-kind42">
+
+        <label for="kind-7-content-input">kind:7 content</label>
+        <input id="kind-7-content-input" type="text" maxlength="10" value="⭐">
+      </div>
+
+      <div class="flex-container">
+        <textarea id="hex-filter" rows="2" placeholder="(npub1…,hex…)"></textarea>
+        <div>
+          <button id="apply-filter">apply</button>
+          <button id="clear-filter">clear</button>
+          <button id="load-follows" class="hidden">kind:3</button>
+        </div>
+      </div>
+
+      <div class="post-options">
+        <select id="post-kind-selector">
+          <option value="1">kind:1</option>
+          <option value="42">kind:42</option>
+        </select>
+        <select id="channel-list-selector" class="hidden">
+          <option value="">select</option>
+        </select>
+      </div>
+
+    </div>
+
+    <div class="flex-container">
+      <input type="text" name="username" autocomplete="username" class="hidden">
+      <form onsubmit="return false;">
+        <input type="password" id="temp-nsec-input" autocomplete="nsec" placeholder="nsec">
+      </form>
+      <textarea id="new-post-content" placeholder=""></textarea>
+      <button id="send-new-post">send</button>
+    </div>
+
+    <div id="tab-buttons">
+      <button id="tab-global" class="tab-button active">global</button>
+      <button id="tab-following" class="tab-button">kind:3</button>
+      <button id="tab-myposts" class="tab-button">me</button>
+      <button id="tab-likes" class="tab-button">befaved</button>
+    </div>
+
+    <ul id="timeline"></ul>
+
+    <button id="load-more" class="full-width">loadmore</button>
+
+    <p class="viewongithub"><a href="https://github.com/ompomz/flowgazer">view on github</a></p>
+
+  </div>
+
+  <!-- 
+  Based on motherfucking-nostr-client by かすてらふぃ（jiftechnify）
+  Some parts generated or modified with AI assistance  
+  Uses nostr-tools (MIT License)
+  Licensed under WTFPL
+  -->
+
+  <!-- 既存JS -->
+  <script src="https://ompomz.github.io/tweetsrecap/utility.js"></script>
+  <script src="./event-bus.js"></script>
+  <script src="./auth.js"></script>
+  <script src="./auth-ui.js"></script>
+
+  <script src="https://unpkg.com/nostr-tools@2.17.0/lib/nostr.bundle.js"></script>
+
+  <!-- 共有版 -->
+  <script src="./relay-manager.js"></script>
+  <script src="./data-store.js"></script>
+  <script src="./view-state.js"></script>
+  <script src="./profile-fetcher.js"></script>
+  <script src="./timeline.js"></script>
+  <script src="./app.js"></script>
+
+  <script>
+    // 初期化確認（詳細版を維持）
+    console.log('✅ スクリプト読み込み完了');
+    console.log('Components:', {
+      dataStore: typeof window.dataStore,
+      viewState: typeof window.viewState,
+      app: typeof window.app
+    });
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      // インスタンスの存在確認
+      if (!window.dataStore || !window.viewState) {
+        console.error('❌ 初期化エラー');
+        alert('初期化エラー: ページを再読み込みしてください');
+        return;
+      }
+
+      // タイムラインインスタンス作成
+      window.timeline = new Timeline(document.getElementById('timeline'));
+
+      // --- lite.html独自仕様：ROM（未ログイン）でもglobalタイムラインを閲覧できるようにする ---
+      // 共有版 app.js の updateTabVisibility() は、未ログイン時に #tab-buttons 全体
+      // （tab-globalを含む）を非表示にしてしまう。lite.htmlは「ログインしなくても
+      // globalタイムラインを見られる」設計のため、このインスタンスに限り上書きする。
+      // 共有版 app.js 自体（kit-ten.html / index.html）の挙動には影響しない。
+      // following / myposts / likes は従来通りログイン時のみ表示する。
+      // window.app.init() が内部で updateLoginUI() → updateTabVisibility() を
+      // 呼ぶため、必ず init() より前に上書きする。
+      window.app.updateTabVisibility = function () {
+        const auth = window.nostrAuth;
+        const isLoggedIn = auth && typeof auth.isLoggedIn === 'function' && auth.isLoggedIn();
+
+        // tab-buttons自体は常に表示（ROM状態でもtab-globalを使えるように）
+        const tabButtons = document.getElementById('tab-buttons');
+        if (tabButtons) tabButtons.style.display = 'flex';
+
+        // ログインが必要なタブのみ個別に表示制御
+        const tabsToToggle = ['tab-following', 'tab-myposts', 'tab-likes'];
+        tabsToToggle.forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.style.display = isLoggedIn ? '' : 'none';
+        });
+      };
+
+      // アプリ初期化
+      // ※ send-new-post / post-kind-selector / new-post-content(Ctrl+Enter) /
+      //    subscribe-relay / .tab-button / apply-filter / clear-filter /
+      //    filter-flowgazer-only / toggle-kind42 / auto-update-toggle /
+      //    load-more / show-settings / hide-settings / kind-7-content-input /
+      //    hex-filter復元 / visibilitychange は、
+      //    共有版 app.js の setupEventListeners() 内ですべて登録される。
+      //    ここで重複登録すると投稿の二重送信等が起きるため、
+      //    lite.html 側では登録しない。
+      await window.app.init();
+
+      // --- 安全なイベントリスナー登録用のヘルパー関数 ---
+      const addEvent = (id, event, handler) => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener(event, handler);
+      };
+
+      // フォロー読み込み（lite.html独自機能。共有版app.jsには存在しない）
+      addEvent('load-follows', 'click', () => {
+        if (!window.nostrAuth.isLoggedIn()) {
+          alert('鍵の入力が必要です');
+          if (typeof showAuthUI === 'function') showAuthUI();
+          return;
+        }
+        const pubkeys = Array.from(window.dataStore.followingPubkeys);
+        if (pubkeys.length === 0) {
+          alert('フォローリストが取得できていません');
+          return;
+        }
+        const inputEl = document.getElementById('hex-filter');
+        if (inputEl) inputEl.value = pubkeys.join('\n');
+        alert(`${pubkeys.length}人のフォローを読み込みました`);
+      });
+    });
+
+    // --- グローバル関数群 ---
+    // （saveFavMark / loadFavMark は共有版 app.js の
+    //   this.saveFavMark / this.loadFavMark に統合済みのため、
+    //   lite.html 側の同名グローバル関数は廃止した）
+
+    function generateAndLoginWithNewKeypair() {
+      if (!confirm('新しい鍵ペアを生成します。nsecを失くさないよう保存してください。')) return;
+      const seckey = window.NostrTools.generateSecretKey();
+      const nsec = window.NostrTools.nip19.nsecEncode(seckey);
+      window.nostrAuth.loginWithNsec(nsec);
+      // 古い方の挙動（location.reload）にするか、新しい方の挙動（UI書き換え）にするか選べますが、
+      // 確実なのは location.reload() です。
+      location.reload();
+    }
+  </script>
+</body>
+
+</html>
