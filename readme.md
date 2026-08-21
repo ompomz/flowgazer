@@ -14,7 +14,7 @@
 このプロジェクトはオリジナルと同じWTFPLライセンスで公開しています。  
 詳細はLICENSEファイルを参照してください。
 
-#### [flowgazer/kit-ten](https://ompomz.github.io/flowgazer/kit-ten.html)で埋め込んでいる投稿専用クライアント
+#### [flowgazer/kit-ten](https://ompomz.github.io/flowgazer/kit-ten.html)、 [flowgazer/lite](https://ompomz.github.io/flowgazer/lite.html)で埋め込んでいる投稿専用クライアント
 
 - [eHagaki](https://github.com/lokuyow/ehagaki)
 
