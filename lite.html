@@ -522,10 +522,6 @@
       <button id="hide-settings" class="hidden">option</button>
     </div>
 
-    <button id="generate-trial-keypair" class="hidden" onclick="generateAndLoginWithNewKeypair()">
-      新しい鍵ペアを生成して試す！
-    </button>
-
     <div id="advanced-settings" class="hidden">
 
       <div>
@@ -682,21 +678,6 @@
         alert(`${pubkeys.length}人のフォローを読み込みました`);
       });
     });
-
-    // --- グローバル関数群 ---
-    // （saveFavMark / loadFavMark は共有版 app.js の
-    //   this.saveFavMark / this.loadFavMark に統合済みのため、
-    //   lite.html 側の同名グローバル関数は廃止した）
-
-    function generateAndLoginWithNewKeypair() {
-      if (!confirm('新しい鍵ペアを生成します。nsecを失くさないよう保存してください。')) return;
-      const seckey = window.NostrTools.generateSecretKey();
-      const nsec = window.NostrTools.nip19.nsecEncode(seckey);
-      window.nostrAuth.loginWithNsec(nsec);
-      // 古い方の挙動（location.reload）にするか、新しい方の挙動（UI書き換え）にするか選べますが、
-      // 確実なのは location.reload() です。
-      location.reload();
-    }
   </script>
 </body>
 
