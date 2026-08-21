@@ -713,9 +713,15 @@ class Timeline {
      */
     async executeNostrAction(action, originalEvent) {
         // neventの生成（共通ロジック）
+        // 🆕 eHagaki側での「イベント取得失敗」を防ぐため、
+        //    author / kind をnevent自体に埋め込み、relay問い合わせに頼らず著者が分かるようにする。
+        //    また relayManager.url が null（未接続）の場合に不正な relays: [null] を渡さないようガードする。
+        const connectedRelay = window.relayManager?.url || null;
         const nevent = window.NostrTools.nip19.neventEncode({
             id: originalEvent.id,
-            relays: [window.relayManager.url]
+            author: originalEvent.pubkey,
+            kind: originalEvent.kind,
+            relays: connectedRelay ? [connectedRelay] : []
         });
 
         switch (action) {

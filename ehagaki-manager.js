@@ -50,9 +50,14 @@
             url.searchParams.set('parentOrigin', parentUrl);
 
             if (payload) {
-                if (payload.reply) url.searchParams.set('reply', payload.reply);
+                if (payload.reply) {
+                    url.searchParams.set('reply', payload.reply);
+                    // 🆕 リプライ時、継承pタグの通知もいったん強制ONにする
+                    url.searchParams.set('embedReplyNotification', 'true');
+                }
                 if (payload.quotes) {
                     payload.quotes.forEach(q => url.searchParams.append('quote', q));
+                    url.searchParams.set('embedQuoteNotification', 'false');
                 }
                 if (payload.content) url.searchParams.set('content', payload.content);
 
@@ -69,6 +74,9 @@
 
             const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
             url.searchParams.set('embedTheme', prefersDark ? 'dark' : 'light');
+
+            console.log('🔍 eHagakiへ渡すURL:', url.toString());
+            console.log('📦 受け取ったpayload:', payload);
 
             this.iframe.src = url.toString();
             this.modal.style.display = 'flex';

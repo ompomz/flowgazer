@@ -292,7 +292,74 @@
       cursor: pointer;
     }
 
-    /* --- 長押しメニュー（index.html から移植。共有版 timeline.js が参照するDOM構造） --- */
+    a.pubkey-ref {
+      color: var(--primary) !important;
+    }
+
+    /* eHagaki モーダル関連 */
+    #open-ehagaki-modal {
+      position: fixed;
+      top: 0.5rem;
+      right: 0.5rem;
+      width: 3.5rem;
+      height: 3.5rem;
+      border-radius: 50%;
+      background-color: hsla(207, 90%, 54%, 0.3);
+      background-image: url('https://raw.githubusercontent.com/Lokuyow/ehagaki/main/public/ehagaki_icon.svg');
+      background-size: 60%;
+      background-repeat: no-repeat;
+      background-position: center;
+      border: none;
+      cursor: pointer;
+      z-index: 999;
+      transition: transform 0.2s;
+    }
+
+    #open-ehagaki-modal:hover {
+      transform: scale(1.1);
+    }
+
+    #ehagaki-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #ehagaki-modal>div {
+      position: relative;
+      width: 95%;
+      max-width: 600px;
+      height: 80vh;
+      background: var(--surface);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    #close-ehagaki-modal {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1001;
+      font-weight: bold;
+      color: #fff;
+      background: hsl(152, 74%, 43%, 0.5);
+      border: none;
+      border-radius: 999px;
+      padding: 6px 18px;
+      cursor: pointer;
+    }
+
+    #ehagaki-iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
     /* コンテナ：指の座標（中心）を基準にする */
     .lp-menu {
       position: fixed;
@@ -368,15 +435,15 @@
       color: #66b3ff;
     }
 
-    /* 右：copy（neventコピー） */
-    .lp-item[data-action="copy"] {
+    /* 右：quote */
+    .lp-item[data-action="quote"] {
       top: 0;
       left: 3rem;
       color: #666666;
     }
 
-    /* 下：lumilumi */
-    .lp-item[data-action="lumilumi"] {
+    /* 下：reply */
+    .lp-item[data-action="reply"] {
       top: 3rem;
       left: 0;
       color: #66b3ff;
@@ -390,15 +457,22 @@
         0 0 20px 12px rgba(120, 170, 255, 0.35),
         0 0 40px 20px rgba(120, 170, 255, 0.25),
     }
-
-    a.pubkey-ref {
-      color: var(--primary) !important;
-    }
   </style>
 </head>
 
 <body>
-  <!-- 長押しメニュー（index.html から移植。共有版 timeline.js の createLongPressHandler が参照する） -->
+  <button id="open-ehagaki-modal" class="hidden"></button>
+
+  <div id="ehagaki-modal" style="display:none;">
+    <div>
+      <button id="close-ehagaki-modal">✕ とじる</button>
+      <iframe id="ehagaki-iframe"
+        src="https://lokuyow.github.io/ehagaki/?parentOrigin=http://ompomz.github.io/flowgazer/lite.html"
+        allow="local-network-access; local-network; loopback-network" frameborder="0" width="600" height="400">
+      </iframe>
+    </div>
+  </div>
+
   <div id="long-press-menu" class="lp-menu" style="display: none;">
     <div class="lp-item" data-action="like" id="lp-like-icon" title="ふぁぼ"></div>
 
@@ -412,19 +486,17 @@
       </svg>
     </div>
 
-    <div class="lp-item" data-action="copy" title="neventコピー">
+    <div class="lp-item" data-action="quote" title="引用">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
         stroke-linecap="round" stroke-linejoin="round">
         <path d="M3 21c3 0 7-1 7-8V5H4v8h4c0 2-1 4-4 4v4zm13 0c3 0 7-1 7-8V5h-6v8h4c0 2-1 4-4 4v4z"></path>
       </svg>
     </div>
 
-    <div class="lp-item" data-action="lumilumi" title="lumilumiで開く">
+    <div class="lp-item" data-action="reply" title="リプライ">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
         stroke-linecap="round" stroke-linejoin="round">
-        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-        <polyline points="15 3 21 3 21 9"></polyline>
-        <line x1="10" y1="14" x2="21" y2="3"></line>
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
       </svg>
     </div>
   </div>
@@ -537,6 +609,7 @@
   <script src="./profile-fetcher.js"></script>
   <script src="./timeline.js"></script>
   <script src="./app.js"></script>
+  <script src="./ehagaki-manager.js"></script>
 
   <script>
     // 初期化確認（詳細版を維持）
@@ -583,15 +656,8 @@
       };
 
       // アプリ初期化
-      // ※ send-new-post / post-kind-selector / new-post-content(Ctrl+Enter) /
-      //    subscribe-relay / .tab-button / apply-filter / clear-filter /
-      //    filter-flowgazer-only / toggle-kind42 / auto-update-toggle /
-      //    load-more / show-settings / hide-settings / kind-7-content-input /
-      //    hex-filter復元 / visibilitychange は、
-      //    共有版 app.js の setupEventListeners() 内ですべて登録される。
-      //    ここで重複登録すると投稿の二重送信等が起きるため、
-      //    lite.html 側では登録しない。
       await window.app.init();
+      window.ehagakiManager?.init?.();
 
       // --- 安全なイベントリスナー登録用のヘルパー関数 ---
       const addEvent = (id, event, handler) => {
