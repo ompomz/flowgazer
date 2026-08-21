@@ -140,6 +140,35 @@
         },
 
         /**
+         * 🆕 channelId から eHagaki へ渡す channel payload を組み立てる共通ヘルパー。
+         * openChannelContext / openReplyToChannel の両方から使う。
+         * @param {string} channelId
+         * @param {string|null} relayHint
+         * @returns {Object|null} channel payload。エンコード失敗時は null
+         */
+        _buildChannelPayload(channelId, relayHint = null) {
+            const reference = this._encodeChannelReference(channelId);
+            if (!reference) return null;
+
+            const meta = window.channelMetaMap?.get(channelId) || {};
+            const name = window.channelNameMap?.get(channelId) || meta.name || null;
+
+            const connectedRelay = window.relayManager?.url || null;
+            const candidateRelays = [];
+            if (relayHint) candidateRelays.push(relayHint);
+            if (connectedRelay && connectedRelay !== relayHint) candidateRelays.push(connectedRelay);
+            const relays = candidateRelays.slice(0, 3);
+
+            return {
+                reference,
+                relays,
+                name: name || null,
+                about: meta.about || null,
+                picture: meta.picture || null
+            };
+        },
+
+        /**
          * タイムラインのチャンネルバッジクリック用エントリポイント。
          * - モーダル未表示: URLクエリ付きで新規起動（初回描画のチラつき防止のため name/about/picture も渡す）
          * - モーダル表示中: 再読み込みせず composer.setContext で切り替える
@@ -153,29 +182,8 @@
             // 🆕 post.success時にどのチャンネルタブを開くべきか判定するために保存
             this._activeChannelId = channelId;
 
-            // hex channelId は eHagaki に渡せないため nevent1... へ変換する
-            const reference = this._encodeChannelReference(channelId);
-            if (!reference) return;
-
-            const meta = window.channelMetaMap?.get(channelId) || {};
-            const name = window.channelNameMap?.get(channelId) || meta.name || null;
-
-            // channelRelays（一時write relay候補）。
-            // reference の nevent 内relayとあわせてドキュメント仕様の合計最大3件枠に収まるよう、
-            // eタグ由来の relayHint と接続中リレーの重複を除いて先頭3件までに制限する
-            const connectedRelay = window.relayManager?.url || null;
-            const candidateRelays = [];
-            if (relayHint) candidateRelays.push(relayHint);
-            if (connectedRelay && connectedRelay !== relayHint) candidateRelays.push(connectedRelay);
-            const relays = candidateRelays.slice(0, 3);
-
-            const channel = {
-                reference,
-                relays,
-                name: name || null,
-                about: meta.about || null,
-                picture: meta.picture || null
-            };
+            const channel = this._buildChannelPayload(channelId, relayHint);
+            if (!channel) return;
 
             const isOpen = this.modal.style.display === 'flex';
 
@@ -186,6 +194,41 @@
                 });
             } else {
                 this.open({ channel });
+            }
+        },
+
+        /**
+         * 🆕 kind:42（チャンネルメッセージ）へのリプライ用エントリポイント。
+         * リプライ対象がチャンネルメッセージの場合、reply nevent と同時に
+         * channel context も渡すことで、eHagaki側がkind:42として送信できるようにする。
+         *
+         * @param {string} replyNevent - リプライ対象のnevent
+         * @param {string|null} channelId - リプライ対象が属するチャンネルの hex event id（root eタグの値）
+         * @param {string|null} relayHint - eタグ3番目の要素
+         */
+        openReplyToChannel(replyNevent, channelId, relayHint = null) {
+            if (!channelId) {
+                this.open({ reply: replyNevent, quotes: [] });
+                return;
+            }
+
+            this._activeChannelId = channelId;
+
+            const channel = this._buildChannelPayload(channelId, relayHint);
+            if (!channel) {
+                this.open({ reply: replyNevent, quotes: [] });
+                return;
+            }
+
+            const isOpen = this.modal.style.display === 'flex';
+
+            if (isOpen) {
+                this.post('composer.setContext', {
+                    requestId: this._generateRequestId('reply-channel'),
+                    payload: { reply: replyNevent, quotes: [], channel }
+                });
+            } else {
+                this.open({ reply: replyNevent, quotes: [], channel });
             }
         },
 
@@ -425,8 +468,8 @@
 
             // 🆕 composer.setContext の適用成功通知
             case 'composer.contextApplied':
-                if (data.requestId?.startsWith('channel-switch-')) {
-                    console.log('✅ チャンネル切り替え成功:', data.requestId, data.payload);
+                if (data.requestId?.startsWith('channel-switch-') || data.requestId?.startsWith('reply-channel-')) {
+                    console.log('✅ チャンネル切り替え・リプライ設定成功:', data.requestId, data.payload);
                 } else if (data.requestId?.startsWith('channel-close-')) {
                     console.log('✅ チャンネル解除成功:', data.requestId, data.payload);
                 } else {
@@ -436,8 +479,8 @@
 
             // 🆕 composer.setContext の適用失敗通知
             case 'composer.contextError':
-                if (data.requestId?.startsWith('channel-switch-') || data.requestId?.startsWith('channel-close-')) {
-                    console.error('❌ チャンネル切り替え失敗:', data.payload);
+                if (data.requestId?.startsWith('channel-switch-') || data.requestId?.startsWith('reply-channel-') || data.requestId?.startsWith('channel-close-')) {
+                    console.error('❌ チャンネル関連のコンテキスト設定失敗:', data.payload);
                 } else {
                     console.error('❌ composer context 反映失敗:', data.requestId, data.payload);
                 }
