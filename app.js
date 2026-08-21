@@ -1491,7 +1491,10 @@ class FlowgazerApp {
           alert('投稿先のチャンネルを選んでください！');
           return;
         }
-        event.tags.push(['e', channelId, '', 'root']);
+        // root eタグの3番目（relay hint）は、以前は空文字列で送信していた。
+        // チャンネル固有のホームリレーを別途調べたり追加ブロードキャストしたりはせず、
+        // シンプルに「今接続しているリレー」をヒントとして書く。
+        event.tags.push(['e', channelId, window.relayManager.url || '', 'root']);
       }
 
       event.tags.push(['client', 'flowgazer', '31990:a19caaa8404721584746fb0e174cf971a94e0f51baaf4c4e8c6e54fa88985eaf:1755917022711', 'wss://relay.nostr.band/']);
