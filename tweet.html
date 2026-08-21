@@ -1,766 +1,1524 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="https://ompomz.github.io/favicon.ico">
     <title>tweetviewer</title>
-<style>
-/* --- Base / Layout --- */
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.5; background-color: #f7f7f7; color: #666; font-size: 0.9rem; padding: 0.5rem; }
-.container { max-width: 600px; margin: 0 ; padding: 0.5rem; }
-.header-section, .footer-section { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0; border-bottom: 1px dashed #ddd; }
-.footer-section { border-bottom: none; border-top: 1px dashed #ddd; }
-.hidden { display: none; }
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-/* --- Components (Buttons/Forms) --- */
-button { border: none; font-size: 0.8rem; padding: 0.5rem 0.8rem; border-radius: 999px; font-weight: bold; cursor: pointer; background-color: #ffb366; color: #fff; transition: 0.3s; }
-button:hover { background-color: #ffa347; }
-.form-input { flex: 1; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; min-width: 0; }
-.nostr-form { display: flex; align-items: center; gap: 0.5rem; padding-top: 0.25rem; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans JP", sans-serif;
+            line-height: 1.5;
+            background-color: #f7f7f7;
+            color: #666;
+            font-size: 0.9rem;
+            padding: 0.5rem;
+        }
 
-/* --- Post / Profile --- */
-.post-header { display: flex; align-items: center; gap: 10px; }
-.post-content { margin: 0.5rem 0; line-height: 1.5; overflow-wrap: break-word; word-break: break-all; }
-.post-footer { font-size: 0.8rem; color: #888; }
-.profile-card { display: flex; flex-direction: column; gap: 1rem; padding: 1rem; background: #fff; border-radius: 8px; border: 1px solid #ddd; }
-.profile-picture { width: 6rem; height: 6rem; border-radius: 50%; object-fit: cover; border: 3px solid rgba(0, 121, 107, 0.5); }
-.header-pic { width: 4rem; height: 4rem; border-radius: 50%; object-fit: cover; border: 3px solid rgba(0, 121, 107, 0.5); }
-.user-link { text-decoration: none; color: inherit; font-weight: bold; }
-.user-link:hover { text-decoration: underline; color: #66b3ff; }
+        .container {
+            max-width: 600px;
+            margin: 0;
+            padding: 0.5rem;
+            border-radius: 4px;
+        }
 
-/* --- Reactions --- */
-.reactions-list { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.25rem 0 0.75rem 0; }
-.reaction-group { display: inline-flex; align-items: center; background: #f8f8f8; padding: 2px 8px; border-radius: 15px; margin: 0.5rem 0rem 0rem 0rem; font-size: 0.9rem; border: 1px solid #eee; }
-.reaction-avatars { margin-left: 8px; display: flex; align-items: center; flex-direction: row-reverse; }
-.reaction-avatar { width: 20px; height: 20px; border-radius: 50%; margin-left: -5px; border: 1px solid white; background: #eee; object-fit: cover; }
-.reaction-container { background: #fff5f8; border: 1px dashed #ffb3c1; border-radius: 12px; padding: 15px; margin-bottom: 20px; }
+        .container h1 {
+            font-size: 1.3rem;
+        }
 
-/* --- Media / Custom Emoji --- */
-.video-container { margin: 10px 0; }
-.video-container.youtube { aspect-ratio: 16 / 9; }
-.video-container iframe, .video-container video { width: 100%; height: 100%; border-radius: 12px; border: none; }
-.video-container video { max-width: 100%; height: auto; border: 1px solid #eee; }
-.image-container { margin: 8px 0; }
-.post-image { max-width: 15rem; max-height: 15rem; border-radius: 12px; border: 1px solid #eee; display: block; cursor: zoom-in; }
-.custom-emoji { height: 1.2em; vertical-align: middle; display: inline-block; }
+        .container h2 {
+            font-size: 1.1rem;
+        }
 
-/* --- Modal (画像拡大) --- */
-.modal { display: none; position: fixed; z-index: 1; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0, 0, 0, 0.2); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
-.modal-content { margin: auto; display: block; max-width: 80%; max-height: 80vh; width: 80%; }
-.modal-image { width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; display: block; margin: auto; }
-.close-button { color: #fff; font-size: 40px; font-weight: 700; cursor: pointer; transition: 0.3s; }
-.close-button:hover, .close-button:focus { color: #eee; text-decoration: none; cursor: pointer; }
-</style>
+        .container h3 {
+            font-size: 1rem;
+        }
+
+        .container p {
+            word-break: break-all;
+        }
+
+        .container a {
+            color: #66b3ff;
+            text-decoration: none;
+        }
+
+        .container a:hover {
+            color: #4da6ff;
+            text-decoration: underline;
+        }
+
+        @media (max-width: 767px) {
+            .container {
+                max-width: 100%;
+            }
+        }
+
+        .container button {
+            border: none;
+            font-size: 0.8rem;
+            padding: 0.5rem 0.8rem;
+            border-radius: 999px;
+            font-weight: bold;
+            cursor: pointer;
+            background-color: #ffb366;
+            color: #fff;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .container button:hover {
+            background-color: #ffa347;
+        }
+
+        .header-section {
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0;
+            border-bottom: 1px dashed #ddd;
+        }
+
+        #main-event {
+            padding: 0.5rem 0;
+        }
+
+        #status {
+            margin: 0rem 0rem 1rem 0rem;
+            font-weight: bold;
+            color: #ff99cc;
+        }
+
+        /* --- リアクション --- */
+        .reactions-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            padding: 0.25rem 0rem 0.75rem 0rem;
+        }
+
+        .reactions-list img {
+            height: 1.25rem !important;
+            object-fit: cover;
+        }
+
+        .reaction-group {
+            display: flex;
+            align-items: center;
+            background-color: #eee;
+            border-radius: 999px;
+            padding: 0.2rem 0.5rem;
+            font-size: 0.8rem;
+        }
+
+        .reaction-avatars {
+            display: flex;
+            flex-direction: row-reverse;
+        }
+
+        .reaction-avatar {
+            width: 1.25rem;
+            height: 1.25rem;
+            border-radius: 50%;
+            object-fit: cover;
+            display: block;
+            margin: 0;
+        }
+
+        .reaction-container {
+            background: #fff5f8;
+            border: 1px dashed #ffb3c1;
+            border-radius: 12px;
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .reaction-headline {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .reaction-headline-emoji {
+            font-size: 1.6rem;
+        }
+
+        .reaction-headline-emoji img.custom-emoji {
+            height: 1.6rem;
+        }
+
+        /* --- リポスト --- */
+        .repost-banner {
+            background: #f4f7ff;
+            border: 1px dashed #b3c6ff;
+            border-radius: 12px;
+            padding: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+
+        /* --- 関連投稿カード --- */
+        .related-posts {
+            margin: 0.5rem 0rem;
+        }
+
+        .related-post-card {
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 0.25rem 0.5rem;
+            margin: 0.5rem 0rem;
+            display: block;
+        }
+
+        a.quote-link {
+            display: block;
+            color: inherit;
+            text-decoration: none;
+        }
+
+        a.quote-link:hover {
+            text-decoration: none;
+        }
+
+        a.quote-link .related-post-card:hover {
+            border-color: #66b3ff;
+        }
+
+        .post-link-label {
+            font-size: 0.75rem;
+        }
+
+        .related-post-card .profile,
+        .related-post-card .profile-name,
+        .related-post-card .profile-npub {
+            font-size: 0.8rem;
+        }
+
+        .related-post-card .profile-image {
+            width: 1.5rem;
+            height: 1.5rem;
+        }
+
+        .related-post-card .post-content {
+            font-size: 0.8rem;
+            margin: 0.5rem 0rem 0.75rem 0rem;
+        }
+
+        /* --- プロフィール --- */
+        .profile {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .profile-image {
+            width: 2rem;
+            height: 2rem;
+            border-radius: 50%;
+            object-fit: cover;
+            background: #eee;
+        }
+
+        .profile-name {
+            font-weight: bold;
+            font-size: 1rem;
+            color: #444;
+        }
+
+        .profile-nip05,
+        .profile-npub {
+            text-decoration: none !important;
+            font-size: 0.8rem;
+            color: #999;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 200px;
+            display: block;
+        }
+
+        .profile-picture {
+            width: 6rem;
+            height: 6rem;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid rgba(0, 121, 107, 0.5);
+            background: #eee;
+        }
+
+        @media (max-width: 370px) {
+            .profile-picture {
+                width: 4.5rem;
+                height: 4.5rem;
+            }
+        }
+
+        .profile-card {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            padding: 1rem;
+            background-color: #fff;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+        }
+
+        .profile-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .profile-info-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            min-width: 0;
+        }
+
+        .npub-container {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+            word-break: break-all;
+            padding: 0.25rem 0rem 0rem 0rem;
+        }
+
+        .copy-icon {
+            cursor: pointer;
+            transition: opacity 0.2s ease;
+        }
+
+        .copy-icon:hover {
+            opacity: 0.4;
+        }
+
+        .about-text {
+            font-size: 0.9rem;
+            line-height: 1.5;
+            color: #333;
+            word-break: break-all;
+        }
+
+        .about-text a {
+            color: #66b3ff;
+            text-decoration: underline;
+        }
+
+        .about-text a:hover {
+            color: #4da6ff;
+        }
+
+        .about-text .custom-emoji {
+            height: 1.2rem;
+            vertical-align: middle;
+        }
+
+        .post-info {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            font-size: 0.8rem;
+            color: #999;
+        }
+
+        .post-content {
+            margin: 0.5rem 0rem;
+            line-height: 1.5;
+            overflow-wrap: break-word;
+            word-break: break-word;
+        }
+
+        .post-content img {
+            max-width: 15rem;
+            max-height: 15rem;
+            height: auto;
+            display: block;
+            margin: 0;
+        }
+
+        .post-content video {
+            max-width: 15rem;
+            max-height: 15rem;
+            display: block;
+            margin: 0;
+        }
+
+        .post-content img.custom-emoji {
+            vertical-align: middle;
+            display: inline-block;
+            height: 1.2rem;
+            max-width: none;
+            max-height: none;
+        }
+
+        .post-content ul,
+        .post-content ol {
+            list-style-position: inside;
+        }
+
+        /* --- チャンネル(kind 40/41) --- */
+        .channel-card {
+            background: #fff;
+            border: 2px solid #7c6fe0;
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .channel-card-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .channel-picture {
+            width: 3.5rem;
+            height: 3.5rem;
+            border-radius: 8px;
+            object-fit: cover;
+            background: #eee;
+        }
+
+        .channel-picture-placeholder {
+            display: grid;
+            place-items: center;
+            font-size: 1.4rem;
+        }
+
+        .channel-name {
+            margin: 0;
+            font-size: 1.2rem;
+            color: #444;
+        }
+
+        .channel-kind-label {
+            font-size: 0.75rem;
+            color: #999;
+        }
+
+        .channel-about {
+            white-space: pre-wrap;
+            color: #555;
+            line-height: 1.6;
+            margin-bottom: 0.75rem;
+        }
+
+        .channel-load-btn {
+            background-color: #7c6fe0 !important;
+            width: 100%;
+        }
+
+        .channel-load-btn:hover {
+            background-color: #6a5dd0 !important;
+        }
+
+        .channel-context-banner {
+            display: block;
+            font-size: 0.8rem;
+            color: #7c6fe0 !important;
+            background: #f5f3ff;
+            padding: 0.4rem 0.6rem;
+            border-radius: 6px;
+            margin-bottom: 0.5rem;
+        }
+
+        .channel-context-name {
+            font-weight: bold;
+        }
+
+        /* --- チャンネルチャット --- */
+        .chat-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+            margin-top: 0.5rem;
+        }
+
+        .chat-row {
+            display: flex;
+            gap: 0.5rem;
+            align-items: flex-start;
+        }
+
+        .chat-avatar {
+            width: 2rem;
+            height: 2rem;
+            border-radius: 50%;
+            object-fit: cover;
+            background: #eee;
+            flex-shrink: 0;
+        }
+
+        .chat-body {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .chat-meta {
+            display: flex;
+            align-items: baseline;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+            color: #666;
+            margin-bottom: 0.15rem;
+        }
+
+        .chat-name {
+            font-weight: bold;
+            color: #444 !important;
+        }
+
+        .chat-time {
+            color: #999 !important;
+        }
+
+        .chat-bubble {
+            background: #f1f1f1;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0 12px 12px 12px;
+            display: inline-block;
+            max-width: 100%;
+            word-break: break-word;
+        }
+
+        .chat-bubble img,
+        .chat-bubble video {
+            max-width: 12rem;
+            max-height: 12rem;
+        }
+
+        /* --- 汎用イベント --- */
+        .generic-event-card {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 1rem;
+        }
+
+        .generic-event-json {
+            background: #eee;
+            padding: 0.5rem;
+            overflow-x: auto;
+            font-size: 0.75rem;
+            margin-top: 0.5rem;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        /* --- フォーム --- */
+        .nostr-form {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 0.5rem;
+            padding-top: 0.25rem;
+        }
+
+        .form-input {
+            color: #666;
+            flex: 1;
+            min-width: 0;
+            width: 100%;
+            max-width: 400px;
+            padding: 0.5rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+
+        .form-button {
+            flex-shrink: 0;
+            padding: 0.5rem 1.2rem !important;
+        }
+
+        .footer-section {
+            padding: 0.5rem 0;
+            border-top: 1px dashed #ddd;
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .relay-status {
+            font-size: 0.7rem;
+            color: #bbb;
+            padding: 0.25rem 0;
+        }
+
+        /* --- モーダル(画像拡大)：utility.js が自動注入するのでベースのみ --- */
+        .custom-emoji-hover:hover {
+            transform: scale(2.0);
+            z-index: 10;
+        }
+
+        .post-image {
+            max-height: 400px;
+            object-fit: cover;
+        }
+    </style>
 </head>
+
 <body>
-<div id="modal-placeholder"></div>
+    <div id="header-placeholder"></div>
+    <div class="container">
+        <div class="header-section">
+            <button onclick="goBack()">もどる</button>
+            <button onclick="copyUrl()">シェア</button>
+            <button id="copy-nevent-btn" onclick="copyCurrentId()" style="display: none;">コピー</button>
+        </div>
+        <div id="main-event"></div>
+        <p id="status" class="hidden"></p>
 
-<div class="container">
-    <div id="nav-section" class="header-section">
-        <button id="btn-back">もどる</button>
-        <button id="btn-share">シェア</button>
-        <button id="btn-auth" class="auth-button" style="display:none;">鍵をお持ちの方はこちら</button>
+        <div id="reactions-section" style="display: none;">
+            <div id="reactions-list" class="reactions-list"></div>
+        </div>
+
+        <div id="related-events-section" style="display: none;">
+            <div id="related-events-list" class="related-posts"></div>
+        </div>
+
+        <p class="relay-status" id="relay-status-text"></p>
+
+        <div class="footer-section">
+            <button onclick="goBack()">もどる</button>
+            <button id="jump-to-okkake" style="display: none;">このときにジャンプ</button>
+        </div>
     </div>
-    <div style="margin: 0.5rem 0rem;">
-    <main id="main-content">
-        <div id="loading-status" class="hidden"></div>
-        <div id="render-area"></div>
-    </main>
 
-    <section id="sub-content" class="hidden">
-        <div id="reactions-section">
-            <div id="reactions-list"></div>
-        </div>
-        <div id="related-events-section">
-            <div id="related-events-list"></div>
-        </div>
-    </section>
-    </div>
-    <div id="footer-section" class="footer-section">
-        <button id="btn-back-footer">もどる</button>
-        <button id="save-list-btn" style="display:none;">フォローリストを保存</button>
-    </div>
-</div>
+    <script src="https://unpkg.com/nostr-tools@2.17.0/lib/nostr.bundle.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://ompomz.github.io/tweetsrecap/utility.js"></script>
+    <script>
+        'use strict';
 
-<script src="https://unpkg.com/nostr-tools@2.17.0/lib/nostr.bundle.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<script src="https://ompomz.github.io/modal.js"></script>
-<script src="https://ompomz.github.io/flowgazer/auth.js"></script>
-<script src="https://ompomz.github.io/flowgazer/auth-ui.js"></script>
-<script src="https://ompomz.github.io/flowgazer/relay-manager.js"></script>
-<script src="https://ompomz.github.io/flowgazer/data-store.js"></script>
-<script src="https://ompomz.github.io/flowgazer/profile-fetcher.js"></script>
-<script src="https://ompomz.github.io/flowgazer/app.js"></script>
-<script src="https://ompomz.github.io/flowgazer2/channel.js"></script>
-<script src="https://ompomz.github.io/flowgazer2/quote-manager.js"></script>
+        // ========================================
+        // 定数・グローバル状態
+        // ========================================
+        const FALLBACK_RELAYS = ['wss://relay.nostr.band', 'wss://nos.lol', 'wss://relay.damus.io'];
+        const DEFAULT_PROFILE_IMAGE = 'https://ompomz.github.io/favicon.ico';
+        const MAX_RELAYS_PER_QUERY = 6;
 
-<script>
-    function parseNevent(input) {
-        try {
-            const decoded = window.NostrTools.nip19.decode(input);
-            const type = decoded.type; // 'npub', 'nevent', 'note' など
-            const data = decoded.data;
+        // nostr-tools v2: SimplePool は 'wss://relay/' のような複数リレーを
+        // 横断してイベントを探す責務を持つ（単一接続専用のRelayManagerとは役割が異なる）
+        const pool = new NostrTools.SimplePool({ eoseSubTimeout: 6000 });
 
-            if (type === 'npub') {
-                return { id: data, type: 'npub' }; // pubkeyをidとして返す
-            }
-            if (type === 'nevent') {
-                return { id: data.id, type: 'nevent', relays: data.relays || [] };
-            }
-            if (type === 'note') {
-                return { id: data, type: 'note' };
-            }
-            if (type === 'nprofile') {
-                return { id: data.pubkey, type: 'nprofile', relays: data.relays || [] };
-            }
-            return null;
-        } catch (e) {
-            console.error("NIP-19 Decode Error:", e);
-            return null;
-        }
-    }
-    
-    const FALLBACK_RELAYS = [
-        'wss://relay.damus.io/',
-        'wss://nos.lol/',
-        'wss://relay.nostr.band/'
-    ];
+        // キャッシュ（同一セッション内での再取得を防ぐ）
+        const profileCache = new Map();   // pubkey -> profile object | null
+        const eventCache = new Map();     // eventId -> event | undefined(未取得)
+        const channelMetaCache = new Map(); // channelId -> { name, about, picture }
 
-    function getPriorityRelays(hintRelays) {
-        const combined = new Set([...hintRelays, ...FALLBACK_RELAYS]);
-        return Array.from(combined);
-    }
+        const mainEventContainer = document.getElementById('main-event');
+        const statusElement = document.getElementById('status');
+        const reactionsSection = document.getElementById('reactions-section');
+        const reactionsList = document.getElementById('reactions-list');
+        const relatedEventsSection = document.getElementById('related-events-section');
+        const relatedEventsList = document.getElementById('related-events-list');
 
-    function setupFormListener() {
-        const form = document.getElementById('nostr-form');
-        if (!form) return;
+        // ========================================
+        // 共通ユーティリティ
+        // ========================================
 
-        form.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const input = document.getElementById('nostr-id-input').value.trim();
-            if (input) {
-                window.location.href = `?id=${input}`;
-            }
-        });
-    }
-
-    function showStatus(message) {
-        const statusElement = document.getElementById('loading-status');
-        if (!statusElement) return;
-
-        statusElement.textContent = message;
-        if (message) {
-            statusElement.classList.remove('hidden');
-        } else {
-            statusElement.classList.add('hidden');
-        }
-    }
-
-    // --- 1. ID判別とルート振り分け ---
-function initializeApp() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const id = urlParams.get('id');
-    const renderArea = document.getElementById('render-area');
-
-    if (!id) {
-        renderArea.innerHTML = Components.inputForm();
-        setupFormListener();
-        return;
-    }
-
-    // ここでデコードせず、そのまま ID文字列を渡す！
-    startEventWorkflow(id); 
-}
-
-    // --- 2. レンダリング・コンポーネント (HTMLを組み立てる専門家) ---
-    const Components = {
-        // プロフィールカードの生成
-        profileCard: (profile, npub) => {
-            const picture = profile.picture || 'https://ompomz.github.io/favicon.ico';
-            const name = profile.name || 'Unknown';
-            const about = profile.about ? `<p class="about-text">${Components.utils.escape(profile.about).replace(/\n/g, '<br>')}</p>` : '';
-
-            return `
-            <div class="profile-card">
-                <div class="profile-header">
-                    <img src="${picture}" class="profile-picture">
-                    <div class="profile-info">
-                        <h2 class="profile-name">${name}</h2>
-                        <code class="npub-text">${npub.substring(0, 12)}...</code>
-                    </div>
-                </div>
-                ${about}
-            </div>
-        `;
-        },
-
-        // 投稿（イベント）本体の生成
-        eventBody: (event, contentHtml, profile = {}) => {
-            const date = new Date(event.created_at * 1000).toLocaleString();
-            const picture = profile.picture || 'https://ompomz.github.io/favicon.ico';
-            const nameHtml = Components.utils.getNameLink(event.pubkey, profile);
-
-            return `
-        <div class="main-post">
-        <div class="post-header">
-            <img src="${picture}" class="header-pic">
-            <div>
-                <div class="user-name">${nameHtml}</div>
-                <div class="profile-npub">@${NostrTools.nip19.npubEncode(event.pubkey).substring(0, 10)}...</div>
-            </div>
-        </div>
-        <div class="post-content">${contentHtml}</div>
-        <div class="post-footer"><span>${date}</span></div>
-        </div>`;
-        },
-
-        // 入力フォームの生成
-        inputForm: () => `
-        <div class="input-form-container">
-            <p class="form-title">Nostr IDを入力してください</p>
-            <form id="nostr-form" class="nostr-form">
-                <input type="text" id="nostr-id-input" placeholder="nevent1..., npub1..." required class="form-input">
-                <button type="submit" class="form-button">表示</button>
-            </form>
-        </div>
-        `,
-
-        // ユーティリティ（テキスト成形など）
-        utils: {
-            escape: (str) => str.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m])),
-
-            // pubkeyからリンク付きの名前（またはnpubの一部）を返す
-            getNameLink: (pubkey, profile = {}) => {
-                const name = profile.display_name || profile.name || "";
-                const npub = NostrTools.nip19.npubEncode(pubkey);
-                const displayName = name ? Components.utils.escape(name) : `${npub.substring(0, 10)}...`;
-                // クリックで ?id=npub... へ移動
-                return `<a href="?id=${npub}" class="user-link" style="text-decoration: none; color: inherit; font-weight: bold;">${displayName}</a>`;
-            },
-
-            // 投稿本文をリッチにする（画像展開・リンク化）
-            formatContent: async (content, tags) => {
-                // 1. まずテキスト全体をエスケープ
-                let html = Components.utils.escape(content);
-
-                // 2. 先に改行を <br> に変換（これで本文の改行はOK）
-                html = html.replace(/\n/g, '<br>');
-
-                // 3. メディア（画像・動画・YouTube）とURLの処理
-                // ここで生成するHTMLには改行を入れないように連結します
-                const urlRegex = /https?:\/\/[\w/:%#\$&\?\(\)~\.=\+\-]+/g;
-
-                html = html.replace(urlRegex, (url) => {
-                    // --- YouTube ---
-                    const ytMatch = url.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-                    if (ytMatch) {
-                        const videoId = ytMatch[1];
-                        return `
-                        <div class="video-container youtube">
-                            <iframe src="https://www.youtube.com/embed/${videoId}" allowfullscreen></iframe>
-                        </div>
-                        `;
-                    }
-
-                    // --- 動画 ---
-                    if (/\.(mp4|webm|mov)(?:\?.*)?$/i.test(url)) {
-                        return `
-                        <div class="video-container">
-                            <video src="${url}" controls></video>
-                        </div>
-                        `;
-                    }
-
-                    // --- 画像 ---
-                    if (/\.(png|jpe?g|gif|webp|svg)(?:\?.*)?$/i.test(url)) {
-                        return `
-                        <div class="image-container">
-                            <img src="${url}" class="post-image" onclick="openModal('${url}')" onerror="this.style.display='none';">
-                        </div>
-                        `;
-                    }
-
-                    // --- 通常リンク ---
-                    return `<a href="${url}" target="_blank" rel="noopener" class="external-link">${url}</a>`;
-                });
-
-                // 4. Nostr ID (nostr:...) の処理
-                const nostrRegex = /nostr:(n(?:pub|event|ote|profile|addr)1[a-z0-9]+)/g;
-                html = html.replace(nostrRegex, (match, nip19Id) => {
-                    return `<div class="quote-placeholder" data-id="${nip19Id}"><a href="?id=${nip19Id}" class="nostr-link">nostr:${nip19Id.substring(0, 12)}...</a></div>`;
-                });
-
-                // 5. カスタム絵文字の置換
-                tags.filter(t => t[0] === 'emoji').forEach(([_, code, url]) => {
-                    const reg = new RegExp(`:${code}:`, 'g');
-                    html = html.replace(reg, `<img src="${url}" class="custom-emoji" title=":${code}:">`);
-                });
-
-                return html;
-            }
-        },
-
-        reactionSection: (reactions) => {
-            if (reactions.length === 0) return '';
-            return `<div class="reactions-summary">🌟 ${reactions.length} reactions</div>`;
-        },
-
-        replyCard: (event, contentHtml) => {
-            return `
-            <div class="reply-card">
-                <div class="reply-content">${contentHtml}</div>
-            </div>
-        `;
-        },
-        
-        quoteCard: (eventId, contentHtml = "読み込み中...", profile = {}) => {
-            const nameHtml = profile.pubkey ? Components.utils.getNameLink(profile.pubkey, profile) : (profile.name || "...");
-            return `
-        <div id="quote-${eventId}" class="quote-card" ...>
-            <div style="display: flex; align-items: center; gap: 5px; margin-bottom: 5px;">
-                <img src="${profile.picture || ''}" ...>
-                <span style="font-weight: bold;">${nameHtml}</span>
-            </div>
-            <div class="quote-content">${contentHtml}</div>
-        </div>
-        `;
-        }
-    };
-
-    // --- 3. ユーザーアクションの管理 ---
-    function setupEventListeners() {
-        // もどるボタン
-        const backBtns = [document.getElementById('btn-back'), document.getElementById('btn-back-footer')];
-        backBtns.forEach(btn => {
-            btn?.addEventListener('click', () => {
-                window.history.length > 1 ? window.history.back() : window.location.href = './';
-            });
-        });
-
-        // シェアボタン
-        document.getElementById('btn-share')?.addEventListener('click', () => {
-            navigator.clipboard.writeText(window.location.href).then(() => alert('URLをコピーしました'));
-        });
-
-        // 認証ボタン (外部の auth-ui.js を呼び出す想定)
-        document.getElementById('btn-auth')?.addEventListener('click', () => {
-            if (typeof showAuthUI === 'function') showAuthUI();
-        });
-    }
-
-    // --- 4. Workflow (データの取得から表示までの手順) ---
-
-    // プロフィール表示の流れ
-        async function startProfileWorkflow(decoded) {
-            showStatus('プロフィール情報を取得中...');
-
-            // npubまたはnprofileから公開鍵を取得
-            const pubkey = decoded.data.pubkey || decoded.data.id || decoded.data;
-
-            // リレーリストの決定（IDに紐づくリレーがあれば優先、なければFallback）
-            const relays = (decoded.data.relays && decoded.data.relays.length > 0)
-                ? decoded.data.relays
-                : FALLBACK_RELAYS;
-
-            try {
-                // 1. リレーに接続
-                await relayManager.connect(relays[0]);
-
-                // 2. 購読開始 (subId, filters, handler)
-                // relay-manager.js の仕様通り、3つの引数を渡します
-                relayManager.subscribe(
-                    'profile-query',           // subId
-                    {                          // filters
-                        kinds: [0],
-                        authors: [pubkey],
-                        limit: 1
-                    },
-                    (type, event) => {         // handler (コールバック)
-                        if (type === 'EVENT' && event) {
-                            try {
-                                const profile = JSON.parse(event.content);
-                                const npub = NostrTools.nip19.npubEncode(pubkey);
-
-                                // 3. 描画
-                                const renderArea = document.getElementById('render-area');
-                                renderArea.innerHTML = Components.profileCard(profile, npub);
-
-                                showStatus(''); // ステータスを消す
-
-                                // 4. 用が済んだら購読解除
-                                relayManager.unsubscribe('profile-query');
-                            } catch (e) {
-                                console.error("Profile parse error:", e);
-                            }
-                        }
-                    }
-                );
-
-            } catch (err) {
-                console.error("Connection error:", err);
-                showStatus('リレーへの接続に失敗しました');
-            }
+        function withTimeout(promise, ms, message) {
+            return Promise.race([
+                promise,
+                new Promise((_, reject) => setTimeout(() => reject(new Error(message || 'タイムアウトしました')), ms))
+            ]);
         }
 
-    // --- 1. まずイベントを1つだけ取ってくる関数 ---
-    async function fetchSingleEvent(originalId) {
-        const decoded = parseNevent(originalId);
-        if (!decoded) return null;
-
-        const { id, relays: hintRelays } = decoded;
-        const targetRelays = getPriorityRelays(hintRelays || []);
-
-        for (const url of targetRelays) {
-            try {
-                console.log(`[探索開始] ${url} に接続中...`);
-                const event = await window.relayManager.getEvent(url, { ids: [id] });
-
-                if (event) {
-                    console.log(`[発見！] ${url} でイベントを発見しました`);
-                    return { event, foundRelay: url };
-                }
-            } catch (error) {
-                console.warn(`[エラー] ${url} で問題が発生しました:`, error);
-            }
+        function getPriorityRelays(hintRelays) {
+            const cleaned = (hintRelays || []).filter(Boolean);
+            const combined = [...new Set([...cleaned, ...FALLBACK_RELAYS])];
+            return combined.slice(0, MAX_RELAYS_PER_QUERY);
         }
-        return null;
-    }
 
-    // --- 2. 振り分けを行うメインワークフロー ---
-    async function startEventWorkflow(originalId) {
-        try {
-            // 1. IDの解析
-            const decoded = parseNevent(originalId);
+        function showStatus(message) {
+            if (!statusElement) return;
+            statusElement.textContent = message;
+            statusElement.classList.toggle('hidden', !message);
+        }
 
-            // 解析に失敗した場合のガード
-            if (!decoded || !decoded.id) {
-                throw new Error("IDの形式が正しくありません。");
-            }
-
-            const renderArea = document.getElementById('render-area');
-
-            // ==========================================
-            // ケースA: npub または nprofile (ユーザー投稿一覧表示)
-            // ==========================================
-            if (originalId.startsWith('npub') || originalId.startsWith('nprofile')) {
-                const pubkey = decoded.id;
-                showStatus('ユーザーの投稿を取得中...');
-
-                // app.js の汎用メソッドを使って投稿を取得
-                // window.app が初期化されていることが前提
-                const posts = await window.app.fetchUserPosts(pubkey);
-
-                if (posts && posts.length > 0) {
-                    renderArea.innerHTML = ''; // エリアをクリア
-
-                    for (const post of posts) {
-                        // 第2引数 true: タイムラインモードで描画
-                        await renderStandardPost(post, true);
-                    }
-                    showStatus('');
-                } else {
-                    showStatus('投稿が見つかりませんでした。', true);
-                    renderArea.innerHTML = Components.inputForm();
-                    setupFormListener();
-                }
-                return; // 投稿一覧を出したらここで終了
-            }
-
-            // ==========================================
-            // ケースB: nevent / note (単一イベント詳細表示)
-            // ==========================================
-            const eventId = decoded.id;
-            const existingEvent = window.dataStore.getEvent(eventId);
-
-            let result;
-
-            // データの取得（キャッシュ or リレー）
-            if (existingEvent) {
-                result = { event: existingEvent, foundRelay: null };
+        function goBack() {
+            if (window.history.length > 1) {
+                window.history.back();
             } else {
-                showStatus('イベントをロード中...');
-                // fetchSingleEvent は nevent/note 用の既存ロジック
-                result = await fetchSingleEvent(originalId);
+                window.location.href = 'https://ompomz.github.io/tweetsrecap/tweet';
+            }
+        }
+
+        function copyUrl() {
+            navigator.clipboard.writeText(window.location.href)
+                .then(() => alert('URLがコピーされました！'))
+                .catch(err => { console.error('URLのコピーに失敗:', err); alert('URLのコピーに失敗しました。'); });
+        }
+
+        function copyCurrentId() {
+            const params = new URLSearchParams(window.location.search);
+            const id = (params.get('id') || '').trim();
+            if (!id) { alert('コピーできるIDが見つかりません。'); return; }
+            navigator.clipboard.writeText(id)
+                .then(() => alert('Nostr IDをコピーしました！'))
+                .catch(err => { console.error('コピー失敗:', err); alert('コピーに失敗しました。'); });
+        }
+
+        function showCopyButton() {
+            const btn = document.getElementById('copy-nevent-btn');
+            if (btn) btn.style.display = 'inline-block';
+        }
+
+        function showJumpButton(pubkey, originalId) {
+            const jumpBtn = document.getElementById('jump-to-okkake');
+            if (!jumpBtn) return;
+            try {
+                const npub = NostrTools.nip19.npubEncode(pubkey);
+                const okkakeUrl = `https://ompomz.github.io/flowgazer/okkake/?id=${encodeURIComponent(originalId)}&follow=${npub}`;
+                jumpBtn.style.display = 'inline-block';
+                jumpBtn.onclick = () => window.open(okkakeUrl, '_blank');
+            } catch (e) {
+                console.warn('jumpボタン設定失敗:', e);
+            }
+        }
+
+        function getPostTypeLabel(kind) {
+            switch (kind) {
+                case 1: return '投稿';
+                case 6: return 'リポスト';
+                case 7: return 'リアクション';
+                case 16: return '引用リポスト';
+                case 30023: return '記事';
+                case 40: return 'チャンネル作成';
+                case 41: return 'チャンネル情報更新';
+                case 42: return 'チャンネルメッセージ';
+                default: return 'イベント';
+            }
+        }
+
+        // --- カスタム絵文字置換（:shortcode: -> <img>） ---
+        function replaceCustomEmojis(html, customEmojiMap) {
+            if (!html || customEmojiMap.size === 0) return html;
+            let result = html;
+            customEmojiMap.forEach((url, shortcode) => {
+                const escaped = shortcode.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                const regex = new RegExp(`(?<=\\s|^|>)${escaped}(?=\\s|$|<)`, 'g');
+                result = result.replace(regex, `<img src="${url}" alt="${shortcode}" title="${shortcode}" class="custom-emoji custom-emoji-hover">`);
+            });
+            return result;
+        }
+
+        // ========================================
+        // データ取得（プロフィール・イベント・チャンネル情報）
+        // ========================================
+
+        async function fetchProfile(pubkey, hintRelays) {
+            if (profileCache.has(pubkey)) return profileCache.get(pubkey);
+            const relays = getPriorityRelays(hintRelays);
+            try {
+                const event = await withTimeout(
+                    pool.get(relays, { kinds: [0], authors: [pubkey] }),
+                    8000, 'プロフィール取得タイムアウト'
+                );
+                if (event) {
+                    const profile = JSON.parse(event.content);
+                    profileCache.set(pubkey, profile);
+                    return profile;
+                }
+            } catch (e) {
+                console.warn('プロフィール取得失敗:', pubkey.substring(0, 8), e.message);
+            }
+            profileCache.set(pubkey, null);
+            return null;
+        }
+
+        async function fetchProfilesBatch(pubkeys, hintRelays) {
+            const uncached = [...new Set(pubkeys)].filter(pk => pk && !profileCache.has(pk));
+            if (uncached.length === 0) return;
+            const relays = getPriorityRelays(hintRelays);
+            const latestByPubkey = new Map();
+            try {
+                const events = await withTimeout(
+                    pool.querySync(relays, { kinds: [0], authors: uncached }),
+                    8000, 'プロフィール一括取得タイムアウト'
+                );
+                events.forEach(ev => {
+                    const current = latestByPubkey.get(ev.pubkey);
+                    if (!current || ev.created_at > current.created_at) latestByPubkey.set(ev.pubkey, ev);
+                });
+            } catch (e) {
+                console.warn('プロフィール一括取得失敗:', e.message);
             }
 
-            // 結果の存在確認
-            if (!result || !result.event) {
-                showStatus('イベントが見つかりませんでした。', true);
-                if (renderArea) {
-                    renderArea.innerHTML = Components.inputForm();
-                    setupFormListener();
+            uncached.forEach(pk => {
+                const ev = latestByPubkey.get(pk);
+                if (ev) {
+                    try { profileCache.set(pk, JSON.parse(ev.content)); }
+                    catch (e) { profileCache.set(pk, null); }
+                } else if (!profileCache.has(pk)) {
+                    profileCache.set(pk, null);
                 }
+            });
+        }
+
+        async function fetchEventById(id, hintRelays) {
+            if (eventCache.has(id)) return eventCache.get(id);
+            const relays = getPriorityRelays(hintRelays);
+            try {
+                const event = await withTimeout(
+                    pool.get(relays, { ids: [id] }),
+                    10000, 'イベント取得タイムアウト'
+                );
+                eventCache.set(id, event || null);
+                return event || null;
+            } catch (e) {
+                console.warn('イベント取得失敗:', id.substring(0, 8), e.message);
+                eventCache.set(id, null);
+                return null;
+            }
+        }
+
+        async function fetchChannelMeta(channelId, hintRelays) {
+            if (channelMetaCache.has(channelId)) return channelMetaCache.get(channelId);
+            const relays = getPriorityRelays(hintRelays);
+            let meta = null;
+
+            // kind:41（チャンネル情報更新）を優先
+            try {
+                const metaEvents = await withTimeout(
+                    pool.querySync(relays, { kinds: [41], '#e': [channelId] }),
+                    6000, 'チャンネル情報(kind41)取得タイムアウト'
+                );
+                if (metaEvents.length > 0) {
+                    metaEvents.sort((a, b) => b.created_at - a.created_at);
+                    const parsed = JSON.parse(metaEvents[0].content);
+                    meta = { name: parsed.name || null, about: parsed.about || null, picture: parsed.picture || null };
+                }
+            } catch (e) {
+                console.warn('kind41取得失敗:', e.message);
+            }
+
+            // 名前が取れなければ kind:40（チャンネル作成）で補完
+            if (!meta || !meta.name) {
+                try {
+                    const createEvent = await withTimeout(
+                        pool.get(relays, { kinds: [40], ids: [channelId] }),
+                        6000, 'チャンネル情報(kind40)取得タイムアウト'
+                    );
+                    if (createEvent) {
+                        const parsed = JSON.parse(createEvent.content);
+                        meta = meta || {};
+                        meta.name = meta.name || parsed.name || null;
+                        meta.about = meta.about || parsed.about || null;
+                        meta.picture = meta.picture || parsed.picture || null;
+                    }
+                } catch (e) {
+                    console.warn('kind40取得失敗:', e.message);
+                }
+            }
+
+            const result = meta || {};
+            result.name = result.name || `Channel ${channelId.substring(0, 8)}`;
+            result.about = result.about || null;
+            result.picture = result.picture || null;
+            channelMetaCache.set(channelId, result);
+            return result;
+        }
+
+        // ========================================
+        // ID解析（npub / nprofile / note / nevent / naddr）
+        // ========================================
+
+        function parseInput(raw) {
+            const input = (raw || '').trim();
+            if (!input) return null;
+            try {
+                const decoded = NostrTools.nip19.decode(input);
+                switch (decoded.type) {
+                    case 'npub':
+                        return { kind: 'profile', pubkey: decoded.data, relays: [] };
+                    case 'nprofile':
+                        return { kind: 'profile', pubkey: decoded.data.pubkey, relays: decoded.data.relays || [] };
+                    case 'note':
+                        return { kind: 'event', id: decoded.data, relays: [] };
+                    case 'nevent':
+                        return { kind: 'event', id: decoded.data.id, relays: decoded.data.relays || [] };
+                    case 'naddr':
+                        return {
+                            kind: 'addr',
+                            pubkey: decoded.data.pubkey,
+                            addrKind: decoded.data.kind,
+                            identifier: decoded.data.identifier,
+                            relays: decoded.data.relays || []
+                        };
+                    default:
+                        return null;
+                }
+            } catch (e) {
+                console.error('NIP-19デコードエラー:', e);
+                return null;
+            }
+        }
+
+        // ========================================
+        // 本文フォーマット（エスケープ → linkify → 絵文字 → 引用カード展開）
+        // ========================================
+
+        async function formatPostContent(content, tags, options) {
+            const opts = options || { expandMedia: true };
+            let html = MyNostrUtils.escapeHtml(content || '');
+            html = html.replace(/\n/g, '<br>');
+            html = MyNostrUtils.linkify(html, opts);
+
+            const customEmojiMap = new Map();
+            (tags || []).filter(t => t[0] === 'emoji' && t[1] && t[2]).forEach(([, shortcode, url]) => {
+                customEmojiMap.set(`:${shortcode}:`, url);
+            });
+            html = replaceCustomEmojis(html, customEmojiMap);
+
+            // nostr:xxxx 参照をカード化する。
+            // 【重要】MyNostrUtils.linkify は表示テキストを10文字+"..."に短縮するため、
+            // 表示テキストからIDを取り出すと壊れる。hrefのクエリに完全なIDが入っているのでそちらを使う。
+            const temp = document.createElement('div');
+            temp.innerHTML = html;
+            const nostrLinks = Array.from(temp.querySelectorAll('a.nostr-ref'));
+            const tasks = nostrLinks.map(async (link) => {
+                const text = link.textContent || '';
+                if (!text.startsWith('nostr:')) return;
+                try {
+                    const href = link.getAttribute('href');
+                    const url = new URL(href, window.location.href);
+                    const nip19Id = url.searchParams.get('id');
+                    if (!nip19Id) return;
+                    const cardHtml = await createNostrCard(nip19Id);
+                    if (cardHtml) link.outerHTML = cardHtml;
+                } catch (e) {
+                    console.warn('引用カード生成失敗:', e.message);
+                }
+            });
+            if (tasks.length > 0) await Promise.all(tasks);
+
+            return temp.innerHTML;
+        }
+
+        async function formatEmojiOnly(content, tags) {
+            if (content === '+') return '⭐';
+            if (/^:[a-zA-Z0-9_+-]+:$/.test(content)) {
+                const map = new Map();
+                (tags || []).filter(t => t[0] === 'emoji' && t[1] && t[2]).forEach(([, code, url]) => map.set(`:${code}:`, url));
+                if (map.has(content)) {
+                    return `<img src="${map.get(content)}" class="custom-emoji" alt="${content}" title="${content}">`;
+                }
+            }
+            return MyNostrUtils.escapeHtml(content);
+        }
+
+        // ========================================
+        // プロフィール表示の共通部品
+        // ========================================
+
+        function createProfileHtml(pubkey, profile, isLink) {
+            const link = isLink === undefined ? true : isLink;
+            const picture = (profile && profile.picture && profile.picture.trim() !== '') ? profile.picture : DEFAULT_PROFILE_IMAGE;
+            const npub = NostrTools.nip19.npubEncode(pubkey);
+            const name = MyNostrUtils.getDisplayName(profile, pubkey);
+            const nip05 = (profile && profile.nip05) ? MyNostrUtils.escapeHtml(profile.nip05) : `${npub.substring(0, 13)}...`;
+
+            const inner = `
+        <div class="profile">
+          <img src="${picture}" class="profile-image" alt="" onerror="this.src='${DEFAULT_PROFILE_IMAGE}'">
+          <div>
+            <span class="profile-name" style="color:${MyNostrUtils.getHslColor(pubkey)}">${MyNostrUtils.escapeHtml(name)}</span>
+            <span class="profile-nip05">${nip05}</span>
+          </div>
+        </div>`;
+
+            if (!link) return inner;
+            return `<a href="?id=${npub}" class="profile-link" style="text-decoration:none; color:inherit;">${inner}</a>`;
+        }
+
+        // ========================================
+        // 引用カード（nostr: 参照の展開・入れ子は1階層まで）
+        // ========================================
+
+        async function buildEventPreviewCard(event, nip19Id) {
+            const profile = await fetchProfile(event.pubkey);
+            const date = new Date(event.created_at * 1000).toLocaleString();
+            const label = getPostTypeLabel(event.kind);
+            const rawContent = event.kind === 40 || event.kind === 41
+                ? (() => { try { return JSON.parse(event.content).name || event.content; } catch (e) { return event.content; } })()
+                : (event.content || '');
+            const shortContent = rawContent.length > 150 ? rawContent.substring(0, 150) + '...' : rawContent;
+
+            // 入れ子カードはこれ以上展開しない（無限再帰防止）簡易フォーマット
+            let contentHtml = MyNostrUtils.escapeHtml(shortContent).replace(/\n/g, '<br>');
+            contentHtml = MyNostrUtils.linkify(contentHtml, { expandMedia: false });
+
+            return `
+        <a href="?id=${nip19Id}" class="quote-link">
+          <div class="related-post-card">
+            ${createProfileHtml(event.pubkey, profile, false)}
+            <div class="post-info">
+              <span>${date}</span>
+              <span>${label}</span>
+            </div>
+            <div class="post-content"><p class="post-text">${contentHtml}</p></div>
+          </div>
+        </a>`;
+        }
+
+        async function createNostrCard(nip19Id) {
+            let decoded;
+            try {
+                decoded = NostrTools.nip19.decode(nip19Id);
+            } catch (e) {
+                return `<div class="related-post-card">無効なNostr IDです</div>`;
+            }
+
+            if (decoded.type === 'npub' || decoded.type === 'nprofile') {
+                const pubkey = decoded.data.pubkey || decoded.data;
+                const hintRelays = decoded.data.relays || [];
+                const profile = await fetchProfile(pubkey, hintRelays);
+                const npub = NostrTools.nip19.npubEncode(pubkey);
+                return `
+          <a href="?id=${npub}" class="quote-link">
+            <div class="related-post-card">
+              ${createProfileHtml(pubkey, profile, false)}
+              <div class="post-content">${MyNostrUtils.escapeHtml((profile && profile.about) || '')}</div>
+            </div>
+          </a>`;
+            }
+
+            if (decoded.type === 'naddr') {
+                const relays = getPriorityRelays(decoded.data.relays || []);
+                try {
+                    const ev = await withTimeout(
+                        pool.get(relays, {
+                            kinds: [decoded.data.kind],
+                            authors: [decoded.data.pubkey],
+                            '#d': [decoded.data.identifier]
+                        }),
+                        8000, '記事取得タイムアウト'
+                    );
+                    if (!ev) return `<div class="related-post-card">記事が見つかりませんでした</div>`;
+                    return await buildEventPreviewCard(ev, nip19Id);
+                } catch (e) {
+                    return `<div class="related-post-card">記事の取得に失敗しました</div>`;
+                }
+            }
+
+            let eventId = null;
+            let hintRelays = [];
+            if (decoded.type === 'note') {
+                eventId = decoded.data;
+            } else if (decoded.type === 'nevent') {
+                eventId = decoded.data.id;
+                hintRelays = decoded.data.relays || [];
+            } else {
+                return null;
+            }
+
+            const event = await fetchEventById(eventId, hintRelays);
+            if (!event) return `<div class="related-post-card">イベントが見つかりませんでした</div>`;
+            return await buildEventPreviewCard(event, nip19Id);
+        }
+
+        // ========================================
+        // メインイベント種別ごとのレンダリング
+        // ========================================
+
+        async function renderStandardPost(event, originalId) {
+            const profile = await fetchProfile(event.pubkey);
+            const contentHtml = (event.kind === 30023 && window.marked)
+                ? window.marked.parse(event.content || '')
+                : await formatPostContent(event.content, event.tags);
+
+            const date = new Date(event.created_at * 1000).toLocaleString();
+            const client = (event.tags.find(t => t[0] === 'client') || [])[1] || '';
+
+            mainEventContainer.innerHTML = `
+        ${createProfileHtml(event.pubkey, profile)}
+        <div class="post-content">${contentHtml}</div>
+        <div class="post-info">
+          <span>${date}</span>
+          ${client ? `<span>via ${MyNostrUtils.escapeHtml(client)}</span>` : ''}
+        </div>`;
+
+            showCopyButton();
+            if (event.kind === 1) showJumpButton(event.pubkey, originalId);
+
+            await loadRelatedData(event.id);
+        }
+
+        async function renderRepost(event) {
+            const profile = await fetchProfile(event.pubkey);
+            const date = new Date(event.created_at * 1000).toLocaleString();
+            const targetTag = event.tags.find(t => t[0] === 'e');
+            const targetId = targetTag ? targetTag[1] : null;
+            const hintRelay = (targetTag && targetTag[2]) ? [targetTag[2]] : [];
+
+            mainEventContainer.innerHTML = `
+        <div class="repost-banner">
+          ${createProfileHtml(event.pubkey, profile)}
+          <div class="post-info"><span>${date}</span><span>${event.kind === 6 ? 'リポストしました' : '引用リポストしました'}</span></div>
+        </div>
+        <div id="repost-target"><p style="color:#888;">元投稿を読み込み中...</p></div>`;
+
+            showCopyButton();
+
+            if (!targetId) return;
+            const targetEvent = await fetchEventById(targetId, hintRelay);
+            const targetContainer = document.getElementById('repost-target');
+            if (!targetEvent) {
+                targetContainer.innerHTML = `<p style="color:#ccc; padding:0.5rem;">元投稿（${targetId.substring(0, 8)}）が見つかりませんでした</p>`;
+                return;
+            }
+            const targetProfile = await fetchProfile(targetEvent.pubkey);
+            const targetContentHtml = await formatPostContent(targetEvent.content, targetEvent.tags);
+            targetContainer.innerHTML = `
+        <div class="related-post-card">
+          ${createProfileHtml(targetEvent.pubkey, targetProfile)}
+          <div class="post-content">${targetContentHtml}</div>
+          <div class="post-info"><span>${new Date(targetEvent.created_at * 1000).toLocaleString()}</span></div>
+        </div>`;
+
+            await loadRelatedData(event.id);
+        }
+
+        async function renderReactionEvent(event) {
+            const profile = await fetchProfile(event.pubkey);
+            const rawEmoji = (event.content && event.content.trim() !== '') ? event.content.trim() : '+';
+            const emojiHtml = await formatEmojiOnly(rawEmoji, event.tags);
+            const date = new Date(event.created_at * 1000).toLocaleString();
+
+            const eTags = (event.tags || []).filter(t => t[0] === 'e');
+            const targetTag = eTags.find(t => t[3] === 'reply') || eTags[eTags.length - 1] || null;
+            const targetId = targetTag ? targetTag[1] : null;
+            const hintRelay = (targetTag && targetTag[2]) ? [targetTag[2]] : [];
+
+            mainEventContainer.innerHTML = `
+        <div class="reaction-container">
+          <div class="reaction-headline">
+            <span class="reaction-headline-emoji">${emojiHtml}</span>
+            <span>リアクションしました</span>
+          </div>
+          ${createProfileHtml(event.pubkey, profile)}
+          <div class="post-info"><span>${date}</span></div>
+        </div>
+        <div id="reaction-target"><p style="color:#888;">対象の投稿を読み込み中...</p></div>`;
+
+            showCopyButton();
+
+            if (!targetId) return;
+            const targetEvent = await fetchEventById(targetId, hintRelay);
+            const targetContainer = document.getElementById('reaction-target');
+            if (!targetEvent) {
+                targetContainer.innerHTML = `<p style="color:#ccc; padding:0.5rem;">対象の投稿（${targetId.substring(0, 8)}）が見つかりませんでした</p>`;
+                return;
+            }
+            const targetProfile = await fetchProfile(targetEvent.pubkey);
+            const targetContentHtml = await formatPostContent(targetEvent.content, targetEvent.tags);
+            targetContainer.innerHTML = `
+        <div style="margin:0.5rem 0; font-size:0.8rem; color:#888;">👇リアクション元</div>
+        <div class="related-post-card">
+          ${createProfileHtml(targetEvent.pubkey, targetProfile)}
+          <div class="post-content">${targetContentHtml}</div>
+          <div class="post-info"><span>${new Date(targetEvent.created_at * 1000).toLocaleString()}</span></div>
+        </div>`;
+        }
+
+        async function renderChannelRoot(event) {
+            let metadata = {};
+            try { metadata = JSON.parse(event.content); } catch (e) { /* noop */ }
+
+            const channelId = event.kind === 40 ? event.id : ((event.tags.find(t => t[0] === 'e') || [])[1] || event.id);
+            const meta = await fetchChannelMeta(channelId);
+            const name = metadata.name || meta.name;
+            const about = metadata.about || meta.about || '説明はありません';
+            const picture = metadata.picture || meta.picture || '';
+
+            mainEventContainer.innerHTML = `
+        <div class="channel-card">
+          <div class="channel-card-header">
+            ${picture
+                    ? `<img src="${picture}" class="channel-picture" onerror="this.style.display='none'">`
+                    : `<div class="channel-picture channel-picture-placeholder">💬</div>`}
+            <div>
+              <h2 class="channel-name">${MyNostrUtils.escapeHtml(name)}</h2>
+              <code class="channel-kind-label">${event.kind === 40 ? 'Kind 40（チャンネル作成）' : 'Kind 41（チャンネル情報更新）'}</code>
+            </div>
+          </div>
+          <p class="channel-about">${MyNostrUtils.escapeHtml(about)}</p>
+          <button id="load-channel-messages" class="channel-load-btn">このチャンネルのメッセージを読み込む</button>
+        </div>
+        <div id="channel-messages"></div>`;
+
+            showCopyButton();
+            document.getElementById('load-channel-messages')?.addEventListener('click', () => loadChannelMessages(channelId));
+        }
+
+        async function loadChannelMessages(channelId) {
+            const container = document.getElementById('channel-messages');
+            container.innerHTML = `<p style="color:#888; padding:0.5rem;">メッセージを読み込み中...</p>`;
+            const relays = getPriorityRelays();
+            try {
+                const events = await withTimeout(
+                    pool.querySync(relays, { kinds: [42], '#e': [channelId], limit: 50 }),
+                    10000, 'メッセージ取得タイムアウト'
+                );
+                events.sort((a, b) => a.created_at - b.created_at);
+
+                if (events.length === 0) {
+                    container.innerHTML = `<p style="color:#888; padding:0.5rem;">メッセージが見つかりませんでした</p>`;
+                    return;
+                }
+
+                await fetchProfilesBatch(events.map(e => e.pubkey));
+                const rows = await Promise.all(events.map(ev => buildChatRow(ev)));
+                container.innerHTML = `<div class="chat-list">${rows.join('')}</div>`;
+            } catch (e) {
+                console.error('チャンネルメッセージ取得失敗:', e);
+                container.innerHTML = `<p style="color:#c00; padding:0.5rem;">メッセージの取得に失敗しました</p>`;
+            }
+        }
+
+        async function buildChatRow(event) {
+            const profile = profileCache.get(event.pubkey);
+            const name = MyNostrUtils.getDisplayName(profile, event.pubkey);
+            const picture = (profile && profile.picture) ? profile.picture : DEFAULT_PROFILE_IMAGE;
+            const npub = NostrTools.nip19.npubEncode(event.pubkey);
+            const time = new Date(event.created_at * 1000).toLocaleTimeString();
+            const contentHtml = await formatPostContent(event.content, event.tags, { expandMedia: false });
+            const nevent = NostrTools.nip19.neventEncode({ id: event.id, author: event.pubkey, kind: 42 });
+
+            return `
+        <div class="chat-row" id="msg-${event.id}">
+          <img src="${picture}" class="chat-avatar" onerror="this.src='${DEFAULT_PROFILE_IMAGE}'">
+          <div class="chat-body">
+            <div class="chat-meta">
+              <a href="?id=${npub}" class="chat-name">${MyNostrUtils.escapeHtml(name)}</a>
+              <a href="?id=${nevent}" class="chat-time">${time}</a>
+            </div>
+            <div class="chat-bubble">${contentHtml}</div>
+          </div>
+        </div>`;
+        }
+
+        async function renderChannelMessage(event) {
+            const rootTag = event.tags.find(t => t[0] === 'e' && t[3] === 'root') || event.tags.find(t => t[0] === 'e');
+            const channelId = rootTag ? rootTag[1] : null;
+            const relayHint = (rootTag && rootTag[2]) ? [rootTag[2]] : [];
+
+            const profile = await fetchProfile(event.pubkey);
+            const contentHtml = await formatPostContent(event.content, event.tags);
+            const date = new Date(event.created_at * 1000).toLocaleString();
+
+            let channelBannerHtml = '';
+            if (channelId) {
+                const meta = await fetchChannelMeta(channelId, relayHint);
+                const channelNevent = NostrTools.nip19.neventEncode({ id: channelId, relays: relayHint });
+                channelBannerHtml = `
+          <a href="?id=${channelNevent}" class="channel-context-banner">
+            💬 チャンネル: <span class="channel-context-name">${MyNostrUtils.escapeHtml(meta.name)}</span>
+          </a>`;
+            }
+
+            mainEventContainer.innerHTML = `
+        ${channelBannerHtml}
+        ${createProfileHtml(event.pubkey, profile)}
+        <div class="post-content">${contentHtml}</div>
+        <div class="post-info"><span>${date}</span></div>`;
+
+            showCopyButton();
+            await loadRelatedData(event.id);
+        }
+
+        function renderGenericEvent(event) {
+            mainEventContainer.innerHTML = `
+        <div class="generic-event-card">
+          <h3>未対応のイベント種別です（Kind: ${event.kind}）</h3>
+          <pre class="generic-event-json">${MyNostrUtils.escapeHtml(JSON.stringify(event, null, 2))}</pre>
+        </div>`;
+            showCopyButton();
+        }
+
+        // ========================================
+        // 関連データ（リプライ・リアクション・リポスト）
+        // ========================================
+
+        async function loadRelatedData(eventId) {
+            const relays = getPriorityRelays();
+            try {
+                const [replies, reactions, reposts] = await Promise.all([
+                    withTimeout(pool.querySync(relays, { kinds: [1, 42], '#e': [eventId] }), 10000, '返信取得タイムアウト')
+                        .catch(e => { console.warn('返信取得失敗:', e.message); return []; }),
+                    withTimeout(pool.querySync(relays, { kinds: [7], '#e': [eventId] }), 10000, 'リアクション取得タイムアウト')
+                        .catch(e => { console.warn('リアクション取得失敗:', e.message); return []; }),
+                    withTimeout(pool.querySync(relays, { kinds: [6, 16], '#e': [eventId] }), 10000, 'リポスト取得タイムアウト')
+                        .catch(e => { console.warn('リポスト取得失敗:', e.message); return []; })
+                ]);
+
+                const filteredReplies = replies.filter(e => e.id !== eventId);
+                const allPubkeys = [...filteredReplies, ...reactions, ...reposts].map(e => e.pubkey);
+                await fetchProfilesBatch(allPubkeys);
+
+                if (reactions.length > 0) renderReactionsList(reactions);
+                if (filteredReplies.length > 0 || reposts.length > 0) {
+                    await renderRelatedList(filteredReplies, reposts);
+                }
+            } catch (e) {
+                console.error('関連データ取得失敗:', e);
+            }
+        }
+
+        function renderReactionsList(reactions) {
+            const groups = new Map();
+            reactions.forEach(r => {
+                const emoji = (r.content || '+').trim() || '+';
+                if (!groups.has(emoji)) groups.set(emoji, { pubkeys: new Set(), tags: r.tags });
+                groups.get(emoji).pubkeys.add(r.pubkey);
+            });
+
+            let html = '';
+            for (const [emoji, group] of groups.entries()) {
+                const displayEmoji = emoji === '+' ? '⭐' : emoji;
+                const emojiMap = new Map();
+                (group.tags || []).filter(t => t[0] === 'emoji' && t[1] && t[2]).forEach(([, code, url]) => emojiMap.set(`:${code}:`, url));
+                const emojiHtml = emojiMap.has(displayEmoji)
+                    ? `<img src="${emojiMap.get(displayEmoji)}" class="custom-emoji" alt="${displayEmoji}">`
+                    : MyNostrUtils.escapeHtml(displayEmoji);
+
+                const avatars = Array.from(group.pubkeys).map(pk => {
+                    const profile = profileCache.get(pk);
+                    const pic = (profile && profile.picture) ? profile.picture : DEFAULT_PROFILE_IMAGE;
+                    const npub = NostrTools.nip19.npubEncode(pk);
+                    const name = MyNostrUtils.getDisplayName(profile, pk);
+                    return `<a href="?id=${npub}"><img src="${pic}" class="reaction-avatar" title="${MyNostrUtils.escapeHtml(name)}" onerror="this.src='${DEFAULT_PROFILE_IMAGE}'"></a>`;
+                }).join('');
+
+                html += `
+          <div class="reaction-group">
+            <span class="reaction-emoji">${emojiHtml}</span>
+            <div class="reaction-avatars">${avatars}</div>
+          </div>`;
+            }
+            reactionsList.innerHTML = html;
+            reactionsSection.style.display = 'block';
+        }
+
+        async function renderRelatedList(replies, reposts) {
+            const all = [
+                ...replies.map(e => ({ event: e, label: e.kind === 42 ? 'チャンネル返信' : 'リプライ' })),
+                ...reposts.map(e => ({ event: e, label: e.kind === 6 ? 'リポスト' : '引用リポスト' }))
+            ];
+            all.sort((a, b) => a.event.created_at - b.event.created_at);
+
+            const cards = await Promise.all(all.map(async ({ event, label }) => {
+                const profile = profileCache.get(event.pubkey);
+                const date = new Date(event.created_at * 1000).toLocaleString();
+                let bodyHtml;
+                if (event.kind === 6) {
+                    const repostUser = MyNostrUtils.getDisplayName(profile, event.pubkey);
+                    bodyHtml = `<div class="post-content">${MyNostrUtils.escapeHtml(repostUser)}さんがリポストしました</div>`;
+                } else {
+                    bodyHtml = `<div class="post-content">${await formatPostContent(event.content, event.tags, { expandMedia: false })}</div>`;
+                }
+                const nevent = NostrTools.nip19.neventEncode({ id: event.id, author: event.pubkey, kind: event.kind });
+                return `
+          <a href="?id=${nevent}" class="quote-link">
+            <div class="related-post-card">
+              ${createProfileHtml(event.pubkey, profile, false)}
+              <div class="post-info">
+                <span>${date}</span>
+                <span class="post-link-label">${label}</span>
+              </div>
+              ${bodyHtml}
+            </div>
+          </a>`;
+            }));
+
+            relatedEventsList.innerHTML = cards.join('');
+            relatedEventsSection.style.display = 'block';
+        }
+
+        // ========================================
+        // プロフィールページ
+        // ========================================
+
+        async function renderProfilePage(pubkey, hintRelays) {
+            const relays = getPriorityRelays(hintRelays);
+            const profileEvent = await withTimeout(
+                pool.get(relays, { kinds: [0], authors: [pubkey] }),
+                10000, 'プロフィール取得タイムアウト'
+            );
+
+            if (!profileEvent) {
+                showStatus('プロフィールが見つかりませんでした');
                 return;
             }
 
-            const { event, foundRelay } = result;
-            console.log(`📡 Event Kind: ${event.kind} (Source: ${foundRelay || 'Cache'})`);
+            let profile;
+            try { profile = JSON.parse(profileEvent.content); } catch (e) { profile = {}; }
+            profileCache.set(pubkey, profile);
 
-            // 3. Kind ごとの表示処理に分岐
-            switch (event.kind) {
-                case 1:
-                case 30023:
-                    await renderStandardPost(event, false); // 詳細表示
-                    break;
-                case 6:
-                    if (typeof renderRepost === 'function') {
-                        renderRepost(event);
-                    } else {
-                        renderGenericEvent(event, "リポストされました");
-                    }
-                    break;
-                case 7:
-                    await renderReactionEvent(event);
-                    break;
-                case 40:
-                case 41:
-                    ChannelHandlers.renderMetadata(event);
-                    break;
-                case 42:
-                    await ChannelHandlers.renderMessage(event);
-                    break;
-                default:
-                    renderGenericEvent(event);
-                    break;
-            }
+            const npub = NostrTools.nip19.npubEncode(pubkey);
+            const aboutHtml = await formatPostContent(profile.about || '', profileEvent.tags);
 
-            // 4. 関連データ（リプライ・リアクション）の取得
-            const relaysForRelated = foundRelay
-                ? [...new Set([foundRelay, ...FALLBACK_RELAYS])]
-                : FALLBACK_RELAYS;
-
-            fetchRelatedData(event.id, relaysForRelated);
-            showStatus('');
-
-        } catch (error) {
-            console.error("Workflow Error:", error);
-            showStatus('エラー: ' + error.message, true);
-
-            const renderArea = document.getElementById('render-area');
-            if (renderArea) {
-                renderArea.innerHTML = Components.inputForm();
-                setupFormListener();
-            }
-        }
-    }
-
-    /**
-     * Kind 1 や 30023 などの標準的な投稿をレンダリングする
-     */
-    async function renderStandardPost(event) {
-        const renderArea = document.getElementById('render-area');
-        const profile = window.dataStore.getProfile(event.pubkey);
-
-        // 1. 本文をフォーマット（HTML化）
-        const contentHtml = await Components.utils.formatContent(event.content, event.tags);
-
-        // 2. メインエリアを描画
-        renderArea.innerHTML = Components.eventBody(event, contentHtml, profile || {});
-
-        // 3. プロフィールがなければ取得をリクエスト
-        if (!profile) {
-            window.profileFetcher.request(event.pubkey);
-        }
-
-        // 4. 本文の中の「引用 (nostr:...)」をスキャンして展開
-        if (typeof QuoteManager !== 'undefined') {
-            QuoteManager.scanAndRender();
-        }
-
-        // 5. 下部のリプライやリアクションを取得開始
-        // IDに紐づくリレーがあれば優先、なければFallback
-        const relays = FALLBACK_RELAYS;
-        fetchRelatedData(event.id, relays);
-    }
-
-    // --- 関連データ（リプライ・リアクション）の取得 ---
-    async function fetchRelatedData(eventId, relays) {
-        const reactionsList = document.getElementById('reactions-list');
-        const relatedList = document.getElementById('related-events-list');
-        const subContent = document.getElementById('sub-content');
-
-        relayManager.subscribe('related-data', { '#e': [eventId], kinds: [1, 7] }, async (type, event) => {
-            if (type === 'EVENT' && event) {
-                window.dataStore.addEvent(event);
-                subContent.classList.remove('hidden');
-
-                if (event.kind === 7) {
-                    // --- 1. リアクションの集計 ---
-                    const allReactions = Array.from(window.dataStore.events.values()).filter(e =>
-                        e.kind === 7 && e.tags.some(t => t[0] === 'e' && t[1] === eventId)
-                    );
-
-                    const reactionGroups = new Map();
-                    allReactions.forEach(r => {
-                        const emoji = r.content.trim() || '+';
-                        if (!reactionGroups.has(emoji)) {
-                            reactionGroups.set(emoji, { pubkeys: new Set(), event: r });
-                        }
-                        reactionGroups.get(emoji).pubkeys.add(r.pubkey);
-                    });
-
-                    // --- 2. HTMLの組み立て ---
-                    let html = '';
-                    for (const [emoji, group] of reactionGroups.entries()) {
-                        const emojiHtml = await Components.utils.formatContent(emoji === '+' ? '⭐' : emoji, group.event.tags);
-
-                        const avatarsHtml = Array.from(group.pubkeys).map(pubkey => {
-                            const profile = window.dataStore.getProfile(pubkey);
-
-                            // プロフィールがなければ取得を依頼する
-                            if (!profile) {
-                                window.profileFetcher.request(pubkey);
-                            }
-
-                            const pic = profile?.picture || 'https://ompomz.github.io/favicon.ico';
-                            const name = profile?.name || '...';
-                            const npub = NostrTools.nip19.npubEncode(pubkey);
-
-                            return `
-                        <a href="?id=${npub}">
-                            <img src="${pic}" class="reaction-avatar" title="${Components.utils.escape(name)}" onerror="this.src='https://ompomz.github.io/favicon.ico'">
-                        </a>`;
-                        }).join('');
-
-                        html += `
-                    <div class="reaction-group">
-                        <span class="reaction-emoji">${emojiHtml}</span>
-                        <div class="reaction-avatars">${avatarsHtml}</div>
-                    </div>`;
-                    }
-                    reactionsList.innerHTML = html;
-
-                } else if (event.kind === 1) {
-                    // --- リプライの処理 ---
-                    const html = await Components.utils.formatContent(event.content, event.tags);
-                    const profile = window.dataStore.getProfile(event.pubkey);
-
-                    // プロフィールがなければ取得依頼
-                    if (!profile) {
-                        window.profileFetcher.request(event.pubkey);
-                    }
-
-                    // リプライを画面に追加（重複表示を防ぐため、すでにあるかチェックするとより安全です）
-                    if (!document.getElementById(`reply-${event.id}`)) {
-                        const replyWrapper = document.createElement('div');
-                        replyWrapper.id = `reply-${event.id}`;
-                        replyWrapper.innerHTML = Components.replyCard(event, html);
-                        relatedList.appendChild(replyWrapper);
-                    }
-                }
-            }
-        });
-    }
-
-    /**
-     * Kind 7 (リアクション) のレンダリング
-     */
-    async function renderReactionEvent(event) {
-        const renderArea = document.getElementById('render-area');
-
-        // 1. リアクションの内容（通常は "+" や "⭐"、カスタム絵文字なら :name:）
-        const emoji = event.content === "" ? "⭐" : event.content;
-
-        // 2. 対象となるイベントID（eタグ）を探す
-        const targetEventId = event.tags.find(t => t[0] === 'e')?.[1];
-
-        // 3. 本文の整形（カスタム絵文字対応のためフォーマッタを通す）
-        const emojiHtml = await Components.utils.formatContent(emoji, event.tags);
-        const profile = window.dataStore.getProfile(event.pubkey);
-
-        // ★名前リンクの生成
-        const nameHtml = (typeof Components.utils.getNameLink === 'function') 
-            ? Components.utils.getNameLink(event.pubkey, profile)
-            : (() => {
-                const name = profile?.display_name || profile?.name || event.pubkey.substring(0, 8);
-                const npub = NostrTools.nip19.npubEncode(event.pubkey);
-                return `<a href="?id=${npub}" style="text-decoration: none; color: inherit; font-weight: bold;">${Components.utils.escape(name)}</a>`;
-            })();
-
-        renderArea.innerHTML = `
-        <div class="reaction-container">
-        <div style="font-size: 1.2rem; display: flex; align-items: center; gap: 10px;">
-            <span style="font-size: 2rem;">${emojiHtml}</span>
-            <span>リアクションされました</span>
-        </div>
-        <div class="post-footer" style="color:#666">By: ${nameHtml}</div>
-        </div>
-        <div id="reaction-target-root">
-        <p style="color: #888; font-size: 0.8rem;">対象の投稿を読み込み中...</p>
+            mainEventContainer.innerHTML = `
+        <div class="profile-card">
+          <div class="profile-header">
+            <img src="${profile.picture || DEFAULT_PROFILE_IMAGE}" class="profile-picture" onerror="this.src='${DEFAULT_PROFILE_IMAGE}'">
+            <div class="profile-info-container">
+              <h2 class="profile-name">${MyNostrUtils.escapeHtml(profile.name || profile.display_name || 'No Name')}</h2>
+              <div class="npub-container">
+                <span id="npub-text">${npub}</span>
+                <span class="copy-icon" id="copy-npub-icon" title="npubをコピー">📋</span>
+              </div>
+              <p class="nip05">${profile.nip05 ? MyNostrUtils.escapeHtml(profile.nip05) : 'NIP-05未設定'}</p>
+            </div>
+          </div>
+          <p class="about-text">${aboutHtml}</p>
         </div>`;
 
-        // 4. プロフィールがなければ取得
-        if (!profile) {
-            window.profileFetcher.request(event.pubkey);
+            document.getElementById('copy-npub-icon')?.addEventListener('click', async () => {
+                try { await navigator.clipboard.writeText(npub); alert('npubをコピーしました！'); }
+                catch (e) { alert('コピーに失敗しました。'); }
+            });
+
+            showCopyButton();
         }
 
-        // 5. リアクションの「対象」となった投稿を下に表示する
-        if (targetEventId) {
-            renderTargetEvent(targetEventId);
+        // ========================================
+        // 入力フォーム
+        // ========================================
+
+        function renderInputForm() {
+            mainEventContainer.innerHTML = `
+        <div class="input-form-container">
+          <p class="form-title">イベントまたはユーザーのNostr IDを入力してください</p>
+          <form id="nostr-form" class="nostr-form">
+            <input type="text" id="nostr-id-input" placeholder="nevent1..., npub1..." required class="form-input">
+            <button type="submit" class="form-button">表示</button>
+          </form>
+        </div>`;
+
+            const form = document.getElementById('nostr-form');
+            form?.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const input = document.getElementById('nostr-id-input').value.trim();
+                const validPrefixes = ['note1', 'nevent1', 'naddr1', 'npub1', 'nprofile1'];
+                if (validPrefixes.some(p => input.startsWith(p))) {
+                    window.location.href = `?id=${input}`;
+                } else {
+                    alert('有効なNostr ID (note1, nevent1, naddr1, npub1, nprofile1) を入力してください。');
+                }
+            });
         }
-    }
 
-    // 補助関数：対象イベントを取得して表示
-    async function renderTargetEvent(eventId) {
-        const targetRoot = document.getElementById('reaction-target-root');
+        // ========================================
+        // ルーティング（起点）
+        // ========================================
 
-        // すでに dataStore にあるか確認（無駄な通信を防ぐ）
-        let targetEvent = window.dataStore.getEvent(eventId);
+        async function startWorkflow(originalId) {
+            showStatus('読み込み中...');
+            const parsed = parseInput(originalId);
 
-        if (!targetEvent) {
-            // dataStoreに無い場合のみリレーに聞きに行く
-            targetEvent = await fetchSingleEvent(eventId);
-        }
-
-        if (targetEvent) {
-            // ... (ここから下の描画ロジックは今のままでOKです) ...
-            const contentHtml = await Components.utils.formatContent(targetEvent.content, targetEvent.tags);
-            const profile = window.dataStore.getProfile(targetEvent.pubkey);
-
-            targetRoot.innerHTML = `
-            <div style="margin-bottom: 10px; font-size: 0.8rem; color: #888; margin-top:20px;">👇リアクション元</div>
-            ${Components.eventBody(targetEvent, contentHtml, profile || {})}
-        `;
-
-            if (!profile) {
-                window.profileFetcher.request(targetEvent.pubkey);
+            if (!parsed) {
+                showStatus('');
+                renderInputForm();
+                return;
             }
 
-            // 引用展開
-            if (typeof QuoteManager !== 'undefined') {
-                QuoteManager.scanAndRender();
+            try {
+                if (parsed.kind === 'profile') {
+                    await renderProfilePage(parsed.pubkey, parsed.relays);
+                    showStatus('');
+                    return;
+                }
+
+                let event;
+                if (parsed.kind === 'addr') {
+                    const relays = getPriorityRelays(parsed.relays);
+                    event = await withTimeout(
+                        pool.get(relays, { kinds: [parsed.addrKind], authors: [parsed.pubkey], '#d': [parsed.identifier] }),
+                        10000, '記事取得タイムアウト'
+                    );
+                } else {
+                    event = await fetchEventById(parsed.id, parsed.relays);
+                }
+
+                if (!event) {
+                    showStatus('イベントが見つかりませんでした。しばらく待ってから再読み込みしてください。');
+                    return;
+                }
+
+                switch (event.kind) {
+                    case 1:
+                    case 30023:
+                        await renderStandardPost(event, originalId);
+                        break;
+                    case 6:
+                    case 16:
+                        await renderRepost(event);
+                        break;
+                    case 7:
+                        await renderReactionEvent(event);
+                        break;
+                    case 40:
+                    case 41:
+                        await renderChannelRoot(event);
+                        break;
+                    case 42:
+                        await renderChannelMessage(event);
+                        break;
+                    default:
+                        renderGenericEvent(event);
+                }
+                showStatus('');
+            } catch (err) {
+                console.error('ワークフローエラー:', err);
+                showStatus('エラーが発生しました: ' + err.message);
             }
-        } else {
-            targetRoot.innerHTML = `<p style="color: #ccc; padding: 20px;">対象の投稿（${eventId.substring(0, 8)}）をリレーから取得できませんでした。しばらく待ってから再読み込みしてください。</p>`;
         }
-    }
 
-    function renderGenericEvent(event, message = "不明なイベント") {
-        const renderArea = document.getElementById('render-area');
-        renderArea.innerHTML = `
-        <div style="padding: 20px; border: 1px solid #ccc; border-radius: 8px;">
-            <h3>${message} (Kind: ${event.kind})</h3>
-            <pre style="background: #eee; padding: 10px; overflow-x: auto;">${JSON.stringify(event, null, 2)}</pre>
-        </div>
-    `;
-    }
+        function initializeApp() {
+            const relayStatusText = document.getElementById('relay-status-text');
+            if (relayStatusText) relayStatusText.textContent = `接続先リレー候補: ${FALLBACK_RELAYS.length}件`;
 
-    // --- 5. 実行（ここがスタート地点） ---
-    document.addEventListener('DOMContentLoaded', () => {
-        // ボタンのクリックイベントなどを有効にする
-        setupEventListeners();
+            const urlParams = new URLSearchParams(window.location.search);
+            const id = urlParams.get('id');
 
-        // URLをチェックして描画を開始する
-        initializeApp();
-    });
+            if (!id) {
+                renderInputForm();
+                return;
+            }
+            startWorkflow(id.trim());
+        }
 
-    // プロフィールが届いたら、画面全体を壊さずに「再描画」だけを依頼する
-    document.addEventListener('profiles_updated', () => {
-        console.log("プロフィール更新を検知。リアクション欄を再レンダリングします。");
-    });
+        window.addEventListener('load', initializeApp);
 
-</script>
-
+        // ページ離脱時にリレー接続を解放
+        window.addEventListener('beforeunload', () => {
+            try { pool.close(FALLBACK_RELAYS); } catch (e) { /* noop */ }
+        });
+    </script>
+    <script src="https://ompomz.github.io/header/loadHeader.js"></script>
 </body>
+
 </html>
