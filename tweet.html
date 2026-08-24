@@ -101,7 +101,7 @@
             display: flex;
             flex-wrap: wrap;
             gap: 0.5rem;
-            padding: 0.25rem 0rem 0.75rem 0rem;
+            padding: 0.25rem 0rem 0.5rem 0rem;
         }
 
         .reactions-list img {
@@ -175,7 +175,7 @@
             border: 1px solid #ddd;
             border-radius: 4px;
             padding: 0.25rem 0.5rem;
-            margin: 0rem;
+            margin: 0.25rem 0 0 0;
             display: block;
         }
 
@@ -599,7 +599,7 @@
 
         /* --- 長押しアクション時のヒント --- */
         .long-pressable {
-            cursor: pointer;
+            cursor: default;
             border-radius: 6px;
             transition: background-color 0.15s ease;
         }
@@ -657,6 +657,7 @@
         .ehagaki-modal-inner {
             background: #f0f0f0;
             width: 95%;
+            max-height: 95%;
             max-width: 480px;
             height: 85vh;
             border-radius: 8px;
@@ -717,12 +718,12 @@
         </div>
     </div>
 
-    <!-- 長押しアクションメニュー（いいね・RT・引用・返信・コピー） -->
+    <!-- 長押しアクションメニュー（ふぁぼ・RT・引用・リプライ・コピー） -->
     <div id="long-press-menu" class="lp-menu">
-        <div class="lp-item" data-action="like"><span id="lp-like-icon">⭐</span><span>いいね</span></div>
+        <div class="lp-item" data-action="like"><span id="lp-like-icon">⭐</span><span>ふぁぼ</span></div>
         <div class="lp-item" data-action="repost"><span>🔁</span><span>RT</span></div>
         <div class="lp-item" data-action="quote"><span>💬</span><span>引用</span></div>
-        <div class="lp-item" data-action="reply"><span>↩️</span><span>返信</span></div>
+        <div class="lp-item" data-action="reply"><span>↩️</span><span>リプライ</span></div>
         <div class="lp-item" data-action="copy"><span>📋</span><span>neventをコピー</span></div>
         <div class="lp-item" data-action="lumilumi"><span>🔗</span><span>lumilumiで開く</span></div>
     </div>
