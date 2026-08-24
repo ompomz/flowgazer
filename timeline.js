@@ -769,28 +769,27 @@ class Timeline {
                 break;
 
             case 'quote':
-                // マネージャーを呼び出すだけ（ehagakiManagerが存在しないHTMLでも安全に動くようオプショナルチェイニング化）
                 window.ehagakiManager?.open?.({
                     quotes: [nevent],
+                    quoteEvents: [originalEvent], // 🆕 preloadedEvents用
                     reply: null
                 });
                 break;
 
             case 'reply':
                 if (originalEvent.kind === 42) {
-                    // リプライ対象がチャンネルメッセージなら、そのチャンネルを
-                    // e タグ(root優先)から取り出し、channel contextも一緒に渡す
                     const channelTag = originalEvent.tags?.find(t => t[0] === 'e' && t[3] === 'root')
                         || originalEvent.tags?.find(t => t[0] === 'e');
                     const channelId = channelTag?.[1] || null;
                     const relayHint = channelTag?.[2] || null;
 
-                    window.ehagakiManager?.openReplyToChannel?.(nevent, channelId, relayHint);
+                    // 🆕 originalEventをpreloadedEvents用に渡す
+                    window.ehagakiManager?.openReplyToChannel?.(nevent, channelId, relayHint, originalEvent);
                 } else {
-                    // マネージャーを呼び出すだけ（ehagakiManagerが存在しないHTMLでも安全に動くようオプショナルチェイニング化）
                     window.ehagakiManager?.open?.({
                         reply: nevent,
-                        quotes: []
+                        quotes: [],
+                        replyEvent: originalEvent // 🆕 preloadedEvents用
                     });
                 }
                 break;
