@@ -385,7 +385,7 @@ Timeline.prototype.render = function () {
 
     const timeSpan = document.createElement("span");
     timeSpan.className = "time";
-    timeSpan.innerHTML = `<a href="https://ompomz.github.io/tweetsrecap/tweet?id=${nevent}" target="_blank" style="color: inherit; text-decoration: none;">${ev.id === this.originId ? "▶ " : ""}[${timeStr}]</a>`;
+    timeSpan.innerHTML = `<a href="https://ompomz.github.io/flowgazer/tweet?id=${nevent}" target="_blank" style="color: inherit; text-decoration: none;">${ev.id === this.originId ? "▶ " : ""}[${timeStr}]</a>`;
 
     // 2. 著者名（短縮済みを利用）
     const npub = NostrTools.nip19.npubEncode(ev.pubkey);
@@ -394,7 +394,7 @@ Timeline.prototype.render = function () {
     authorSpan.style.color = color;
     authorSpan.style.fontWeight = "normal";
     // ここで finalDisplayName を使います
-    authorSpan.innerHTML = `<a href="https://ompomz.github.io/tweetsrecap/tweet?id=${npub}" target="_blank" style="color: inherit; text-decoration: none;">${finalDisplayName}</a>`;
+    authorSpan.innerHTML = `<a href="https://ompomz.github.io/flowgazer/tweet?id=${npub}" target="_blank" style="color: inherit; text-decoration: none;">${finalDisplayName}</a>`;
 
     // 3. コンテンツ
     const separator = document.createElement("span");
