@@ -1523,6 +1523,16 @@
         // メインイベント種別ごとのレンダリング
         // ========================================
 
+        // 🆕 リプライ先のeタグを取得（NIP-10: reply優先 → root → 末尾フォールバック）
+        function getReplyTargetTag(event) {
+            if (event.kind !== 1) return null;
+            const eTags = (event.tags || []).filter(t => t[0] === 'e');
+            if (eTags.length === 0) return null;
+            return eTags.find(t => t[3] === 'reply')
+                || eTags.find(t => t[3] === 'root')
+                || eTags[eTags.length - 1];
+        }
+
         async function renderStandardPost(event, originalId) {
             const profile = await fetchProfile(event.pubkey);
             const contentHtml = (event.kind === 30023 && window.marked)
@@ -1532,17 +1542,44 @@
             const date = new Date(event.created_at * 1000).toLocaleString();
             const client = (event.tags.find(t => t[0] === 'client') || [])[1] || '';
 
+            // 🆕 リプライ元プレビュー
+            let replyBannerHtml = '';
+            const replyTag = getReplyTargetTag(event);
+            if (replyTag) {
+                const targetId = replyTag[1];
+                const hintRelay = replyTag[2] ? [replyTag[2]] : [];
+                const targetEvent = await fetchEventById(targetId, hintRelay);
+                if (targetEvent) {
+                    const targetNevent = NostrTools.nip19.neventEncode({
+                        id: targetEvent.id,
+                        author: targetEvent.pubkey,
+                        kind: targetEvent.kind,
+                        relays: hintRelay
+                    });
+                    const card = await buildEventPreviewCard(targetEvent, targetNevent);
+                    replyBannerHtml = `<div class="reply-context">${card}<p class="post-link-label">　</p></div>`;
+                } else {
+                    replyBannerHtml = `<div class="reply-context"><p class="post-link-label">↩️ リプライ先</p><div class="related-post-card">元投稿（${targetId.substring(0, 8)}）が見つかりませんでした</div></div>`;
+                }
+            }
+
             mainEventContainer.innerHTML = `
-        ${createProfileHtml(event.pubkey, profile)}
-        <div class="post-content">${contentHtml}</div>
-        <div class="post-info">
-          <span>${date}</span>
-          ${client ? `<span>via ${MyNostrUtils.escapeHtml(client)}</span>` : ''}
+        ${replyBannerHtml}
+        <div class="own-post">
+            ${createProfileHtml(event.pubkey, profile)}
+            <div class="post-content">${contentHtml}</div>
+            <div class="post-info">
+                <span>${date}</span>
+                ${client ? `<span>via ${MyNostrUtils.escapeHtml(client)}</span>` : ''}
+            </div>
         </div>`;
 
             showCopyButton();
             if (event.kind === 1) showJumpButton(event.pubkey, originalId);
-            attachActionHandler(mainEventContainer, event);
+
+            // 🆕 長押しアクションは自分の投稿部分だけに限定（リプライ先カードのクリックと競合させないため）
+            const ownPostEl = mainEventContainer.querySelector('.own-post');
+            attachActionHandler(ownPostEl, event);
 
             await loadRelatedData(event.id);
         }
