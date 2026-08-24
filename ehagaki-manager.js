@@ -25,6 +25,11 @@
         // post.success 受信時にタイムラインの該当チャンネルタブを自動で開くために使う。
         _activeChannelId: null,
 
+        // 🆕 preloadedEvents付きcomposer.setContextの送信予約。
+        // open()でURLクエリ起動した直後は iframe がまだ ready を送っていないため、
+        // ready受信後に送るためにここへ一時保持する。
+        _pendingPreload: null,
+
         get modal() { return document.getElementById('ehagaki-modal'); },
         get iframe() { return document.getElementById('ehagaki-iframe'); },
 
@@ -43,6 +48,58 @@
             return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
         },
 
+        /**
+         * 🆕 originalEvent配列から preloadedEvents 辞書を組み立てる。
+         * composer.setContext の payload.preloadedEvents は
+         * { [eventId]: { id, pubkey, created_at, kind, tags, content, sig } } の形式。
+         * 署名フィールド(sig)が無いイベント（未検証・未取得）は対象外にする。
+         * @param {Object[]} events - originalEvent の配列（null/undefined混在可）
+         * @returns {Object|null} 1件も無ければ null
+         */
+        _buildPreloadedEvents(events) {
+            const list = (events || []).filter(ev => ev?.id && ev?.sig);
+            if (list.length === 0) return null;
+
+            const result = {};
+            for (const ev of list) {
+                result[ev.id] = {
+                    id: ev.id,
+                    pubkey: ev.pubkey,
+                    created_at: ev.created_at,
+                    kind: ev.kind,
+                    tags: ev.tags,
+                    content: ev.content,
+                    sig: ev.sig
+                };
+            }
+            return result;
+        },
+
+        /**
+         * 🆕 open()で予約したpreloadedEvents付きcomposer.setContextを送信する。
+         * iframeの'ready'受信後に呼ぶ想定。
+         */
+        flushPendingPreload() {
+            if (!this._pendingPreload) return;
+            const payload = this._pendingPreload;
+            this._pendingPreload = null;
+
+            this.post('composer.setContext', {
+                requestId: this._generateRequestId('preload'),
+                payload
+            });
+        },
+
+        /**
+         * eHagakiモーダルを開く。
+         * @param {Object|null} payload
+         * @param {string} [payload.reply] - リプライ先nevent/note
+         * @param {string[]} [payload.quotes] - 引用先nevent/note配列
+         * @param {Object} [payload.replyEvent] - 🆕 リプライ対象のoriginalEvent（preloadedEvents用）
+         * @param {Object[]} [payload.quoteEvents] - 🆕 引用対象のoriginalEvent配列（preloadedEvents用）
+         * @param {string} [payload.content]
+         * @param {Object} [payload.channel]
+         */
         open(payload = null) {
             const parentUrl = window.location.origin + window.location.pathname;
             const url = new URL(`${this.ORIGIN}/ehagaki/`);
@@ -78,6 +135,25 @@
             console.log('🔍 eHagakiへ渡すURL:', url.toString());
             console.log('📦 受け取ったpayload:', payload);
 
+            // 🆕 replyEvent / quoteEvents（親アプリがすでに保持しているoriginalEvent）から
+            // preloadedEventsを組み立て、ready受信後に送るpatchとして予約する。
+            // URLクエリには preloadedEvents を含められないため、
+            // reply/quotes/channelも一緒に再送する（composer.setContextはpatchなので
+            // 起動時URLクエリと内容が重複しても無害）。
+            const preloadedEvents = payload
+                ? this._buildPreloadedEvents([
+                    payload.replyEvent,
+                    ...(payload.quoteEvents || [])
+                ])
+                : null;
+
+            this._pendingPreload = preloadedEvents ? {
+                ...(payload.reply ? { reply: payload.reply } : {}),
+                ...(payload.quotes ? { quotes: payload.quotes } : {}),
+                ...(payload.channel ? { channel: payload.channel } : {}),
+                preloadedEvents
+            } : null;
+
             this.iframe.src = url.toString();
             this.modal.style.display = 'flex';
         },
@@ -86,6 +162,8 @@
             this.modal.style.display = 'none';
             // 🆕 モーダルを閉じたらチャンネルコンテキストの記憶もクリア
             this._activeChannelId = null;
+            // 🆕 未送信のpreload予約が残っていればクリア（次回openで作り直すため）
+            this._pendingPreload = null;
         },
 
         post(type, data = {}) {
@@ -205,10 +283,11 @@
          * @param {string} replyNevent - リプライ対象のnevent
          * @param {string|null} channelId - リプライ対象が属するチャンネルの hex event id（root eタグの値）
          * @param {string|null} relayHint - eタグ3番目の要素
+         * @param {Object|null} replyEvent - 🆕 リプライ対象のoriginalEvent（preloadedEvents用）
          */
-        openReplyToChannel(replyNevent, channelId, relayHint = null) {
+        openReplyToChannel(replyNevent, channelId, relayHint = null, replyEvent = null) {
             if (!channelId) {
-                this.open({ reply: replyNevent, quotes: [] });
+                this.open({ reply: replyNevent, quotes: [], replyEvent });
                 return;
             }
 
@@ -216,19 +295,26 @@
 
             const channel = this._buildChannelPayload(channelId, relayHint);
             if (!channel) {
-                this.open({ reply: replyNevent, quotes: [] });
+                this.open({ reply: replyNevent, quotes: [], replyEvent });
                 return;
             }
 
             const isOpen = this.modal.style.display === 'flex';
 
             if (isOpen) {
+                // 🆕 モーダルが開いている場合は composer.setContext に直接 preloadedEvents を含める
+                const preloadedEvents = this._buildPreloadedEvents([replyEvent]);
                 this.post('composer.setContext', {
                     requestId: this._generateRequestId('reply-channel'),
-                    payload: { reply: replyNevent, quotes: [], channel }
+                    payload: {
+                        reply: replyNevent,
+                        quotes: [],
+                        channel,
+                        ...(preloadedEvents ? { preloadedEvents } : {})
+                    }
                 });
             } else {
-                this.open({ reply: replyNevent, quotes: [], channel });
+                this.open({ reply: replyNevent, quotes: [], channel, replyEvent });
             }
         },
 
@@ -423,6 +509,8 @@
                 if (auth.pubkey) {
                     mgr.post('auth.login', { payload: { pubkeyHex: auth.pubkey } });
                 }
+                // 🆕 open()で予約されたpreloadedEvents付きsetContextがあれば送る
+                mgr.flushPendingPreload();
                 break;
 
             case 'auth.request':
@@ -472,6 +560,8 @@
                     console.log('✅ チャンネル切り替え・リプライ設定成功:', data.requestId, data.payload);
                 } else if (data.requestId?.startsWith('channel-close-')) {
                     console.log('✅ チャンネル解除成功:', data.requestId, data.payload);
+                } else if (data.requestId?.startsWith('preload-')) {
+                    console.log('✅ preloadedEvents付きコンテキスト反映完了:', data.requestId, data.payload);
                 } else {
                     console.log('✅ composer context 反映完了:', data.requestId, data.payload);
                 }
@@ -481,6 +571,8 @@
             case 'composer.contextError':
                 if (data.requestId?.startsWith('channel-switch-') || data.requestId?.startsWith('reply-channel-') || data.requestId?.startsWith('channel-close-')) {
                     console.error('❌ チャンネル関連のコンテキスト設定失敗:', data.payload);
+                } else if (data.requestId?.startsWith('preload-')) {
+                    console.error('❌ preloadedEvents付きコンテキスト設定失敗:', data.payload);
                 } else {
                     console.error('❌ composer context 反映失敗:', data.requestId, data.payload);
                 }
