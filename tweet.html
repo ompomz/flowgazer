@@ -888,16 +888,40 @@
         // ========================================
 
         function withTimeout(promise, ms, message) {
-            return Promise.race([
-                promise,
-                new Promise((_, reject) => setTimeout(() => reject(new Error(message || 'タイムアウトしました')), ms))
-            ]);
+            const label = message || '通信';
+            const startedAt = Date.now();
+            let timeoutId;
+
+            const timeoutPromise = new Promise((_, reject) => {
+                timeoutId = setTimeout(() => {
+                    console.warn(`⏱️ [${label}] タイムアウト (${ms}ms経過)`);
+                    reject(new Error(message || 'タイムアウトしました'));
+                }, ms);
+            });
+
+            return Promise.race([promise, timeoutPromise])
+                .then((result) => {
+                    clearTimeout(timeoutId);
+                    const elapsed = Date.now() - startedAt;
+                    const count = Array.isArray(result) ? `${result.length}件` : (result ? '取得あり' : '該当なし');
+                    console.log(`✅ [${label}] 完了 (${elapsed}ms, ${count})`);
+                    return result;
+                })
+                .catch((err) => {
+                    clearTimeout(timeoutId);
+                    if (!/タイムアウト/.test(err.message || '')) {
+                        console.warn(`❌ [${label}] 通信エラー:`, err.message || err);
+                    }
+                    throw err;
+                });
         }
 
         function getPriorityRelays(hintRelays) {
             const cleaned = (hintRelays || []).filter(Boolean);
             const combined = [...new Set([...cleaned, ...FALLBACK_RELAYS])];
-            return combined.slice(0, MAX_RELAYS_PER_QUERY);
+            const relays = combined.slice(0, MAX_RELAYS_PER_QUERY);
+            console.log('🔌 使用リレー:', relays);
+            return relays;
         }
 
         function showStatus(message) {
@@ -2114,8 +2138,10 @@
             const loadMoreBtn = document.getElementById('profile-posts-load-more');
             if (!listContainer || !statusEl) return;
 
-            // 🆕 もっと見る用の状態をリセット
             profilePostsState = { pubkey, hintRelays: hintRelays || [], oldestTimestamp: null, isLoading: false };
+
+            // 🆕 取得開始時点でいったん隠しておく（前の状態を引きずらないようにする）
+            if (loadMoreBtn) loadMoreBtn.classList.add('hidden');
 
             const relays = getPriorityRelays(hintRelays);
 
@@ -2127,7 +2153,7 @@
 
                 if (events.length === 0) {
                     statusEl.textContent = '投稿が見つかりませんでした';
-                    return;
+                    return; // loadMoreBtnはすでにhidden
                 }
 
                 events.sort((a, b) => b.created_at - a.created_at);
@@ -2137,21 +2163,23 @@
                 listContainer.innerHTML = lines.join('');
                 statusEl.textContent = '';
 
-                // 🆕 各行に長押しアクション（ふぁぼ・RT・引用・リプライ等）を紐付け
                 events.forEach(ev => {
                     const line = document.getElementById(`profile-post-${ev.id}`);
                     if (line) attachActionHandler(line, ev);
                 });
 
-                // 🆕 もっと見るボタンの表示・配線（50件ちょうど取れた時だけ続きがある可能性あり）
+                // 🆕 「1件以上実際に描画されている」かつ「取得数が上限に達した（＝続きがありそう）」時だけ表示
                 if (loadMoreBtn) {
-                    loadMoreBtn.classList.toggle('hidden', events.length < 50);
+                    const hasRenderedPosts = listContainer.children.length > 0;
+                    loadMoreBtn.classList.toggle('hidden', !(hasRenderedPosts && events.length >= 50));
                     loadMoreBtn.onclick = () => loadMoreProfilePosts();
                 }
 
             } catch (e) {
                 console.warn('ユーザー投稿一覧取得失敗:', e.message);
                 statusEl.textContent = '投稿の取得に失敗しました';
+                // 🆕 失敗時は必ずボタンを隠す
+                if (loadMoreBtn) loadMoreBtn.classList.add('hidden');
             }
         }
 
@@ -2197,6 +2225,10 @@
                     const line = document.getElementById(`profile-post-${ev.id}`);
                     if (line) attachActionHandler(line, ev);
                 });
+
+                // 🆕 描画後の実件数で判定
+                const hasRenderedPosts = listContainer.children.length > 0;
+                loadMoreBtn.classList.toggle('hidden', !(hasRenderedPosts && events.length >= 50));
 
                 if (events.length < 50) {
                     loadMoreBtn.classList.add('hidden');
