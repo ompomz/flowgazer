@@ -151,6 +151,32 @@
             margin: 0px 0px 7px 0px;
         }
 
+        /* テーブル内の列コピーボタン用デザイン */
+        th button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 22px;
+            height: 22px;
+            padding: 0;
+            margin-left: 4px;
+            color: #777;
+            background: transparent;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        th button:hover {
+            color: #222;
+            background: hsl(0, 0%, 93%);
+        }
+
+        th button svg {
+            width: 12.5px;
+            height: 12.5px;
+        }
+
         hr {
             max-width: 600px;
             border: none;
@@ -180,7 +206,6 @@
             background-color: #fff;
             margin: 4px 0px 4px 0px;
             table-layout: fixed;
-            /* これがあるおかげで幅の制御が効きます */
         }
 
         th,
@@ -191,33 +216,47 @@
             word-break: break-all;
         }
 
-        /* 列ごとの幅を指定 */
+        /* 列幅の指定（チェックボックスは40px、残りの4列を均等割り） */
         #profile-table th:nth-child(1),
         #profile-table td:nth-child(1) {
             width: 40px;
-            /* チェックボックス用：狭く固定 */
             text-align: center;
-            /* 念のため中身を中央寄せにするとキレイ */
         }
 
         #profile-table th:nth-child(2),
         #profile-table td:nth-child(2) {
-            width: 35%;
-            /* name列の幅 */
+            width: 24%;
         }
 
         #profile-table th:nth-child(3),
         #profile-table td:nth-child(3) {
-            width: auto;
-            /* 残りの幅を全部hex列に使う */
+            width: 24%;
+        }
+
+        #profile-table th:nth-child(4),
+        #profile-table td:nth-child(4) {
+            width: 26%;
+        }
+
+        #profile-table th:nth-child(5),
+        #profile-table td:nth-child(5) {
+            width: 26%;
         }
     </style>
 
 <body>
+    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+        <symbol id="copy-icon" viewBox="0 0 24 24">
+            <rect x="9" y="9" width="13" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        </symbol>
+    </svg>
+
     <div id="header-placeholder"></div>
     <h1>hex pubkey picker</h1>
 
-    <!-- リレー設定セクション追加 -->
+    <!-- リレー設定セクション -->
     <section>
         <h2>リレー設定</h2>
         <div class="input-group">
@@ -227,6 +266,7 @@
     </section>
     <hr>
 
+    <!-- フォローリストセクション -->
     <section>
         <h2>kind:3（フォローリスト）</h2>
         <div class="input-group">
@@ -239,6 +279,8 @@
         </div>
     </section>
     <hr>
+
+    <!-- プロフィール取得セクション -->
     <section>
         <div class="kind0-group">
             <h2>kind:0（プロフィール取得）</h2>
@@ -259,12 +301,47 @@
             <textarea id="extracted-hexes" rows="1" cols="40" placeholder="抽出後の公開鍵一覧"></textarea>
             <button onclick="copyHexes()">コピー</button>
         </div>
+
+        <!-- 拡張されたテーブル -->
         <table border="1" id="profile-table">
             <thead>
                 <tr>
                     <th> </th>
-                    <th>name</th>
-                    <th>hex</th>
+                    <th>
+                        name
+                        <button onclick="copyColumn(1)" title="コピー">
+                            <svg>
+                                <use href="#copy-icon"></use>
+                            </svg>
+                        </button>
+                    </th>
+
+                    <th>
+                        display_name
+                        <button onclick="copyColumn(2)" title="コピー">
+                            <svg>
+                                <use href="#copy-icon"></use>
+                            </svg>
+                        </button>
+                    </th>
+
+                    <th>
+                        hex
+                        <button onclick="copyColumn(3)" title="コピー">
+                            <svg>
+                                <use href="#copy-icon"></use>
+                            </svg>
+                        </button>
+                    </th>
+
+                    <th>
+                        npub
+                        <button onclick="copyColumn(4)" title="コピー">
+                            <svg>
+                                <use href="#copy-icon"></use>
+                            </svg>
+                        </button>
+                    </th>
                 </tr>
             </thead>
             <tbody></tbody>
@@ -275,6 +352,10 @@
     <script>
         const { bech32 } = window.NostrTools.nip19;
         let relayURL = "wss://nos.lol/";
+
+        // 入力順とプロフィールデータを保持するグローバル変数
+        let profiles = {};
+        let orderMap = {};
 
         function changeRelay() {
             const inputVal = document.getElementById("relay-input").value.trim();
@@ -302,19 +383,19 @@
         }
 
         function bech32Decode(npub) {
-            const { data } = NostrTools.nip19.decode(npub);
-            return data;
+            try {
+                const { data } = NostrTools.nip19.decode(npub);
+                return data;
+            } catch {
+                return null;
+            }
         }
 
         async function normalizePubkeys(input) {
             const keys = input.split(/[\s,]+/).filter(Boolean);
             const resolvedKeys = await Promise.all(keys.map(async k => {
                 if (k.startsWith("npub1")) {
-                    try {
-                        return bech32Decode(k);
-                    } catch {
-                        return null;
-                    }
+                    return bech32Decode(k);
                 } else if (/^[a-f0-9]{64}$/i.test(k)) {
                     return k;
                 } else if (k.includes('@')) {
@@ -379,7 +460,32 @@
             const pubkeys = await normalizePubkeys(input);
             if (pubkeys.length === 0) return alert("有効な公開鍵がありません");
 
-            document.querySelector("#profile-table tbody").innerHTML = '';
+            // 状態を初期化
+            profiles = {};
+            orderMap = {};
+
+            // 入力順を記録
+            pubkeys.forEach((key, index) => {
+                orderMap[key] = index;
+            });
+
+            // 全件分の空データを先に作成
+            pubkeys.forEach(hex => {
+                let npub = "";
+                try {
+                    npub = NostrTools.nip19.npubEncode(hex);
+                } catch {
+                    npub = "";
+                }
+                profiles[hex] = {
+                    name: "",
+                    displayName: "",
+                    hex: hex,
+                    npub: npub
+                };
+            });
+
+            renderTable(); // まず空行の状態で描画
 
             console.log(`[Relay] 接続試行中 (${relayURL}) - プロフィール取得 (${pubkeys.length}件)`);
             const socket = new WebSocket(relayURL);
@@ -395,28 +501,14 @@
                 if (type === "EVENT") {
                     try {
                         const profile = JSON.parse(eventData.content);
-                        const name = profile.name || "(未設定)";
                         const hex = eventData.pubkey;
 
-                        const row = document.createElement("tr");
+                        if (profiles[hex]) {
+                            profiles[hex].name = profile.name || "";
+                            profiles[hex].displayName = profile.display_name || "";
+                        }
 
-                        const tdCheck = document.createElement("td");
-                        const checkbox = document.createElement("input");
-                        checkbox.type = "checkbox";
-                        checkbox.value = hex;
-                        tdCheck.appendChild(checkbox);
-
-                        const tdName = document.createElement("td");
-                        tdName.textContent = name;
-
-                        const tdHex = document.createElement("td");
-                        tdHex.textContent = hex;
-
-                        row.appendChild(tdCheck);
-                        row.appendChild(tdName);
-                        row.appendChild(tdHex);
-
-                        document.querySelector("#profile-table tbody").appendChild(row);
+                        renderTable(); // データが届くたびにテーブルを更新
                     } catch {
                         console.warn("プロフィール解析失敗", eventData);
                     }
@@ -432,6 +524,70 @@
             socket.onclose = () => {
                 console.log(`[Relay] 接続が閉じられました (${relayURL})`);
             };
+        }
+
+        // テーブルの描画処理（入力順を維持・XSS対策のtextContentを使用）
+        function renderTable() {
+            const tbody = document.querySelector("#profile-table tbody");
+
+            // 現在チェックされているhexを保持しておく
+            const checkedHexes = Array.from(tbody.querySelectorAll("input[type='checkbox']:checked"))
+                .map(cb => cb.value);
+
+            tbody.innerHTML = '';
+
+            Object.values(profiles)
+                .sort((a, b) => orderMap[a.hex] - orderMap[b.hex])
+                .forEach(profile => {
+                    const row = document.createElement("tr");
+
+                    // 1列目: チェックボックス
+                    const tdCheck = document.createElement("td");
+                    const checkbox = document.createElement("input");
+                    checkbox.type = "checkbox";
+                    checkbox.value = profile.hex;
+                    if (checkedHexes.includes(profile.hex)) {
+                        checkbox.checked = true;
+                    }
+                    tdCheck.appendChild(checkbox);
+                    row.appendChild(tdCheck);
+
+                    // 2列目: name
+                    const tdName = document.createElement("td");
+                    tdName.textContent = profile.name;
+                    row.appendChild(tdName);
+
+                    // 3列目: display_name
+                    const tdDisplayName = document.createElement("td");
+                    tdDisplayName.textContent = profile.displayName;
+                    row.appendChild(tdDisplayName);
+
+                    // 4列目: hex
+                    const tdHex = document.createElement("td");
+                    tdHex.textContent = profile.hex;
+                    row.appendChild(tdHex);
+
+                    // 5列目: npub
+                    const tdNpub = document.createElement("td");
+                    tdNpub.textContent = profile.npub;
+                    row.appendChild(tdNpub);
+
+                    tbody.appendChild(row);
+                });
+        }
+
+        // 指定した列のデータを改行区切りでコピー
+        function copyColumn(index) {
+            const rows = document.querySelectorAll("#profile-table tbody tr");
+            if (rows.length === 0) return alert("コピーするデータがありません");
+
+            const values = Array.from(rows)
+                .map(row => row.cells[index]?.textContent || "")
+                .join("\n");
+
+            navigator.clipboard.writeText(values)
+                .then(() => alert("列のデータをコピーしました！"))
+                .catch(() => alert("コピーに失敗しました"));
         }
 
         function clearPubkeyTextarea() {
