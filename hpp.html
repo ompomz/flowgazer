@@ -5,37 +5,213 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>hex pubkey picker</title>
-<style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"; padding: 16px; line-height: 1.3; font-weight: normal; background-color: #f7f7f7; color: #333; }
-h1 { font-size: 1.25rem; color: #555; margin-bottom: 0rem; }
-h2 { font-size: 1rem; color: #555; margin: 6px 0px 6px 0px; }
-p { font-size: .9rem; color: #666; }
-a { color: #007bff; text-decoration: none; }
-a:hover { text-decoration: underline; }
-section { max-width: 600px; margin-right: auto; padding: 0rem; }
-@media (max-width: 767px) { section { max-width: 100%; padding: 0px; margin: 0; } }
-input[type="text"], textarea { width: calc(100% - 100px); padding: 6px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; transition: border-color .2s; }
-input[type="text"]:focus, textarea:focus { outline: none; border-color: #4c51bf; }
-textarea#pubkey-textarea { resize: vertical; }
-button { padding: 4px 12px; background-color: #4c51bf; color: white; border: none; border-radius: 20px; cursor: pointer; font-weight: bold; transition: background-color .2s; white-space: nowrap; }
-button:hover { background-color: #667eea; }
-button[onclick="getFollowList()"], button[onclick="getProfiles()"] { background-color: #ffb366; }
-button[onclick="getFollowList()"]:hover, button[onclick="getProfiles()"]:hover { background-color: #ffa347; }
-button[onclick="checkAll(true)"], button[onclick="checkAll(false)"] { background-color: #66b3ff; }
-button[onclick="checkAll(true)"]:hover, button[onclick="checkAll(false)"]:hover { background-color: #4da6ff; }
-button[onclick="extractSelected()"] { background-color: #ff99cc; }
-button[onclick="extractSelected()"]:hover { background-color: #ff66b2; }
-button[onclick="copyExtractedFollows()"], button[onclick="copyHexes()"] { background-color: #ffd700; }
-button[onclick="copyExtractedFollows()"]:hover, button[onclick="copyHexes()"]:hover { background-color: #ffc400; }
-button[onclick="pasteFromExtractedFollows()"], button[onclick="clearPubkeyTextarea()"] { background-color: #f7f7f7; color: #ff99cc; padding: 0; margin: 0px 0px 7px 0px; }
-button[onclick="pasteFromExtractedFollows()"]:hover, button[onclick="clearPubkeyTextarea()"]:hover { background-color: #f7f7f7; color: #ff66b2; padding: 0; margin: 0px 0px 7px 0px; }
-hr { max-width: 600px; border: none; border-top: 1px dashed #ccc; margin: 8px 0px 4px 0px; }
-.input-group { display: flex; align-items: center; gap: 8px; justify-content: flex-start; padding: 4px 0px 4px 0px; }
-.kind0-group { display: flex; align-items: flex-end; gap: 8px; justify-content: flex-start; padding: 0; }
-table { width: 100%; border-collapse: collapse; background-color: #fff; margin: 4px 0px 4px 0px; table-layout: fixed; }
-th, td { padding: 5px; border: 1px solid #e2e8f0; font-weight: normal; word-break: break-all; }
-</style>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+            padding: 16px;
+            line-height: 1.3;
+            font-weight: normal;
+            background-color: #f7f7f7;
+            color: #333;
+        }
+
+        h1 {
+            font-size: 1.25rem;
+            color: #555;
+            margin-bottom: 0rem;
+        }
+
+        h2 {
+            font-size: 1rem;
+            color: #555;
+            margin: 6px 0px 6px 0px;
+        }
+
+        p {
+            font-size: .9rem;
+            color: #666;
+        }
+
+        a {
+            color: #007bff;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        section {
+            max-width: 600px;
+            margin-right: auto;
+            padding: 0rem;
+        }
+
+        @media (max-width: 767px) {
+            section {
+                max-width: 100%;
+                padding: 0px;
+                margin: 0;
+            }
+        }
+
+        input[type="text"],
+        textarea {
+            width: calc(100% - 100px);
+            padding: 6px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            transition: border-color .2s;
+        }
+
+        input[type="text"]:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #4c51bf;
+        }
+
+        textarea#pubkey-textarea {
+            resize: vertical;
+        }
+
+        button {
+            padding: 4px 12px;
+            background-color: #4c51bf;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color .2s;
+            white-space: nowrap;
+        }
+
+        button:hover {
+            background-color: #667eea;
+        }
+
+        button[onclick="getFollowList()"],
+        button[onclick="getProfiles()"] {
+            background-color: #ffb366;
+        }
+
+        button[onclick="getFollowList()"]:hover,
+        button[onclick="getProfiles()"]:hover {
+            background-color: #ffa347;
+        }
+
+        button[onclick="checkAll(true)"],
+        button[onclick="checkAll(false)"] {
+            background-color: #66b3ff;
+        }
+
+        button[onclick="checkAll(true)"]:hover,
+        button[onclick="checkAll(false)"]:hover {
+            background-color: #4da6ff;
+        }
+
+        button[onclick="extractSelected()"] {
+            background-color: #ff99cc;
+        }
+
+        button[onclick="extractSelected()"]:hover {
+            background-color: #ff66b2;
+        }
+
+        button[onclick="copyExtractedFollows()"],
+        button[onclick="copyHexes()"] {
+            background-color: #ffd700;
+        }
+
+        button[onclick="copyExtractedFollows()"]:hover,
+        button[onclick="copyHexes()"]:hover {
+            background-color: #ffc400;
+        }
+
+        button[onclick="pasteFromExtractedFollows()"],
+        button[onclick="clearPubkeyTextarea()"] {
+            background-color: #f7f7f7;
+            color: #ff99cc;
+            padding: 0;
+            margin: 0px 0px 7px 0px;
+        }
+
+        button[onclick="pasteFromExtractedFollows()"]:hover,
+        button[onclick="clearPubkeyTextarea()"]:hover {
+            background-color: #f7f7f7;
+            color: #ff66b2;
+            padding: 0;
+            margin: 0px 0px 7px 0px;
+        }
+
+        hr {
+            max-width: 600px;
+            border: none;
+            border-top: 1px dashed #ccc;
+            margin: 8px 0px 4px 0px;
+        }
+
+        .input-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: flex-start;
+            padding: 4px 0px 4px 0px;
+        }
+
+        .kind0-group {
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+            justify-content: flex-start;
+            padding: 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #fff;
+            margin: 4px 0px 4px 0px;
+            table-layout: fixed;
+            /* これがあるおかげで幅の制御が効きます */
+        }
+
+        th,
+        td {
+            padding: 5px;
+            border: 1px solid #e2e8f0;
+            font-weight: normal;
+            word-break: break-all;
+        }
+
+        /* 列ごとの幅を指定 */
+        #profile-table th:nth-child(1),
+        #profile-table td:nth-child(1) {
+            width: 40px;
+            /* チェックボックス用：狭く固定 */
+            text-align: center;
+            /* 念のため中身を中央寄せにするとキレイ */
+        }
+
+        #profile-table th:nth-child(2),
+        #profile-table td:nth-child(2) {
+            width: 35%;
+            /* name列の幅 */
+        }
+
+        #profile-table th:nth-child(3),
+        #profile-table td:nth-child(3) {
+            width: auto;
+            /* 残りの幅を全部hex列に使う */
+        }
+    </style>
 
 <body>
     <div id="header-placeholder"></div>
@@ -97,187 +273,188 @@ th, td { padding: 5px; border: 1px solid #e2e8f0; font-weight: normal; word-brea
 
     <script src="https://cdn.jsdelivr.net/npm/nostr-tools@2.1.2/lib/nostr.bundle.min.js"></script>
     <script>
-    const { bech32 } = window.NostrTools.nip19;
-    let relayURL = "wss://nos.lol/";
+        const { bech32 } = window.NostrTools.nip19;
+        let relayURL = "wss://nos.lol/";
 
-    function changeRelay() {
-        const inputVal = document.getElementById("relay-input").value.trim();
-        if (!inputVal.startsWith("wss://") && !inputVal.startsWith("ws://")) {
-            return alert("有効なWebSocketリレーURL（wss://...）を入力してください");
+        function changeRelay() {
+            const inputVal = document.getElementById("relay-input").value.trim();
+            if (!inputVal.startsWith("wss://") && !inputVal.startsWith("ws://")) {
+                return alert("有効なWebSocketリレーURL（wss://...）を入力してください");
+            }
+            relayURL = inputVal;
+            console.log(`[Relay] リレーURLを変更しました: ${relayURL}`);
+            alert(`リレーを ${relayURL} に変更しました`);
         }
-        relayURL = inputVal;
-        console.log(`[Relay] リレーURLを変更しました: ${relayURL}`);
-        alert(`リレーを ${relayURL} に変更しました`);
-    }
 
-    async function resolveNip05(nip05) {
-        const parts = nip05.split('@');
-        if (parts.length !== 2) return null;
+        async function resolveNip05(nip05) {
+            const parts = nip05.split('@');
+            if (parts.length !== 2) return null;
 
-        const [name, domain] = parts;
-        try {
-            const response = await fetch(`https://${domain}/.well-known/nostr.json?name=${name}`);
-            const data = await response.json();
-            return data.names[name] || null;
-        } catch (e) {
-            console.error(`NIP-05アドレスの解決に失敗しました: ${nip05}`, e);
-            return null;
-        }
-    }
-
-    function bech32Decode(npub) {
-        const { data } = NostrTools.nip19.decode(npub);
-        return data;
-    }
-
-    async function normalizePubkeys(input) {
-        const keys = input.split(/[\s,]+/).filter(Boolean);
-        const resolvedKeys = await Promise.all(keys.map(async k => {
-            if (k.startsWith("npub1")) {
-                try {
-                    return bech32Decode(k);
-                } catch {
-                    return null;
-                }
-            } else if (/^[a-f0-9]{64}$/i.test(k)) {
-                return k;
-            } else if (k.includes('@')) {
-                return await resolveNip05(k);
-            } else {
+            const [name, domain] = parts;
+            try {
+                const response = await fetch(`https://${domain}/.well-known/nostr.json?name=${name}`);
+                const data = await response.json();
+                return data.names[name] || null;
+            } catch (e) {
+                console.error(`NIP-05アドレスの解決に失敗しました: ${nip05}`, e);
                 return null;
             }
-        }));
-        return resolvedKeys.filter(Boolean);
-    }
+        }
 
-    async function getFollowList() {
-        const input = document.getElementById("follow-input").value.trim();
-        const pubkey = (await normalizePubkeys(input))[0];
-        if (!pubkey) return alert("無効な公開鍵です");
+        function bech32Decode(npub) {
+            const { data } = NostrTools.nip19.decode(npub);
+            return data;
+        }
 
-        console.log(`[Relay] 接続試行中 (${relayURL}) - フォローリスト取得`);
-        const socket = new WebSocket(relayURL);
-
-        socket.onopen = () => {
-            console.log(`[Relay] 接続成功: ${relayURL}`);
-            const req = ["REQ", "follow-req", { kinds: [3], authors: [pubkey], limit: 1 }];
-            socket.send(JSON.stringify(req));
-        };
-
-        socket.onmessage = (event) => {
-            const [type, , eventData] = JSON.parse(event.data);
-            if (type === "EVENT") {
-                console.log("[Relay] イベント受信完了（フォローリスト）");
-                const follows = eventData.tags
-                    .filter(tag => tag[0] === "p")
-                    .map(tag => tag[1]);
-                document.getElementById("extracted-follows").value = follows.join(",");
-                socket.close();
-            }
-        };
-
-        socket.onerror = (error) => {
-            console.error(`[Relay] エラー発生 (${relayURL}):`, error);
-        };
-
-        socket.onclose = () => {
-            console.log(`[Relay] 接続が閉じられました (${relayURL})`);
-        };
-    }
-
-    function copyExtractedFollows() {
-        const textarea = document.getElementById("extracted-follows");
-        textarea.select();
-        document.execCommand("copy");
-        alert("コピーしました！");
-    }
-
-    function pasteFromExtractedFollows() {
-        const sourceTextarea = document.getElementById("extracted-follows");
-        const targetTextarea = document.getElementById("pubkey-textarea");
-        targetTextarea.value = sourceTextarea.value;
-    }
-
-    async function getProfiles() {
-        const input = document.getElementById("pubkey-textarea").value;
-        const pubkeys = await normalizePubkeys(input);
-        if (pubkeys.length === 0) return alert("有効な公開鍵がありません");
-        
-        document.querySelector("#profile-table tbody").innerHTML = '';
-
-        console.log(`[Relay] 接続試行中 (${relayURL}) - プロフィール取得 (${pubkeys.length}件)`);
-        const socket = new WebSocket(relayURL);
-
-        socket.onopen = () => {
-            console.log(`[Relay] 接続成功: ${relayURL}`);
-            const req = ["REQ", "profile-req", { kinds: [0], authors: pubkeys }];
-            socket.send(JSON.stringify(req));
-        };
-
-        socket.onmessage = (event) => {
-            const [type, , eventData] = JSON.parse(event.data);
-            if (type === "EVENT") {
-                try {
-                    const profile = JSON.parse(eventData.content);
-                    const name = profile.name || "(未設定)";
-                    const hex = eventData.pubkey;
-                    
-                    const row = document.createElement("tr");
-
-                    const tdCheck = document.createElement("td");
-                    const checkbox = document.createElement("input");
-                    checkbox.type = "checkbox";
-                    checkbox.value = hex;
-                    tdCheck.appendChild(checkbox);
-
-                    const tdName = document.createElement("td");
-                    tdName.textContent = name;
-
-                    const tdHex = document.createElement("td");
-                    tdHex.textContent = hex;
-
-                    row.appendChild(tdCheck);
-                    row.appendChild(tdName);
-                    row.appendChild(tdHex);
-
-                    document.querySelector("#profile-table tbody").appendChild(row);
-                } catch {
-                    console.warn("プロフィール解析失敗", eventData);
+        async function normalizePubkeys(input) {
+            const keys = input.split(/[\s,]+/).filter(Boolean);
+            const resolvedKeys = await Promise.all(keys.map(async k => {
+                if (k.startsWith("npub1")) {
+                    try {
+                        return bech32Decode(k);
+                    } catch {
+                        return null;
+                    }
+                } else if (/^[a-f0-9]{64}$/i.test(k)) {
+                    return k;
+                } else if (k.includes('@')) {
+                    return await resolveNip05(k);
+                } else {
+                    return null;
                 }
-            } else if (type === "EOSE") {
-                console.log("[Relay] EOSE（データ受信終了）を受信しました");
-            }
-        };
+            }));
+            return resolvedKeys.filter(Boolean);
+        }
 
-        socket.onerror = (error) => {
-            console.error(`[Relay] エラー発生 (${relayURL}):`, error);
-        };
+        async function getFollowList() {
+            const input = document.getElementById("follow-input").value.trim();
+            const pubkey = (await normalizePubkeys(input))[0];
+            if (!pubkey) return alert("無効な公開鍵です");
 
-        socket.onclose = () => {
-            console.log(`[Relay] 接続が閉じられました (${relayURL})`);
-        };
-    }
+            console.log(`[Relay] 接続試行中 (${relayURL}) - フォローリスト取得`);
+            const socket = new WebSocket(relayURL);
 
-    function clearPubkeyTextarea() {
-        document.getElementById("pubkey-textarea").value = '';
-    }
+            socket.onopen = () => {
+                console.log(`[Relay] 接続成功: ${relayURL}`);
+                const req = ["REQ", "follow-req", { kinds: [3], authors: [pubkey], limit: 1 }];
+                socket.send(JSON.stringify(req));
+            };
 
-    function checkAll(flag) {
-        document.querySelectorAll("#profile-table tbody input[type='checkbox']").forEach(cb => cb.checked = flag);
-    }
+            socket.onmessage = (event) => {
+                const [type, , eventData] = JSON.parse(event.data);
+                if (type === "EVENT") {
+                    console.log("[Relay] イベント受信完了（フォローリスト）");
+                    const follows = eventData.tags
+                        .filter(tag => tag[0] === "p")
+                        .map(tag => tag[1]);
+                    document.getElementById("extracted-follows").value = follows.join(",");
+                    socket.close();
+                }
+            };
 
-    function extractSelected() {
-        const selected = Array.from(document.querySelectorAll("#profile-table tbody input[type='checkbox']:checked"))
-            .map(cb => cb.value);
-        document.getElementById("extracted-hexes").value = selected.join(",");
-    }
+            socket.onerror = (error) => {
+                console.error(`[Relay] エラー発生 (${relayURL}):`, error);
+            };
 
-    function copyHexes() {
-        const textarea = document.getElementById("extracted-hexes");
-        textarea.select();
-        document.execCommand("copy");
-        alert("コピーしました！");
-    }
+            socket.onclose = () => {
+                console.log(`[Relay] 接続が閉じられました (${relayURL})`);
+            };
+        }
+
+        function copyExtractedFollows() {
+            const textarea = document.getElementById("extracted-follows");
+            textarea.select();
+            document.execCommand("copy");
+            alert("コピーしました！");
+        }
+
+        function pasteFromExtractedFollows() {
+            const sourceTextarea = document.getElementById("extracted-follows");
+            const targetTextarea = document.getElementById("pubkey-textarea");
+            targetTextarea.value = sourceTextarea.value;
+        }
+
+        async function getProfiles() {
+            const input = document.getElementById("pubkey-textarea").value;
+            const pubkeys = await normalizePubkeys(input);
+            if (pubkeys.length === 0) return alert("有効な公開鍵がありません");
+
+            document.querySelector("#profile-table tbody").innerHTML = '';
+
+            console.log(`[Relay] 接続試行中 (${relayURL}) - プロフィール取得 (${pubkeys.length}件)`);
+            const socket = new WebSocket(relayURL);
+
+            socket.onopen = () => {
+                console.log(`[Relay] 接続成功: ${relayURL}`);
+                const req = ["REQ", "profile-req", { kinds: [0], authors: pubkeys }];
+                socket.send(JSON.stringify(req));
+            };
+
+            socket.onmessage = (event) => {
+                const [type, , eventData] = JSON.parse(event.data);
+                if (type === "EVENT") {
+                    try {
+                        const profile = JSON.parse(eventData.content);
+                        const name = profile.name || "(未設定)";
+                        const hex = eventData.pubkey;
+
+                        const row = document.createElement("tr");
+
+                        const tdCheck = document.createElement("td");
+                        const checkbox = document.createElement("input");
+                        checkbox.type = "checkbox";
+                        checkbox.value = hex;
+                        tdCheck.appendChild(checkbox);
+
+                        const tdName = document.createElement("td");
+                        tdName.textContent = name;
+
+                        const tdHex = document.createElement("td");
+                        tdHex.textContent = hex;
+
+                        row.appendChild(tdCheck);
+                        row.appendChild(tdName);
+                        row.appendChild(tdHex);
+
+                        document.querySelector("#profile-table tbody").appendChild(row);
+                    } catch {
+                        console.warn("プロフィール解析失敗", eventData);
+                    }
+                } else if (type === "EOSE") {
+                    console.log("[Relay] EOSE（データ受信終了）を受信しました");
+                }
+            };
+
+            socket.onerror = (error) => {
+                console.error(`[Relay] エラー発生 (${relayURL}):`, error);
+            };
+
+            socket.onclose = () => {
+                console.log(`[Relay] 接続が閉じられました (${relayURL})`);
+            };
+        }
+
+        function clearPubkeyTextarea() {
+            document.getElementById("pubkey-textarea").value = '';
+        }
+
+        function checkAll(flag) {
+            document.querySelectorAll("#profile-table tbody input[type='checkbox']").forEach(cb => cb.checked = flag);
+        }
+
+        function extractSelected() {
+            const selected = Array.from(document.querySelectorAll("#profile-table tbody input[type='checkbox']:checked"))
+                .map(cb => cb.value);
+            document.getElementById("extracted-hexes").value = selected.join(",");
+        }
+
+        function copyHexes() {
+            const textarea = document.getElementById("extracted-hexes");
+            textarea.select();
+            document.execCommand("copy");
+            alert("コピーしました！");
+        }
     </script>
 </body>
+
 </html>
