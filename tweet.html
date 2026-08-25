@@ -678,6 +678,86 @@
             width: 100%;
             border: none;
         }
+
+        /* --- プロフィールページの投稿一覧 --- */
+        .profile-posts-section {
+            margin: 0 0.5rem 0 0.5rem;
+        }
+
+        .profile-posts-status {
+            color: #999;
+            font-size: 0.85rem;
+            padding: 0.5rem 0;
+            display: none;
+        }
+
+        .profile-post-line {
+            padding: 0.6rem 0;
+            border-bottom: 1px dashed #ddd;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            word-break: break-word;
+        }
+
+        .profile-post-time {
+            color: #66b3ff;
+            text-decoration: none;
+            white-space: nowrap;
+            margin-right: 0.5rem;
+        }
+
+        .profile-post-time:hover {
+            color: #4da6ff;
+            text-decoration: underline;
+        }
+
+        .profile-post-content img,
+        .profile-post-content video {
+            max-width: 12rem;
+            max-height: 12rem;
+            display: block;
+            margin-top: 0.3rem;
+        }
+
+        .profile-post-content img.custom-emoji {
+            vertical-align: middle;
+            display: inline-block;
+            height: 1.2rem;
+            max-width: none;
+            max-height: none;
+        }
+
+        #profile-posts-load-more {
+            background: #66b3ff;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            margin-top: 0.5rem;
+            color: #fff;
+            font-size: 0.8rem;
+            font-weight: 700;
+            padding: 0rem 0.8rem;
+            min-height: 1.75rem;
+            border-radius: 999px;
+            cursor: pointer;
+        }
+
+        #profile-posts-load-more.loading::before {
+            content: "";
+            width: 0.9rem;
+            height: 0.9rem;
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3' stroke-linecap='round'><path d='M12 2a10 10 0 1 1-10 10' /></svg>");
+            background-size: contain;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
     </style>
 </head>
 
@@ -755,6 +835,9 @@
         const profileCache = new Map();   // pubkey -> profile object | null
         const eventCache = new Map();     // eventId -> event | undefined(未取得)
         const channelMetaCache = new Map(); // channelId -> { name, about, picture }
+
+        // 🆕 プロフィールページの投稿一覧：もっと見る用の状態
+        let profilePostsState = null; // { pubkey, hintRelays, oldestTimestamp, isLoading }
 
         const mainEventContainer = document.getElementById('main-event');
         const statusElement = document.getElementById('status');
@@ -1985,14 +2068,153 @@
             </div>
           </div>
           <p class="about-text">${aboutHtml}</p>
+        </div>
+        <div id="profile-posts-section" class="profile-posts-section">
+        <p id="profile-posts-status" class="profile-posts-status">投稿を読み込み中...</p>
+        <div id="profile-posts-list"></div>
+        <button id="profile-posts-load-more" class="hidden">もっと見る</button>
         </div>`;
 
             document.getElementById('copy-npub-icon')?.addEventListener('click', async () => {
                 try { await navigator.clipboard.writeText(npub); alert('npubをコピーしました！'); }
                 catch (e) { alert('コピーに失敗しました。'); }
             });
-
             showCopyButton();
+
+            // 🆕 プロフィールページ：kind:1一覧を追加読み込み
+            loadUserPostsList(pubkey, hintRelays);
+        }
+
+        /**
+         * プロフィールページ用：対象ユーザーのkind:1投稿一覧を取得して表示する
+         * @param {string} pubkey
+         * @param {string[]} hintRelays
+         */
+        async function loadUserPostsList(pubkey, hintRelays) {
+            const listContainer = document.getElementById('profile-posts-list');
+            const statusEl = document.getElementById('profile-posts-status');
+            const loadMoreBtn = document.getElementById('profile-posts-load-more');
+            if (!listContainer || !statusEl) return;
+
+            // 🆕 もっと見る用の状態をリセット
+            profilePostsState = { pubkey, hintRelays: hintRelays || [], oldestTimestamp: null, isLoading: false };
+
+            const relays = getPriorityRelays(hintRelays);
+
+            try {
+                const events = await withTimeout(
+                    pool.querySync(relays, { kinds: [1], authors: [pubkey], limit: 50 }),
+                    10000, '投稿一覧取得タイムアウト'
+                );
+
+                if (events.length === 0) {
+                    statusEl.textContent = '投稿が見つかりませんでした';
+                    return;
+                }
+
+                events.sort((a, b) => b.created_at - a.created_at);
+                profilePostsState.oldestTimestamp = events[events.length - 1].created_at;
+
+                const lines = await Promise.all(events.map(ev => buildProfilePostLine(ev)));
+                listContainer.innerHTML = lines.join('');
+                statusEl.textContent = '';
+
+                // 🆕 各行に長押しアクション（ふぁぼ・RT・引用・リプライ等）を紐付け
+                events.forEach(ev => {
+                    const line = document.getElementById(`profile-post-${ev.id}`);
+                    if (line) attachActionHandler(line, ev);
+                });
+
+                // 🆕 もっと見るボタンの表示・配線（50件ちょうど取れた時だけ続きがある可能性あり）
+                if (loadMoreBtn) {
+                    loadMoreBtn.classList.toggle('hidden', events.length < 50);
+                    loadMoreBtn.onclick = () => loadMoreProfilePosts();
+                }
+
+            } catch (e) {
+                console.warn('ユーザー投稿一覧取得失敗:', e.message);
+                statusEl.textContent = '投稿の取得に失敗しました';
+            }
+        }
+
+        /**
+         * プロフィールページの投稿一覧：もっと見る
+         */
+        async function loadMoreProfilePosts() {
+            if (!profilePostsState || profilePostsState.isLoading) return;
+
+            const listContainer = document.getElementById('profile-posts-list');
+            const loadMoreBtn = document.getElementById('profile-posts-load-more');
+            if (!listContainer || !loadMoreBtn) return;
+
+            profilePostsState.isLoading = true;
+            loadMoreBtn.classList.add('loading');
+
+            const relays = getPriorityRelays(profilePostsState.hintRelays);
+
+            try {
+                const events = await withTimeout(
+                    pool.querySync(relays, {
+                        kinds: [1],
+                        authors: [profilePostsState.pubkey],
+                        until: profilePostsState.oldestTimestamp - 1,
+                        limit: 50
+                    }),
+                    10000, '投稿一覧取得タイムアウト'
+                );
+
+                if (events.length === 0) {
+                    alert('これ以上ありません');
+                    loadMoreBtn.classList.add('hidden');
+                    return;
+                }
+
+                events.sort((a, b) => b.created_at - a.created_at);
+                profilePostsState.oldestTimestamp = events[events.length - 1].created_at;
+
+                const lines = await Promise.all(events.map(ev => buildProfilePostLine(ev)));
+                listContainer.insertAdjacentHTML('beforeend', lines.join(''));
+
+                events.forEach(ev => {
+                    const line = document.getElementById(`profile-post-${ev.id}`);
+                    if (line) attachActionHandler(line, ev);
+                });
+
+                if (events.length < 50) {
+                    loadMoreBtn.classList.add('hidden');
+                }
+
+            } catch (e) {
+                console.warn('もっと見る失敗:', e.message);
+                alert('データの取得に失敗しました');
+            } finally {
+                profilePostsState.isLoading = false;
+                loadMoreBtn.classList.remove('loading');
+            }
+        }
+
+        /**
+         * 投稿一覧の1行分HTMLを組み立てる
+         * @param {Object} event
+         * @returns {Promise<string>}
+         */
+        async function buildProfilePostLine(event) {
+            const contentHtml = await formatPostContent(event.content, event.tags, { expandMedia: false });
+            const date = new Date(event.created_at * 1000).toLocaleString();
+
+            const nevent = NostrTools.nip19.neventEncode({
+                id: event.id,
+                author: event.pubkey,
+                kind: event.kind
+            });
+
+            const hasLineBreak = /\r?\n/.test(event.content);
+
+            return `
+                <div class="profile-post-line">
+                <a href="?id=${nevent}" class="profile-post-time">[${date}]</a>${hasLineBreak ? '<br>' : ''}
+                <span class="profile-post-content">${contentHtml}</span>
+                </div>`;
         }
 
         // ========================================
