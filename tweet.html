@@ -233,6 +233,10 @@
             font-weight: bold;
             font-size: 1rem;
             color: #444;
+            min-width: 0;
+            max-width: 100%;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         .profile-nip05,
@@ -271,12 +275,15 @@
             background-color: #fff;
             border-radius: 8px;
             border: 1px solid #ddd;
+            min-width: 0;
+            max-width: 100%;
         }
 
         .profile-header {
             display: flex;
             align-items: center;
             gap: 1rem;
+            min-width: 0;
         }
 
         .profile-info-container {
@@ -299,6 +306,15 @@
         .copy-icon {
             cursor: pointer;
             transition: opacity 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .copy-icon svg {
+            width: 1rem;
+            height: 1rem;
+            display: block;
         }
 
         .copy-icon:hover {
@@ -2062,8 +2078,10 @@
               <h2 class="profile-name">${MyNostrUtils.escapeHtml(profile.name || profile.display_name || 'No Name')}</h2>
               <div class="npub-container">
                 <span id="npub-text">${npub}</span>
-                <span class="copy-icon" id="copy-npub-icon" title="npubをコピー">📋</span>
-              </div>
+                <span class="copy-icon" id="copy-npub-icon" title="npubをコピー" aria-label="npubをコピー">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" > <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect> <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </span>
+                </div>
               <p class="nip05">${profile.nip05 ? MyNostrUtils.escapeHtml(profile.nip05) : 'NIP-05未設定'}</p>
             </div>
           </div>
@@ -2211,10 +2229,10 @@
             const hasLineBreak = /\r?\n/.test(event.content);
 
             return `
-                <div class="profile-post-line">
-                <a href="?id=${nevent}" class="profile-post-time">[${date}]</a>${hasLineBreak ? '<br>' : ''}
-                <span class="profile-post-content">${contentHtml}</span>
-                </div>`;
+        <div class="profile-post-line long-pressable" id="profile-post-${event.id}">
+        <a href="?id=${nevent}" class="profile-post-time">[${date}]</a>${hasLineBreak ? '<br>' : ''}
+        <span class="profile-post-content">${contentHtml}</span>
+        </div>`;
         }
 
         // ========================================
