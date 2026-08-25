@@ -1002,7 +1002,22 @@
 
                 case 'reply':
                     if (!requireWriteAccess()) return;
-                    window.ehagakiManager?.open?.({ reply: nevent, quotes: [] });
+
+                    if (originalEvent.kind === 42) {
+                        // 🆕 kind:42へのリプライはチャンネルコンテキストを付与してopenReplyToChannelを使う
+                        const channelTag = originalEvent.tags?.find(t => t[0] === 'e' && t[3] === 'root')
+                            || originalEvent.tags?.find(t => t[0] === 'e');
+                        const channelId = channelTag?.[1] || null;
+                        const relayHint = channelTag?.[2] || null;
+
+                        window.ehagakiManager?.openReplyToChannel?.(nevent, channelId, relayHint, originalEvent);
+                    } else {
+                        window.ehagakiManager?.open?.({
+                            reply: nevent,
+                            quotes: [],
+                            replyEvent: originalEvent
+                        });
+                    }
                     break;
 
                 case 'copy':
@@ -1523,11 +1538,27 @@
         // メインイベント種別ごとのレンダリング
         // ========================================
 
-        // 🆕 リプライ先のeタグを取得（NIP-10: reply優先 → root → 末尾フォールバック）
+        // 🆕 リプライ先のeタグを取得
+        // - kind:1  → NIP-10: reply優先 → root → 末尾フォールバック
+        // - kind:42 → NIP-28: root eタグは「チャンネル自体」を指すためリプライ先の対象外。
+        //             reply マーカー付きタグのみを正式なリプライ先とし、
+        //             マーカーが無い旧式データ向けに「root以外のeタグ」をフォールバックとして扱う
         function getReplyTargetTag(event) {
-            if (event.kind !== 1) return null;
+            if (event.kind !== 1 && event.kind !== 42) return null;
+
             const eTags = (event.tags || []).filter(t => t[0] === 'e');
             if (eTags.length === 0) return null;
+
+            if (event.kind === 42) {
+                const replyMarked = eTags.find(t => t[3] === 'reply');
+                if (replyMarked) return replyMarked;
+
+                // 旧式フォールバック: root（無ければ先頭）以外のeタグがあればリプライ先とみなす
+                const rootId = (eTags.find(t => t[3] === 'root') || eTags[0])?.[1];
+                return eTags.find(t => t[1] !== rootId) || null;
+            }
+
+            // kind:1
             return eTags.find(t => t[3] === 'reply')
                 || eTags.find(t => t[3] === 'root')
                 || eTags[eTags.length - 1];
@@ -1762,14 +1793,43 @@
           </a>`;
             }
 
+            // 🆕 リプライ元プレビュー（kind:42同士の相互リプライに対応）
+            let replyBannerHtml = '';
+            const replyTag = getReplyTargetTag(event);
+            if (replyTag) {
+                const targetId = replyTag[1];
+                const hintRelay = replyTag[2] ? [replyTag[2]] : [];
+                const targetEvent = await fetchEventById(targetId, hintRelay);
+                if (targetEvent) {
+                    const targetNevent = NostrTools.nip19.neventEncode({
+                        id: targetEvent.id,
+                        author: targetEvent.pubkey,
+                        kind: targetEvent.kind,
+                        relays: hintRelay
+                    });
+                    const card = await buildEventPreviewCard(targetEvent, targetNevent);
+                    replyBannerHtml = `<div class="reply-context">${card}<p class="post-link-label">　</p></div>`;
+                } else {
+                    replyBannerHtml = `<div class="reply-context"><p class="post-link-label">↩️ リプライ先</p><div class="related-post-card">元投稿（${targetId.substring(0, 8)}）が見つかりませんでした</div></div>`;
+                }
+            }
+
             mainEventContainer.innerHTML = `
         ${channelBannerHtml}
-        ${createProfileHtml(event.pubkey, profile)}
-        <div class="post-content">${contentHtml}</div>
-        <div class="post-info"><span>${date}</span></div>`;
+        ${replyBannerHtml}
+        <div class="own-post">
+            ${createProfileHtml(event.pubkey, profile)}
+            <div class="post-content">${contentHtml}</div>
+            <div class="post-info"><span>${date}</span></div>
+        </div>`;
 
             showCopyButton();
-            attachActionHandler(mainEventContainer, event);
+
+            // 🆕 長押しアクションは自分のメッセージ部分だけに限定
+            // （channel-context-banner・reply-contextの<a>クリックと競合させないため）
+            const ownPostEl = mainEventContainer.querySelector('.own-post');
+            attachActionHandler(ownPostEl, event);
+
             await loadRelatedData(event.id);
         }
 
