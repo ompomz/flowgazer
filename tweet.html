@@ -624,77 +624,6 @@
             background-color: rgba(124, 111, 224, 0.08);
         }
 
-        /* --- 長押しメニュー --- */
-        .lp-menu {
-            display: none;
-            position: fixed;
-            flex-direction: column;
-            background: #fff;
-            border-radius: 10px;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-            padding: 0.35rem;
-            z-index: 10000;
-            min-width: 170px;
-            overflow: hidden;
-        }
-
-        .lp-item {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem 0.6rem;
-            border-radius: 6px;
-            font-size: 0.85rem;
-            color: #444;
-            cursor: pointer;
-        }
-
-        .lp-item:hover,
-        .lp-item.selected {
-            background-color: #f0eefe;
-        }
-
-        .lp-item span:first-child {
-            width: 1.2rem;
-            text-align: center;
-        }
-
-        /* --- eHagaki 埋め込みモーダル --- */
-        .ehagaki-modal {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 9999;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .ehagaki-modal-inner {
-            background: #f0f0f0;
-            width: 95%;
-            max-height: 95%;
-            max-width: 480px;
-            height: 85vh;
-            border-radius: 8px;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        .ehagaki-close {
-            align-self: flex-end;
-            margin: 0.5rem 1rem 0 0;
-            color: #666 !important;
-            border: none;
-        }
-
-        .ehagaki-iframe {
-            flex: 1;
-            width: 100%;
-            border: none;
-        }
-
         /* --- プロフィールページの投稿一覧 --- */
         .profile-posts-section {
             margin: 0 0.5rem 0 0.5rem;
@@ -707,12 +636,38 @@
             display: none;
         }
 
-        .profile-post-line {
+        /* 🆕 プロフィール投稿一覧：Timelineクラスが生成する .event を
+        従来の profile-post-line 相当の見た目に整形する */
+        #profile-posts-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        #profile-posts-list .event {
             padding: 0.6rem 0;
             border-bottom: 1px dashed #ddd;
             font-size: 0.9rem;
             line-height: 1.5;
             word-break: break-word;
+        }
+
+        #profile-posts-list .event:last-child {
+            border-bottom: none;
+        }
+
+        #profile-posts-list .event .post-content {
+            display: inline;
+            margin: 0;
+        }
+
+        .reply-indicator,
+        .npub-link {
+            color: #66b3ff;
+        }
+
+        .event-liked {
+            border-right: 4px solid #ffeb3b;
         }
 
         .profile-post-time {
@@ -805,24 +760,6 @@
         </div>
     </div>
 
-    <!-- eHagaki埋め込みモーダル（返信・引用の投稿フォーム） -->
-    <div id="ehagaki-modal" class="ehagaki-modal">
-        <div class="ehagaki-modal-inner">
-            <button id="close-ehagaki-modal" class="ehagaki-close">✕</button>
-            <iframe id="ehagaki-iframe" class="ehagaki-iframe"></iframe>
-        </div>
-    </div>
-
-    <!-- 長押しアクションメニュー（ふぁぼ・RT・引用・リプライ・コピー） -->
-    <div id="long-press-menu" class="lp-menu">
-        <div class="lp-item" data-action="like"><span id="lp-like-icon">⭐</span><span>ふぁぼ</span></div>
-        <div class="lp-item" data-action="repost"><span>🔁</span><span>RT</span></div>
-        <div class="lp-item" data-action="quote"><span>💬</span><span>引用</span></div>
-        <div class="lp-item" data-action="reply"><span>↩️</span><span>リプライ</span></div>
-        <div class="lp-item" data-action="copy"><span>📋</span><span>neventをコピー</span></div>
-        <div class="lp-item" data-action="lumilumi"><span>🔗</span><span>lumilumiで開く</span></div>
-    </div>
-
     <script src="https://unpkg.com/nostr-tools@2.17.0/lib/nostr.bundle.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="./utility.js"></script>
@@ -832,6 +769,9 @@
     <script src="./auth.js"></script>
     <script src="./auth-ui.js"></script>
     <script src="./ehagaki-manager.js"></script>
+    <script src="./action-menu.js"></script>
+    <script src="./data-store.js"></script>
+    <script src="./timeline.js"></script>
     <script src="./tweet.js"></script>
     <script src="https://ompomz.github.io/header/loadHeader.js"></script>
 </body>

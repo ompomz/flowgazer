@@ -266,6 +266,16 @@ class FlowgazerApp {
   async init() {
     console.log('🚀 flowgazer起動中...');
 
+    window.actionMenu = new NostrActionMenu({
+      clientTag: ['client', 'flowgazer', '31990:a19caaa8404721584746fb0e174cf971a94e0f51baaf4c4e8c6e54fa88985eaf:1755917022711', 'wss://relay.nostr.band/'],
+      getRelayUrl: () => {
+        return window.relayManager?.url || 'wss://r.kojira.io/';
+      },
+      publish: async (event) => {
+        return await window.relayManager?.publish(event);
+      }
+    });
+
     // SubscriptionBuilder を初期化（DataStore が確定してから）
     this.subscriptionBuilder = new SubscriptionBuilder(this, window.dataStore);
 

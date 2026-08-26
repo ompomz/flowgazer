@@ -6,28 +6,27 @@
 // ===== Timeline クラス =====
 
 class Timeline {
-    constructor(containerElement) {
+    constructor(containerElement, options = {}) {
         this.container = containerElement;
         this.currentTab = 'global';
-        // DOM要素の追跡用
         this.activeElements = new Set();
-        // チャンネル名キャッシュ
         this.channelNameMap = window.channelNameMap || new Map();
-        // フィルターオプション
-        // showKind42 は app.js（FlowgazerApp）が localStorage から復元した値を初期値として引き継ぐ。
-        // これをしないと、ページ読み込み直後は「トグルON」でも表示フィルタ上は false 扱いになってしまう。
         this.filterOptions = {
             flowgazerOnly: false,
             authors: null,
             showKind42: window.app?.showKind42 || false
         };
 
-        // 1. Canvasを作成して、測るためのペン(measureCtx)を保存する
+        // 🆕 タイムスタンプ表示形式のカスタマイズ用フック。
+        // 未指定時は従来通り HH:MM:SS 固定（メインタイムライン向け）。
+        // プロフィール投稿一覧のように長期間の投稿が並ぶページでは、
+        // 呼び出し側から日付付きフォーマッタを渡せるようにする。
+        this.timestampFormatter = options.timestampFormatter || null;
+
         const canvas = document.createElement('canvas');
         this.measureCtx = canvas.getContext('2d');
         this.measureCtx.font = '14px sans-serif';
 
-        // 2. 時刻の幅を計算
         this.maxNameWidthPx = this.measureCtx.measureText("[00:00:000]").width;
         this.maxContentWidthPx = 0;
     }
@@ -159,7 +158,6 @@ class Timeline {
         // 2. 短縮版のテキスト作成
         let shortText = fullContent;
         if (fullContent.length > threshold) {
-            // 簡易的には substring でも良いが、壊さないために慎重にカット
             shortText = fullContent.substring(0, threshold);
         }
 
@@ -171,7 +169,6 @@ class Timeline {
         wrapper.className = 'expandable-content';
 
         const render = (text) => {
-            // text が短縮されていても、linkify が動くようにする
             const tempEvent = { ...event, content: text };
             return this.createContent(tempEvent);
         };
@@ -205,44 +202,38 @@ class Timeline {
         li.className = 'event event-channel';
         li.id = event.id;
 
-        // 🆕 自分がすでにふぁぼっているチャンネル投稿なら右端を光らせる
-        // （kind:1のcreatePostElementと同じロジック。event.id自身のふぁぼ状態を見る）
         if (window.dataStore.isLikedByMe(event.id)) {
             li.classList.add('event-liked');
         }
 
-        // 長押しハンドラー
-        const longPressHandler = this.createLongPressHandler(event);
-        longPressHandler.attach(li);
+        // 🆕 共通アクションメニューの紐付け
+        if (window.actionMenu) {
+            window.actionMenu.attach(li, event);
+        }
 
         // destroy メソッド
         li.destroy = () => {
-            longPressHandler.detach();
+            if (window.actionMenu) {
+                window.actionMenu.detach(li);
+            }
             li.remove();
         };
 
         // メタデータ
         li.appendChild(this.createMetadata(event));
 
-        // channelId と relay ヒントを e タグから取得（root優先。無ければ最初の e タグ）
+        // channelId と relay ヒントを e タグから取得
         const channelTag = event.tags?.find(t => t[0] === 'e' && t[3] === 'root')
             || event.tags?.find(t => t[0] === 'e');
         const channelId = channelTag?.[1] || null;
         const relayHint = channelTag?.[2] || null;
 
-        // チャンネルバッジ（クリック可能）
         li.appendChild(this.createChannelBadge(channelId, relayHint));
 
-        // 改行表示ONかつ本文に改行を含む場合、本文の直前で改行する
         if (this._shouldBreakBeforeContent(event)) {
             li.appendChild(document.createElement('br'));
         }
 
-        // --- 本文 ---
-        // 改行表示のON/OFFは #timeline.pre-wrap-enabled クラスの有無で
-        // CSS側（.post-content の white-space）を切り替える。
-        // 個別要素にstyleを直接指定すると詳細度でCSSクラスに勝ってしまうため、
-        // ここではインラインstyleを付けない。
         const content = this.createContent(event);
         li.appendChild(content);
 
@@ -251,11 +242,6 @@ class Timeline {
 
     /**
      * チャンネルバッジを生成する。
-     * - 名前解決済みなら channelNameMap から表示、未解決なら app.js に解決をリクエストする
-     * - クリックで eHagaki のパブリックチャットへコンテキスト切り替え（app.js経由）
-     * @param {string|null} channelId
-     * @param {string|null} relayHint - eタグ3番目の要素
-     * @returns {HTMLElement}
      */
     createChannelBadge(channelId, relayHint) {
         const badge = document.createElement('span');
@@ -272,7 +258,6 @@ class Timeline {
             badge.textContent = `*${this.channelNameMap.get(channelId)} `;
         } else {
             badge.textContent = '*kind:42 ';
-            // 未解決チャンネルの名前解決をリクエスト（多重購読防止はapp.js側で行う）
             if (channelId) {
                 window.app?.ensureChannelResolved?.(channelId, relayHint);
             }
@@ -288,12 +273,6 @@ class Timeline {
         return badge;
     }
 
-    /**
-     * チャンネル名解決完了後、すでにDOMに存在するバッジのテキストだけを更新する。
-     * 全体 refresh() を呼ばずに済むため、他タブの描画状態を壊さない。
-     * @param {string} channelId
-     * @param {string} name
-     */
     updateChannelBadge(channelId, name) {
         if (!channelId) return;
         const selector = `.-badgchannele[data-channel-id="${CSS.escape(channelId)}"]`;
@@ -302,12 +281,9 @@ class Timeline {
         });
     }
 
-    // pubkeyを元に、表示用の短い名前（@nameなど）を返す
     resolveName(pubkey) {
-        // 1. dataStoreから「一番良い名前」を取得（ロジックを共通化！）
         let name = window.dataStore.getDisplayName(pubkey);
 
-        // 2. 文字数（ピクセル幅）制限の処理
         const ctx = this.measureCtx;
         const maxWidth = this.maxNameWidthPx;
 
@@ -316,7 +292,6 @@ class Timeline {
         const ellipsis = "…";
         const ellipsisWidth = ctx.measureText(ellipsis).width;
 
-        // もしnpubなどではなく名前が取れている場合に備えて一文字ずつチェック
         for (const char of name) {
             const charWidth = ctx.measureText(char).width;
 
@@ -344,21 +319,22 @@ class Timeline {
             li.classList.add('event-liked');
         }
 
-        // 長押しハンドラー
-        const longPressHandler = this.createLongPressHandler(event);
-        longPressHandler.attach(li);
+        // 🆕 共通アクションメニューの紐付け
+        if (window.actionMenu) {
+            window.actionMenu.attach(li, event);
+        }
 
         // destroy メソッド
         li.destroy = () => {
-            longPressHandler.detach();
+            if (window.actionMenu) {
+                window.actionMenu.detach(li);
+            }
             li.remove();
         };
 
         // メタデータ
         li.appendChild(this.createMetadata(event));
 
-        // リプライ先（pタグ）の表示を追加
-        // 最初に見つかった p タグをリプライ先とみなす（または自分以外のpubkeyを探す）
         const replyTag = event.tags.find(tag => tag[0] === "p");
         if (replyTag) {
             const targetPubkey = replyTag[1];
@@ -367,7 +343,6 @@ class Timeline {
             replySpan.className = 'reply-indicator';
             replySpan.appendChild(document.createTextNode(' '));
 
-            // リプライ先の名前をリンクにする
             const targetName = this.resolveName(targetPubkey);
             const targetLink = this.createAuthorLink(targetPubkey);
             targetLink.textContent = targetName;
@@ -377,18 +352,15 @@ class Timeline {
             li.appendChild(document.createTextNode(' '));
         }
 
-        // 改行表示ONかつ本文に改行を含む場合、本文の直前で改行する
         if (this._shouldBreakBeforeContent(event)) {
             li.appendChild(document.createElement('br'));
         }
 
-        // 本文
         const cwTag = event.tags.find(tag => tag[0] === "content-warning");
 
         if (cwTag) {
             const reason = cwTag[1] ? `：${cwTag[1]}` : "";
 
-            // ボタンではなく <a> タグで作る
             const cwLink = document.createElement('a');
             cwLink.href = '#';
             cwLink.className = 'nostr-ref';
@@ -398,7 +370,6 @@ class Timeline {
                 e.preventDefault();
                 e.stopPropagation();
 
-                // ★ CW を開いたら createExpandableContent を使う
                 const expandable = this.createExpandableContent(event);
                 cwLink.replaceWith(expandable);
             };
@@ -406,12 +377,10 @@ class Timeline {
             li.appendChild(cwLink);
 
         } else {
-            // ★ CW が無い場合も createExpandableContent を使う
             const expandable = this.createExpandableContent(event);
             li.appendChild(expandable);
         }
 
-        // リアクションバッジ
         if (this.currentTab === 'myposts') {
             const badge = this.createReactionBadge(event.id);
             if (badge) li.appendChild(badge);
@@ -424,20 +393,16 @@ class Timeline {
         const span = document.createElement('span');
         span.className = 'inline-rt';
 
-        // "RT: "
         const prefix = document.createElement('span');
         prefix.textContent = 'RT: ';
         prefix.className = 'repost-prefix';
         span.appendChild(prefix);
 
-        // author link
         const author = this.createAuthorLink(originalEvent.pubkey);
         span.appendChild(author);
 
-        // " > "
         span.appendChild(document.createTextNode(' > '));
 
-        // content（折りたたみ対応）
         const content = this.createExpandableContent(originalEvent);
         span.appendChild(content);
 
@@ -451,7 +416,15 @@ class Timeline {
         const li = document.createElement('li');
         li.className = 'event event-repost';
 
+        // 🆕 共通アクションメニューの紐付け
+        if (window.actionMenu) {
+            window.actionMenu.attach(li, event);
+        }
+
         li.destroy = () => {
+            if (window.actionMenu) {
+                window.actionMenu.detach(li);
+            }
             li.remove();
         };
 
@@ -498,28 +471,25 @@ class Timeline {
         const li = document.createElement('li');
         li.className = 'event event-like';
 
-        // 🆕 このリアクション通知（kind:7イベント）自体を自分がふぁぼっている場合、
-        // event-liked クラスで右端をハイライトする。
-        // Nostr仕様上、kind:7イベントのidを対象にさらに自分がkind:7を送ることは可能なため、
-        // createPostElement / createChannelMessageElement と同じロジック（event.idそのもの）が使える。
-        // targetId（プレビュー中の元投稿）ではなく event.id を見る点に注意。
         if (window.dataStore.isLikedByMe(event.id)) {
             li.classList.add('event-liked');
         }
 
-        // 長押しハンドラー
-        const longPressHandler = this.createLongPressHandler(event);
-        longPressHandler.attach(li);
+        // 🆕 共通アクションメニューの紐付け
+        if (window.actionMenu) {
+            window.actionMenu.attach(li, event);
+        }
 
         // destroy メソッド
         li.destroy = () => {
-            longPressHandler.detach();
+            if (window.actionMenu) {
+                window.actionMenu.detach(li);
+            }
             li.remove();
         };
 
         li.appendChild(this.createMetadata(event));
 
-        // カスタム絵文字処理
         const content = event.content || '+';
         const isCustomEmoji =
             content.startsWith(':') &&
@@ -530,7 +500,6 @@ class Timeline {
             const wrapper = document.createElement('span');
             wrapper.style.cssText =
                 'display: inline-block; height: 1.5rem; vertical-align: middle; margin: 0 0.25rem;';
-            // マウスオーバー時にショートコード（:kawaii_cat: など）をブラウザ標準ツールチップで表示
             wrapper.title = content;
 
             const emojiElement =
@@ -553,11 +522,7 @@ class Timeline {
             li.appendChild(emoji);
         }
 
-        // --- 【ここから修正】対象投稿へのリンク取得ロジック ---
         const eTags = event.tags?.filter(t => t[0] === 'e') || [];
-
-        // 1. "reply" マーカーを最優先
-        // 2. マーカーがない場合、eタグが複数あれば最後(最新の参照)を、1つならそれを採用
         const targetTag =
             eTags.find(t => t[3] === 'reply') ||
             (eTags.length > 0 ? eTags[eTags.length - 1] : null);
@@ -577,242 +542,6 @@ class Timeline {
     }
 
     // ========================================
-    // 長押しハンドラー（オブジェクト化）
-    // ========================================
-
-    /**
-     * 長押しハンドラーオブジェクトを作成
-     * @param {Object} event - Nostrイベント
-     * @returns {Object} { attach, detach }
-     */
-    createLongPressHandler(event) {
-        let timer;
-        let startPos = { x: 0, y: 0 };
-        const THRESHOLD = 10;
-
-        const triggerAction = () => {
-            const menu = document.getElementById('long-press-menu');
-
-            // ふぁぼアイコンの反映
-            const customLikeIcon = document.getElementById('kind-7-content-input')?.value || "⭐";
-            const likeDisplay = document.getElementById('lp-like-icon');
-            if (likeDisplay) likeDisplay.textContent = customLikeIcon;
-
-            // 表示位置設定
-            menu.style.left = `${startPos.x}px`;
-            menu.style.top = `${startPos.y - 20}px`;
-            menu.style.display = 'flex';
-
-            // 初期選択状態（like）の設定
-            const items = menu.querySelectorAll('.lp-item');
-            items.forEach(i => i.classList.remove('selected'));
-            menu.querySelector('[data-action="like"]')?.classList.add('selected');
-
-            // --- 共通の閉じる処理 ---
-            const closeMenu = (e) => {
-                if (e && e.target && menu.contains(e.target)) return;
-                menu.style.display = 'none';
-                // リスナー解除
-                document.removeEventListener('pointerdown', closeMenu);
-                document.removeEventListener('keydown', handleKeyDown);
-                menu.onclick = null; // 委譲リスナーも掃除
-            };
-
-            // --- キーボード操作 ---
-            const handleKeyDown = (e) => {
-                if (e.key === 'Enter') {
-                    const selected = menu.querySelector('.lp-item.selected');
-                    if (selected) this.executeNostrAction(selected.getAttribute('data-action'), event);
-                    closeMenu();
-                } else if (e.key === 'Escape') closeMenu();
-            };
-
-            // --- イベント委譲によるクリック一括管理 ---
-            menu.onclick = (e) => {
-                e.stopPropagation();
-                e.preventDefault();
-
-                // クリックされた要素から一番近い .lp-item を探す
-                const item = e.target.closest('.lp-item');
-                const action = item?.getAttribute('data-action');
-
-                if (action) {
-                    this.executeNostrAction(action, event);
-                    closeMenu();
-                }
-            };
-
-            setTimeout(() => {
-                document.addEventListener('pointerdown', closeMenu);
-                document.addEventListener('keydown', handleKeyDown);
-            }, 100);
-        };
-
-        const start = (e) => {
-            const touch = e.touches ? e.touches[0] : e;
-            startPos = { x: touch.clientX, y: touch.clientY };
-            timer = setTimeout(() => triggerAction(e), 400);
-        };
-
-        const move = (e) => {
-            if (!timer) return;
-            const touch = e.touches ? e.touches[0] : e;
-            const dist = Math.hypot(touch.clientX - startPos.x, touch.clientY - startPos.y);
-
-            // 設定したしきい値を超えて動いたらキャンセル
-            if (dist > THRESHOLD) {
-                clearTimeout(timer);
-                timer = null;
-            }
-        };
-
-        const cancel = () => {
-            clearTimeout(timer);
-            timer = null;
-        };
-
-        return {
-            element: null,
-            attach(element) {
-                this.element = element;
-                element.addEventListener('mousedown', start);
-                element.addEventListener('touchstart', start, { passive: true });
-
-                // 移動検知（しきい値判定用）
-                element.addEventListener('mousemove', move);
-                element.addEventListener('touchmove', move, { passive: true });
-
-                // 中断イベント
-                element.addEventListener('mouseup', cancel);
-                element.addEventListener('mouseleave', cancel);
-                element.addEventListener('touchend', cancel);
-                element.addEventListener('touchcancel', cancel);
-
-                element._longPressHandlers = { start, move, cancel };
-            },
-            detach() {
-                const el = this.element;
-                if (!el || !el._longPressHandlers) return;
-                const { start, move, cancel } = el._longPressHandlers;
-                el.removeEventListener('mousedown', start);
-                el.removeEventListener('touchstart', start);
-                el.removeEventListener('mousemove', move);
-                el.removeEventListener('touchmove', move);
-                el.removeEventListener('mouseup', cancel);
-                el.removeEventListener('mouseleave', cancel);
-                el.removeEventListener('touchend', cancel);
-                el.removeEventListener('touchcancel', cancel);
-                delete el._longPressHandlers;
-                clearTimeout(timer);
-            }
-        };
-    }
-
-    /**
-     * Nostrアクション（like, repost, quote, reply）を実行
-     */
-    async executeNostrAction(action, originalEvent) {
-        // neventの生成（共通ロジック）
-        // 🆕 eHagaki側での「イベント取得失敗」を防ぐため、
-        //    author / kind をnevent自体に埋め込み、relay問い合わせに頼らず著者が分かるようにする。
-        //    また relayManager.url が null（未接続）の場合に不正な relays: [null] を渡さないようガードする。
-        const connectedRelay = window.relayManager?.url || null;
-        const nevent = window.NostrTools.nip19.neventEncode({
-            id: originalEvent.id,
-            author: originalEvent.pubkey,
-            kind: originalEvent.kind,
-            relays: connectedRelay ? [connectedRelay] : []
-        });
-
-        switch (action) {
-            case 'like':
-                if (window.sendLikeEvent) window.sendLikeEvent(originalEvent.id, originalEvent.pubkey);
-                break;
-
-            case 'repost':
-                if (!confirm('RTしますか？')) return;
-
-                const isTextNote = originalEvent.kind === 1;
-                const repostKind = isTextNote ? 6 : 16;
-
-                const repostEv = {
-                    kind: repostKind,
-                    content: "",
-                    created_at: Math.floor(Date.now() / 1000),
-                    tags: [
-                        ["e", originalEvent.id, window.relayManager.url],
-                        ["p", originalEvent.pubkey]
-                    ]
-                };
-
-                if (!isTextNote) {
-                    repostEv.tags.push(["k", String(originalEvent.kind)]);
-                }
-
-                // クライアントタグ
-                repostEv.tags.push([
-                    'client',
-                    'flowgazer',
-                    '31990:a19caaa8404721584746fb0e174cf971a94e0f51baaf4c4e8c6e54fa88985eaf:1755917022711',
-                    'wss://relay.nostr.band/'
-                ]);
-
-                try {
-                    const signed = await window.nostrAuth.signEvent(repostEv);
-                    window.relayManager.publish(signed);
-                    // alertはUXを阻害する場合があるため、必要に応じてトースト通知等へ
-                    console.log('RT成功');
-                } catch (err) {
-                    console.error('RT失敗:', err);
-                    alert('RTに失敗しました');
-                }
-                break;
-
-            case 'quote':
-                window.ehagakiManager?.open?.({
-                    quotes: [nevent],
-                    quoteEvents: [originalEvent], // 🆕 preloadedEvents用
-                    reply: null
-                });
-                break;
-
-            case 'reply':
-                if (originalEvent.kind === 42) {
-                    const channelTag = originalEvent.tags?.find(t => t[0] === 'e' && t[3] === 'root')
-                        || originalEvent.tags?.find(t => t[0] === 'e');
-                    const channelId = channelTag?.[1] || null;
-                    const relayHint = channelTag?.[2] || null;
-
-                    // 🆕 originalEventをpreloadedEvents用に渡す
-                    window.ehagakiManager?.openReplyToChannel?.(nevent, channelId, relayHint, originalEvent);
-                } else {
-                    window.ehagakiManager?.open?.({
-                        reply: nevent,
-                        quotes: [],
-                        replyEvent: originalEvent // 🆕 preloadedEvents用
-                    });
-                }
-                break;
-
-            case 'copy':
-                // neventをコピー
-                try {
-                    await navigator.clipboard.writeText(`${nevent}`);
-                    alert('neventをコピーしました');
-                } catch (err) {
-                    console.error('neventコピー失敗:', err);
-                    alert('neventのコピーに失敗しました');
-                }
-                break;
-
-            case 'lumilumi':
-                // lumilumiで開く
-                window.open(`https://lumilumi.app/${nevent}`, '_blank');
-                break;
-        }
-    }
-
-    // ========================================
     // 共通要素作成
     // ========================================
 
@@ -827,26 +556,24 @@ class Timeline {
         return span;
     }
 
-    /**
-     * 改行表示ONかつ本文に \n を含む場合に true。
-     * メタデータ（名前 > やチャンネルバッジ）の直後で <br> を挟むかどうかの判定に使う。
-     * @param {Object} event
-     * @returns {boolean}
-     * @private
-     */
     _shouldBreakBeforeContent(event) {
         return !!(window.app?.preWrapEnabled && (event.content || '').includes('\n'));
     }
 
     createTimestamp(event) {
         const date = new Date(event.created_at * 1000);
-        const timeStr = String(date.getHours()).padStart(2, '0') + ':' +
+
+        // 🆕 timestampFormatter が渡されていればそちらを優先
+        const timeStr = this.timestampFormatter
+            ? this.timestampFormatter(date, event)
+            : String(date.getHours()).padStart(2, '0') + ':' +
             String(date.getMinutes()).padStart(2, '0') + ':' +
             String(date.getSeconds()).padStart(2, '0');
 
+        // 🆕 relayManager が存在しないページ（tweet.htmlなど）でも落ちないようにする
         const nevent = window.NostrTools.nip19.neventEncode({
             id: event.id,
-            relays: [window.relayManager.url]
+            relays: window.relayManager?.url ? [window.relayManager.url] : []
         });
 
         const link = document.createElement('a');
@@ -878,11 +605,8 @@ class Timeline {
         for (const char of rawName) {
             const charWidth = this.measureCtx.measureText(char).width;
 
-            // 次の文字を足すと maxWidth を超える可能性がある場合
             if (currentWidth + charWidth > maxWidth) {
-                // すでに1文字以上あるなら、末尾を三点リーダーにする余裕があるか判定してカット
                 if (truncatedName.length > 0) {
-                    // 三点リーダー込みで幅に収まる位置まで削る（安全策）
                     while (truncatedName.length > 0 && (this.measureCtx.measureText(truncatedName).width + ellipsisWidth) > maxWidth) {
                         truncatedName = truncatedName.slice(0, -1);
                     }
@@ -905,12 +629,10 @@ class Timeline {
         div.className = 'post-content';
         const rawContent = event.content || '';
 
-        // 1. HTMLエスケープ + linkify
         const escapedContent = MyNostrUtils.escapeHtml(rawContent);
         const formattedContent = MyNostrUtils.linkify(escapedContent, { expandMedia: false });
         div.innerHTML = formattedContent;
 
-        // :emoji: を探して置換
         const walker = document.createTreeWalker(div, NodeFilter.SHOW_TEXT, null, false);
         const textNodes = [];
 
@@ -921,7 +643,6 @@ class Timeline {
         textNodes.forEach(node => {
             const text = node.nodeValue;
 
-            // :xxx: パターン検出
             if (!text.includes(':')) return;
 
             const parts = text.split(/(:[a-zA-Z0-9_+-]+:)/g);
@@ -993,7 +714,7 @@ class Timeline {
             const img = document.createElement('img');
             img.src = emojiTag[2];
             img.alt = shortcode;
-            img.title = shortcode; // 本文中の絵文字にもツールチップを付与
+            img.title = shortcode;
             img.className = 'custom-emoji';
             return img;
         }
@@ -1004,7 +725,8 @@ class Timeline {
     createEventLink(eventId) {
         const nevent = window.NostrTools.nip19.neventEncode({
             id: eventId,
-            relays: [window.relayManager.url]
+            // 🆕 同上
+            relays: window.relayManager?.url ? [window.relayManager.url] : []
         });
 
         const link = document.createElement('a');
@@ -1020,12 +742,12 @@ class Timeline {
         const div = document.createElement('div');
         div.className = 'original-post-preview';
         div.style.cssText = `
-    margin: 0.5rem 0;
-    padding: 0.5rem;
-    background-color: #F3F2F1;
-    border-left: 3px solid #65A4D4;
-    font-size: 0.85rem;
-  `;
+            margin: 0.5rem 0;
+            padding: 0.5rem;
+            background-color: #F3F2F1;
+            border-left: 3px solid #65A4D4;
+            font-size: 0.85rem;
+        `;
 
         const originalEvent = window.dataStore.getEvent(eventId);
 
@@ -1036,10 +758,8 @@ class Timeline {
 
             const content = document.createElement('span');
 
-            // kindによって表示を少し調整
             let rawText = originalEvent.content || '';
             if (originalEvent.kind === 40) {
-                // チャンネル作成イベントだった場合のフォールバック
                 try {
                     const parsed = JSON.parse(rawText);
                     rawText = `[Channel Create: ${parsed.name || 'Untitled'}]`;

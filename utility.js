@@ -241,6 +241,16 @@ const MyNostrUtils = {
                 modal.style.display = 'block';
             }
         };
+    },
+
+    // utility.js に追加
+    toNevent(event, relayUrl) {
+        return window.NostrTools.nip19.neventEncode({
+            id: event.id,
+            author: event.pubkey,
+            kind: event.kind,
+            relays: relayUrl ? [relayUrl] : []
+        });
     }
 };
 

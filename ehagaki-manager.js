@@ -15,6 +15,40 @@
 
     console.log('✅ ehagaki-manager.js 読み込み完了');
 
+    /**
+     * #ehagaki-modal が存在しなければDOM/CSSを自動生成する。
+     * すでにHTML側にカスタムなモーダルがある場合は何もしない
+     * （ページ固有デザインを維持したい場合はHTML側の記述を残せばよい）。
+     */
+    function ensureModalDom() {
+        if (document.getElementById('ehagaki-modal')) return;
+
+        const style = document.createElement('style');
+        style.id = 'ehagaki-modal-style';
+        style.textContent = `
+        .ehagaki-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+            z-index: 9999; align-items: center; justify-content: center; }
+        .ehagaki-modal-inner { background: rgb(240, 240, 240); width: 95%; max-width: 480px; height: 85vh;
+            border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; }
+        .ehagaki-close { align-self: flex-end; margin: 0.5rem 1rem 0 0; background: none; border: none;
+            color: #666; font-weight: bold; font-size: 1.1rem; cursor: pointer; }
+        .ehagaki-iframe { flex: 1; width: 100%; border: none; }
+    `;
+        document.head.appendChild(style);
+
+        const modal = document.createElement('div');
+        modal.id = 'ehagaki-modal';
+        modal.className = 'ehagaki-modal';
+        modal.innerHTML = `
+        <div class="ehagaki-modal-inner">
+            <button id="close-ehagaki-modal" class="ehagaki-close">✕</button>
+            <iframe id="ehagaki-iframe" class="ehagaki-iframe"></iframe>
+        </div>`;
+        document.body.appendChild(modal);
+    }
+
+    ensureModalDom();
+
     // --- eHagaki 管理マネージャー ---
     window.ehagakiManager = {
         ORIGIN: 'https://lokuyow.github.io',

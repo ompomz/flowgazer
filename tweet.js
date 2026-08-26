@@ -43,10 +43,30 @@ const DEFAULT_MAIN_RELAY = 'wss://r.kojira.io/';
 // ログインUI更新用の最小限のスタブをここで用意して橋渡しする
 // （kit-ten.html等の「ページ固有の上書きはwindow.appを介して行う」既存パターンに準拠）。
 window.app = {
+    // 🆕 プロフィール投稿一覧の改行表示を、従来のhasLineBreakロジックと同じにするため常時ON
+    preWrapEnabled: true,
     updateLoginUI() {
         updateTweetPageLoginUI();
     }
 };
+
+// tweet.js 冒頭あたりで一度だけ生成
+window.tweetActionMenu = new NostrActionMenu({
+    clientTag: CLIENT_TAG,
+    getRelayUrl: getMainRelayUrl,
+    publish: publishToMainRelay
+});
+
+// timeline.js（Timelineクラス）は window.actionMenu を参照する設計のため、
+// 同じインスタンスをそちらの名前でも公開する
+window.actionMenu = window.tweetActionMenu;
+
+// 古い関数名で呼ばれても tweetActionMenu に転送する橋渡し関数
+function attachActionHandler(element, event) {
+    if (window.tweetActionMenu && element) {
+        window.tweetActionMenu.attach(element, event);
+    }
+}
 
 // ========================================
 // 共通ユーティリティ
@@ -128,7 +148,7 @@ function showJumpButton(pubkey, originalId) {
     if (!jumpBtn) return;
     try {
         const npub = NostrTools.nip19.npubEncode(pubkey);
-        const okkakeUrl = `https://ompomz.github.io/flowgazer/okkake/?id=${encodeURIComponent(originalId)}&follow=${npub}`;
+        const okkakeUrl = `https://ompomz.github.io/flowgazer/okkake.html?id=${encodeURIComponent(originalId)}&follow=${npub}`;
         jumpBtn.style.display = 'inline-block';
         jumpBtn.onclick = () => window.open(okkakeUrl, '_blank');
     } catch (e) {
@@ -204,262 +224,9 @@ function requireWriteAccess() {
     return true;
 }
 
-/**
- * ふぁぼ（kind:7）を送信する。
- * 絵文字は本体の設定（localStorageの favMark）を共有する。未設定時は '+' 。
- */
-async function sendLike(targetEventId, targetPubkey) {
-    if (!requireWriteAccess()) return;
-
-    try {
-        const favMark = localStorage.getItem('favMark') || '+';
-        const event = {
-            kind: 7,
-            content: favMark,
-            created_at: Math.floor(Date.now() / 1000),
-            tags: [['e', targetEventId], ['p', targetPubkey]]
-        };
-        const signed = await window.nostrAuth.signEvent(event);
-        await publishToMainRelay(signed);
-        alert('ふぁぼった!');
-    } catch (err) {
-        console.error('ふぁぼ失敗:', err);
-        alert('ふぁぼれませんでした: ' + err.message);
-    }
-}
-
-/**
- * リポスト（kind:6 / 引用元がkind:1以外ならkind:16）を送信する。
- */
-async function sendRepost(originalEvent) {
-    if (!confirm('RTしますか？')) return;
-    if (!requireWriteAccess()) return;
-
-    const isTextNote = originalEvent.kind === 1;
-    const repostKind = isTextNote ? 6 : 16;
-    const relay = getMainRelayUrl();
-
-    const repostEvent = {
-        kind: repostKind,
-        content: '',
-        created_at: Math.floor(Date.now() / 1000),
-        tags: [
-            ['e', originalEvent.id, relay],
-            ['p', originalEvent.pubkey]
-        ]
-    };
-    if (!isTextNote) repostEvent.tags.push(['k', String(originalEvent.kind)]);
-    repostEvent.tags.push(CLIENT_TAG);
-
-    try {
-        const signed = await window.nostrAuth.signEvent(repostEvent);
-        await publishToMainRelay(signed);
-        alert('RTしました！');
-    } catch (err) {
-        console.error('RT失敗:', err);
-        alert('RTに失敗しました: ' + err.message);
-    }
-}
-
-/**
- * 長押しメニューから選択されたアクションを実行する。
- * quote / reply は eHagaki（本体と共通のコンポーザー）に委譲する。
- */
-async function executeNostrAction(action, originalEvent) {
-    const relay = getMainRelayUrl();
-    const nevent = NostrTools.nip19.neventEncode({
-        id: originalEvent.id,
-        author: originalEvent.pubkey,
-        kind: originalEvent.kind,
-        relays: relay ? [relay] : []
-    });
-
-    switch (action) {
-        case 'like':
-            await sendLike(originalEvent.id, originalEvent.pubkey);
-            break;
-
-        case 'repost':
-            await sendRepost(originalEvent);
-            break;
-
-        case 'quote':
-            if (!requireWriteAccess()) return;
-            window.ehagakiManager?.open?.({ quotes: [nevent], reply: null });
-            break;
-
-        case 'reply':
-            if (!requireWriteAccess()) return;
-
-            if (originalEvent.kind === 42) {
-                // 🆕 kind:42へのリプライはチャンネルコンテキストを付与してopenReplyToChannelを使う
-                const channelTag = originalEvent.tags?.find(t => t[0] === 'e' && t[3] === 'root')
-                    || originalEvent.tags?.find(t => t[0] === 'e');
-                const channelId = channelTag?.[1] || null;
-                const relayHint = channelTag?.[2] || null;
-
-                window.ehagakiManager?.openReplyToChannel?.(nevent, channelId, relayHint, originalEvent);
-            } else {
-                window.ehagakiManager?.open?.({
-                    reply: nevent,
-                    quotes: [],
-                    replyEvent: originalEvent
-                });
-            }
-            break;
-
-        case 'copy':
-            try {
-                await navigator.clipboard.writeText(nevent);
-                alert('neventをコピーしました');
-            } catch (err) {
-                console.error('neventコピー失敗:', err);
-                alert('コピーに失敗しました');
-            }
-            break;
-
-        case 'lumilumi':
-            window.open(`https://lumilumi.app/${nevent}`, '_blank');
-            break;
-    }
-}
-
-/**
- * 長押しハンドラーオブジェクトを作成する（本体 timeline.js の実装に準拠）。
- * @param {Object} event - アクション対象のNostrイベント
- * @returns {{attach: Function, detach: Function}}
- */
-function createLongPressHandler(event) {
-    let timer;
-    let startPos = { x: 0, y: 0 };
-    const THRESHOLD = 10;
-
-    const triggerAction = () => {
-        const menu = document.getElementById('long-press-menu');
-        if (!menu) return;
-
-        const likeDisplay = document.getElementById('lp-like-icon');
-        if (likeDisplay) likeDisplay.textContent = localStorage.getItem('favMark') || '⭐';
-
-        // 画面端でメニューがはみ出さないよう位置を補正
-        const menuWidth = 190;
-        const x = Math.min(Math.max(8, startPos.x), window.innerWidth - menuWidth - 8);
-        const y = Math.min(startPos.y - 20, window.innerHeight - 260);
-        menu.style.left = `${x}px`;
-        menu.style.top = `${Math.max(8, y)}px`;
-        menu.style.display = 'flex';
-
-        const items = menu.querySelectorAll('.lp-item');
-        items.forEach(i => i.classList.remove('selected'));
-        menu.querySelector('[data-action="like"]')?.classList.add('selected');
-
-        const closeMenu = (e) => {
-            if (e && e.target && menu.contains(e.target)) return;
-            menu.style.display = 'none';
-            document.removeEventListener('pointerdown', closeMenu);
-            document.removeEventListener('keydown', handleKeyDown);
-            menu.onclick = null;
-        };
-
-        const handleKeyDown = (e) => {
-            if (e.key === 'Enter') {
-                const selected = menu.querySelector('.lp-item.selected');
-                if (selected) executeNostrAction(selected.getAttribute('data-action'), event);
-                closeMenu();
-            } else if (e.key === 'Escape') {
-                closeMenu();
-            }
-        };
-
-        menu.onclick = (e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            const item = e.target.closest('.lp-item');
-            const action = item?.getAttribute('data-action');
-            if (action) {
-                executeNostrAction(action, event);
-                closeMenu();
-            }
-        };
-
-        setTimeout(() => {
-            document.addEventListener('pointerdown', closeMenu);
-            document.addEventListener('keydown', handleKeyDown);
-        }, 100);
-    };
-
-    const start = (e) => {
-        const touch = e.touches ? e.touches[0] : e;
-        startPos = { x: touch.clientX, y: touch.clientY };
-        timer = setTimeout(() => triggerAction(), 400);
-    };
-
-    const move = (e) => {
-        if (!timer) return;
-        const touch = e.touches ? e.touches[0] : e;
-        const dist = Math.hypot(touch.clientX - startPos.x, touch.clientY - startPos.y);
-        if (dist > THRESHOLD) {
-            clearTimeout(timer);
-            timer = null;
-        }
-    };
-
-    const cancel = () => {
-        clearTimeout(timer);
-        timer = null;
-    };
-
-    return {
-        element: null,
-        attach(element) {
-            this.element = element;
-            element.addEventListener('mousedown', start);
-            element.addEventListener('touchstart', start, { passive: true });
-            element.addEventListener('mousemove', move);
-            element.addEventListener('touchmove', move, { passive: true });
-            element.addEventListener('mouseup', cancel);
-            element.addEventListener('mouseleave', cancel);
-            element.addEventListener('touchend', cancel);
-            element.addEventListener('touchcancel', cancel);
-            element._longPressHandlers = { start, move, cancel };
-            element.classList.add('long-pressable');
-        },
-        detach() {
-            const el = this.element;
-            if (!el || !el._longPressHandlers) return;
-            const { start, move, cancel } = el._longPressHandlers;
-            el.removeEventListener('mousedown', start);
-            el.removeEventListener('touchstart', start);
-            el.removeEventListener('mousemove', move);
-            el.removeEventListener('touchmove', move);
-            el.removeEventListener('mouseup', cancel);
-            el.removeEventListener('mouseleave', cancel);
-            el.removeEventListener('touchend', cancel);
-            el.removeEventListener('touchcancel', cancel);
-            delete el._longPressHandlers;
-            clearTimeout(timer);
-        }
-    };
-}
-
 // 要素ごとに長押しハンドラーを使い回さないよう、対象要素に紐づけて管理する
 const attachedHandlers = new WeakMap();
 
-/**
- * 指定した要素に、指定イベントの長押しアクションを紐付ける。
- * 同じ要素へ再描画時に再度呼ばれても、直前のハンドラーを確実にdetachしてから付け直す。
- * @param {HTMLElement} element
- * @param {Object} event
- */
-function attachActionHandler(element, event) {
-    if (!element || !event) return;
-    const existing = attachedHandlers.get(element);
-    if (existing) existing.detach();
-
-    const handler = createLongPressHandler(event);
-    handler.attach(element);
-    attachedHandlers.set(element, handler);
-}
 
 // eHagakiモーダルの閉じるボタン・背景クリック配線
 document.getElementById('close-ehagaki-modal')?.addEventListener('click', () => {
@@ -710,6 +477,29 @@ async function formatEmojiOnly(content, tags) {
         }
     }
     return MyNostrUtils.escapeHtml(content);
+}
+
+// ========================================
+// プロフィール投稿一覧用の日付フォーマット
+// ========================================
+
+/**
+ * プロフィール投稿一覧専用のタイムスタンプ整形。
+ * Timelineクラス標準の HH:MM:SS だけだと年をまたぐ投稿の判別ができないため、
+ * 今年の投稿は「月/日 時:分」、それ以前は「年/月/日 時:分」で表示する。
+ * @param {Date} date
+ * @returns {string}
+ */
+function formatProfileDate(date) {
+    const now = new Date();
+    const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+
+    if (date.getFullYear() < now.getFullYear()) {
+        return `${date.getFullYear()}/${m}/${d} ${time}`;
+    }
+    return `${m}/${d} ${time}`;
 }
 
 // ========================================
@@ -1294,6 +1084,7 @@ async function renderProfilePage(pubkey, hintRelays) {
 
 /**
  * プロフィールページ用：対象ユーザーのkind:1投稿一覧を取得して表示する
+ * Timelineクラス（timeline.js）のDOM生成をそのまま流用する。
  * @param {string} pubkey
  * @param {string[]} hintRelays
  */
@@ -1305,7 +1096,11 @@ async function loadUserPostsList(pubkey, hintRelays) {
 
     profilePostsState = { pubkey, hintRelays: hintRelays || [], oldestTimestamp: null, isLoading: false };
 
-    // 🆕 取得開始時点でいったん隠しておく（前の状態を引きずらないようにする）
+    // 🆕 この一覧専用のTimelineインスタンスを生成する。
+    // containerは renderProfilePage() の innerHTML 差し替えのたびに作り直されるため、
+    // 都度 new し直す（前回分の activeElements 参照は自然に破棄される）。
+    window.profileTimeline = new Timeline(listContainer, { timestampFormatter: formatProfileDate });
+
     if (loadMoreBtn) loadMoreBtn.classList.add('hidden');
 
     const relays = getPriorityRelays(hintRelays);
@@ -1318,22 +1113,17 @@ async function loadUserPostsList(pubkey, hintRelays) {
 
         if (events.length === 0) {
             statusEl.textContent = '投稿が見つかりませんでした';
-            return; // loadMoreBtnはすでにhidden
+            return;
         }
 
         events.sort((a, b) => b.created_at - a.created_at);
         profilePostsState.oldestTimestamp = events[events.length - 1].created_at;
 
-        const lines = await Promise.all(events.map(ev => buildProfilePostLine(ev)));
-        listContainer.innerHTML = lines.join('');
+        await prefetchNostrReferences(events, relays);
+
+        renderProfilePostBatch(events);
         statusEl.textContent = '';
 
-        events.forEach(ev => {
-            const line = document.getElementById(`profile-post-${ev.id}`);
-            if (line) attachActionHandler(line, ev);
-        });
-
-        // 🆕 「1件以上実際に描画されている」かつ「取得数が上限に達した（＝続きがありそう）」時だけ表示
         if (loadMoreBtn) {
             const hasRenderedPosts = listContainer.children.length > 0;
             loadMoreBtn.classList.toggle('hidden', !(hasRenderedPosts && events.length >= 50));
@@ -1343,9 +1133,37 @@ async function loadUserPostsList(pubkey, hintRelays) {
     } catch (e) {
         console.warn('ユーザー投稿一覧取得失敗:', e.message);
         statusEl.textContent = '投稿の取得に失敗しました';
-        // 🆕 失敗時は必ずボタンを隠す
         if (loadMoreBtn) loadMoreBtn.classList.add('hidden');
     }
+}
+
+/**
+ * 🆕 イベント配列を dataStore に登録した上で Timeline#createPostElement に渡し、
+ * 生成された <li> を一覧に追加する共通処理。
+ * dataStore に登録しておくことで、Timeline側の isLikedByMe（いいね済みハイライト）や
+ * createContent の引用カード解決（すでにキャッシュ済みの場合のみ）が機能する。
+ * @param {Object[]} events
+ */
+function renderProfilePostBatch(events) {
+    const listContainer = document.getElementById('profile-posts-list');
+    if (!window.profileTimeline) return;
+
+    events.forEach(ev => {
+        window.dataStore.addEvent(ev);
+
+        const li = window.profileTimeline.createPostElement(ev);
+        if (li) {
+            // 🆕 改行が含まれていない場合、Timelineが入れた強制改行（<br>など）を消す処理
+            const hasLineBreak = /\r?\n/.test(ev.content);
+            if (!hasLineBreak) {
+                // 例: Timelineがメタデータと本文の間に入れている改行要素を見つけて非表示にする
+                const br = li.querySelector('br'); // または該当するbr要素
+                if (br) br.remove(); // あるいは style.display = 'none';
+            }
+
+            listContainer.appendChild(li);
+        }
+    });
 }
 
 /**
@@ -1356,7 +1174,7 @@ async function loadMoreProfilePosts() {
 
     const listContainer = document.getElementById('profile-posts-list');
     const loadMoreBtn = document.getElementById('profile-posts-load-more');
-    if (!listContainer || !loadMoreBtn) return;
+    if (!listContainer || !loadMoreBtn || !window.profileTimeline) return;
 
     profilePostsState.isLoading = true;
     loadMoreBtn.classList.add('loading');
@@ -1383,15 +1201,10 @@ async function loadMoreProfilePosts() {
         events.sort((a, b) => b.created_at - a.created_at);
         profilePostsState.oldestTimestamp = events[events.length - 1].created_at;
 
-        const lines = await Promise.all(events.map(ev => buildProfilePostLine(ev)));
-        listContainer.insertAdjacentHTML('beforeend', lines.join(''));
+        await prefetchNostrReferences(events, relays);
 
-        events.forEach(ev => {
-            const line = document.getElementById(`profile-post-${ev.id}`);
-            if (line) attachActionHandler(line, ev);
-        });
+        renderProfilePostBatch(events);
 
-        // 🆕 描画後の実件数で判定
         const hasRenderedPosts = listContainer.children.length > 0;
         loadMoreBtn.classList.toggle('hidden', !(hasRenderedPosts && events.length >= 50));
 
@@ -1409,46 +1222,57 @@ async function loadMoreProfilePosts() {
 }
 
 /**
- * 投稿一覧の1行分HTMLを組み立てる
- * @param {Object} event
- * @returns {Promise<string>}
+ * 取得したイベント群の本文中にある nostr: 参照（nevent, noteなど）をスキャンし、
+ * まだデータストアにないものをリレーから一括で先読みしてキャッシュする。
+ * これにより、タイムライン描画時に引用プレビューやインラインRTが正しく機能するようになる。
  */
-async function buildProfilePostLine(event) {
-    const contentHtml = await formatPostContent(event.content, event.tags, { expandMedia: false });
+async function prefetchNostrReferences(events, relays) {
+    const targetIds = new Set();
+    const nip19Regex = /nostr:(npub1|nevent1|note1|nprofile1|nrelay1)[a-zA-Z0-9]+/g;
 
-    // 日時の条件分岐処理
-    const postDate = new Date(event.created_at * 1000);
-    const now = new Date();
+    // 1. 全イベントの本文から nostr: リンクを探してIDを抽出する
+    events.forEach(ev => {
+        if (!ev.content) return;
+        const matches = ev.content.match(nip19Regex);
+        if (!matches) return;
 
-    let dateStr;
-    // 投稿の年が現在の年より前（または1年以上前）の場合
-    if (postDate.getFullYear() < now.getFullYear()) {
-        const y = postDate.getFullYear();
-        const m = String(postDate.getMonth() + 1).padStart(2, '0');
-        const d = String(postDate.getDate()).padStart(2, '0');
-        const time = postDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        dateStr = `${y}/${m}/${d} ${time}`;
-    } else {
-        // 今年の投稿なら「月/日 時:分」形式
-        const m = String(postDate.getMonth() + 1).padStart(2, '0');
-        const d = String(postDate.getDate()).padStart(2, '0');
-        const time = postDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        dateStr = `${m}/${d} ${time}`;
-    }
-
-    const nevent = NostrTools.nip19.neventEncode({
-        id: event.id,
-        author: event.pubkey,
-        kind: event.kind
+        matches.forEach(match => {
+            const nip19Str = match.replace('nostr:', '');
+            try {
+                const decoded = window.NostrTools.nip19.decode(nip19Str);
+                if (decoded.type === 'nevent' && decoded.data?.id) {
+                    targetIds.add(decoded.data.id);
+                } else if (decoded.type === 'note' && decoded.data) {
+                    targetIds.add(decoded.data);
+                }
+            } catch (e) {
+                // デコード失敗は無視
+            }
+        });
     });
 
-    const hasLineBreak = /\r?\n/.test(event.content);
+    if (targetIds.size === 0) return;
 
-    return `
-        <div class="profile-post-line long-pressable" id="profile-post-${event.id}">
-        <a href="?id=${nevent}" class="profile-post-time">[${dateStr}] </a>${hasLineBreak ? '<br>' : ''}
-        <span class="profile-post-content">${contentHtml}</span>
-        </div>`;
+    // 2. すでに dataStore にあるものは省く
+    const missingIds = Array.from(targetIds).filter(id => !window.dataStore.getEvent(id));
+    if (missingIds.length === 0) return;
+
+    console.log(`🔍 引用先の投稿を先読みします: ${missingIds.length}件`);
+
+    try {
+        // 3. 不足しているものをリレーに問い合せる
+        const referencedEvents = await pool.querySync(relays, {
+            ids: missingIds
+        });
+
+        // 4. dataStore に突っ込んでおく
+        referencedEvents.forEach(ev => {
+            window.dataStore.addEvent(ev);
+        });
+        console.log(`✨ 引用先の先読み完了: ${referencedEvents.length}件取得`);
+    } catch (e) {
+        console.warn('引用先の先読み失敗:', e.message);
+    }
 }
 
 // ========================================
