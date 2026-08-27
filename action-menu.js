@@ -294,7 +294,7 @@
                     border-radius: 6px; font-size: 0.85rem; color: #444; cursor: pointer; }
                 .lp-item:hover, .lp-item.selected { background-color: #f0eefe; }
                 .lp-item span:first-child { width: 1.2rem; text-align: center; }
-                .long-pressable { cursor: default; border-radius: 6px; transition: background-color 0.15s ease; }
+                .long-pressable { cursor: default; transition: background-color 0.15s ease; }
                 .long-pressable:active { background-color: rgba(124,111,224,0.08); }
                 .event-liked, .is-favored { border-right: 5px solid #ffeb3b; }
             `;

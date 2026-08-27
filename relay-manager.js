@@ -19,6 +19,12 @@ class RelayManager {
    * リレーに接続
    */
   async connect(url) {
+    // ★追加: 空文字列や wss://, ws:// で始まらないURLは弾く
+    if (!url || !/^wss?:\/\//i.test(url)) {
+      console.error('❌ 無効なリレーURLです:', url);
+      return Promise.reject(new Error('無効なリレーURLです: ' + JSON.stringify(url)));
+    }
+
     if (this.ws?.readyState === WebSocket.OPEN && this.url === url) {
       console.log('✅ すでに接続済み:', url);
       return Promise.resolve();

@@ -4,6 +4,8 @@
 
 console.log("🚀 okkake.js loaded");
 
+const DEFAULT_RELAY = "wss://r.kojira.io/"; // フォールバック用デフォルトリレー
+
 window.okkakeActionMenu = new NostrActionMenu({
   // 必要に応じてオプション（リレー取得関数やクライアントタグなど）を指定
   getRelayUrl: function () { return relayManager.url; },
@@ -17,6 +19,7 @@ window.okkakeActionMenu = new NostrActionMenu({
 window.dataStore = {
   events: new Map(),
   profiles: new Map(),
+  likedByMeIds: new Set(), // ★追加: 自分がふぁぼった投稿IDの管理用
 
   addEvent: function (ev) {
     if (!this.events.has(ev.id)) {
@@ -26,6 +29,16 @@ window.dataStore = {
 
   addProfile: function (pubkey, profile) {
     this.profiles.set(pubkey, profile);
+  },
+
+  // ★追加: 自分がふぁぼったイベントとして登録
+  markAsLikedByMe: function (eventId) {
+    this.likedByMeIds.add(eventId);
+  },
+
+  // ★追加: ふぁぼ済みかチェック
+  isLikedByMe: function (eventId) {
+    return this.likedByMeIds.has(eventId);
   }
 };
 
@@ -102,7 +115,6 @@ async function resolveToHex(input) {
   if (str.includes("@")) {
     console.log("🔍 NIP-05 解決を試みます:", str);
     try {
-      // タイムアウト設定（5秒待ってもダメなら諦める）
       const profile = await Promise.race([
         NostrTools.nip05.queryProfile(str),
         new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 5000))
@@ -115,7 +127,6 @@ async function resolveToHex(input) {
       }
     } catch (e) {
       console.warn("⚠️ NIP-05 解決に失敗（タイポの可能性あり）:", e.message);
-      // ここで return せず、そのまま下の NIP-19 や Raw Hex 判定へ流すのがコツ！
     }
   }
 
@@ -144,7 +155,6 @@ async function resolveToHex(input) {
     return res;
   }
 
-  // ここまで来ても解決できず、Hexでもないなら「失敗」として null を返す
   console.warn("⚠️ 解決に失敗しました（不正な形式）:", str);
   return null;
 }
@@ -156,35 +166,37 @@ function Timeline() {
   this.newest = null;
   this.originId = null;
   this.originCreated = null;
-  this.sortOrder = 'asc'; // ★初期状態を昇順に設定
+  this.sortOrder = 'asc';
 }
 
 Timeline.prototype.loadOrigin = async function (pubkey, eventId, isAutoLoad) {
   console.log("▶ loadOrigin starting...", { pubkey, eventId, isAutoLoad });
 
   dataStore.events.clear();
+  dataStore.likedByMeIds.clear(); // ★追加: 再ロード時にふぁぼ情報もクリア
   this.oldest = null;
   this.newest = null;
   document.getElementById("timeline").innerHTML = "";
 
-  // リレー接続（入力欄の値を優先）
-  await relayManager.connect(document.getElementById("relay").value);
+  const relayInputEl = document.getElementById("relay");
+  if (!relayInputEl.value.trim()) {
+    console.warn("⚠️ リレーURL未指定のためデフォルトを使用します:", DEFAULT_RELAY);
+    relayInputEl.value = DEFAULT_RELAY;
+  }
 
-  // --- ★ここから追加・修正：pubkey自力解決ロジック ---
+  await relayManager.connect(relayInputEl.value.trim());
+
   let targetPubkey = pubkey;
   let origin = null;
 
-  // もしeventIdはあるけどpubkeyが空、または不完全な場合
   if (eventId) {
     console.log("🔍 起点イベントから情報を探します...");
     origin = await this.fetchEvent(eventId);
 
     if (origin) {
-      // イベントが見つかったら、そこから本当の作者(pubkey)を特定
       if (!targetPubkey) {
         targetPubkey = origin.pubkey;
         console.log("✅ 作者を特定しました:", targetPubkey);
-        // 入力欄にも反映してあげると親切（案Aの演出も兼ねて）
         const pkInput = document.getElementById("pubkey");
         pkInput.value = targetPubkey;
       }
@@ -193,34 +205,26 @@ Timeline.prototype.loadOrigin = async function (pubkey, eventId, isAutoLoad) {
       return;
     }
   }
-  // --- ★ここまで ---
 
   if (!targetPubkey) {
     alert("作者(pubkey)を特定できませんでした。");
     return;
   }
 
-  // 特定した作者のフォローリストを取得
   this.authors = await this.fetchContacts(targetPubkey);
   console.log("👥 followees:", this.authors.length);
 
-  // 起点イベントが Kind 1 (通常の投稿) であれば、フォローリストの有無に関わらず
-  // 「この1件だけ」を特別にデータストアに登録して表示対象にする
   if (origin && origin.kind === 1) {
     dataStore.addEvent(origin);
     profileFetcher.request(origin.pubkey);
     console.log("📌 起点イベントを特例としてデータストアに登録しました");
   }
 
-  // 起点の情報をセット（fetchEventを2回やらないように工夫）
   this.originId = origin.id;
   this.originCreated = origin.created_at;
   this.oldest = origin.created_at;
   this.newest = origin.created_at;
 
-  // 起点の前後を取得
-  // ここで渡す self.authors には起点作者が含まれていない（フォローしてない場合）ので、
-  // 他の余計な投稿は流れてきません。
   await this.fetchRange({
     since: isAutoLoad ? origin.created_at : origin.created_at - 300,
     until: origin.created_at + 300,
@@ -237,12 +241,9 @@ Timeline.prototype.fetchContacts = function (pubkey) {
     var subId = "k3-" + Date.now();
     var list = [];
 
-    // --- タイムアウト設定 (3秒) ---
     var timer = setTimeout(function () {
       console.warn("⌛ Contact list request timed out for:", pubkey);
       relayManager.unsubscribe(subId);
-
-      // タイムアウト時は、せめて自分自身だけでもリストに入れて返す
       if (list.length === 0) list.push(pubkey);
       resolve(list);
     }, 3000);
@@ -252,19 +253,14 @@ Timeline.prototype.fetchContacts = function (pubkey) {
       { kinds: [3], authors: [pubkey] },
       function (type, ev) {
         if (type === "EVENT") {
-          // イベントが届いたら、中身をパース
           for (var i = 0; i < ev.tags.length; i++) {
             if (ev.tags[i][0] === "p") list.push(ev.tags[i][1]);
           }
-          // 注: kind 3 は通常1つだけですが、
-          // EOSEを待たずに resolve したい場合はここで条件判定も可能です
         }
 
         if (type === "EOSE") {
-          // 正常に応答が完了した場合、タイマーを解除
           clearTimeout(timer);
           relayManager.unsubscribe(subId);
-
           if (list.length === 0) list.push(pubkey);
           console.log("✅ Contact list loaded:", list.length);
           resolve(list);
@@ -303,23 +299,58 @@ Timeline.prototype.fetchRange = function (filter) {
     var subId = "range-" + Date.now();
     var count = 0;
 
-    relayManager.subscribe(
-      subId,
+    // ★修正: ログイン中の自分のpubkeyを取得（ROM専なら undefined）
+    var myPubkey = window.nostrAuth?.pubkey;
+
+    // ★修正: タイムライン用フィルター (Kind 1) と、自分が送ったふぁぼ用フィルター (Kind 7) を構築
+    var filters = [
       {
         kinds: [1],
         authors: self.authors,
         since: filter.since,
         until: filter.until,
         limit: filter.limit
-      },
+      }
+    ];
+
+    if (myPubkey) {
+      filters.push({
+        kinds: [7],
+        authors: [myPubkey],
+        since: filter.since,
+        until: filter.until,
+        limit: filter.limit
+      });
+    }
+
+    relayManager.subscribe(
+      subId,
+      filters, // 複数フィルター配列を渡す
       function (type, ev) {
         if (type === "EVENT") {
-          count++;
-          dataStore.addEvent(ev);
-          profileFetcher.request(ev.pubkey);
+          // ★追加: 自分が送った Kind 7 イベントならふぁぼ済みとして登録
+          if (ev.kind === 7 && myPubkey && ev.pubkey === myPubkey) {
+            var targetId = null;
+            for (var t = 0; t < ev.tags.length; t++) {
+              if (ev.tags[t][0] === 'e') {
+                targetId = ev.tags[t][1];
+                break;
+              }
+            }
+            if (targetId) {
+              dataStore.markAsLikedByMe(targetId);
+            }
+          }
 
-          if (self.oldest === null || ev.created_at < self.oldest) self.oldest = ev.created_at;
-          if (self.newest === null || ev.created_at > self.newest) self.newest = ev.created_at;
+          // Kind 1 の場合のみイベントとしてカウント・保存する
+          if (ev.kind === 1) {
+            count++;
+            dataStore.addEvent(ev);
+            profileFetcher.request(ev.pubkey);
+
+            if (self.oldest === null || ev.created_at < self.oldest) self.oldest = ev.created_at;
+            if (self.newest === null || ev.created_at > self.newest) self.newest = ev.created_at;
+          }
         }
 
         if (type === "EOSE") {
@@ -338,7 +369,6 @@ Timeline.prototype.render = function () {
   var el = document.getElementById("timeline");
   el.innerHTML = "";
 
-  // --- 【名前の幅制限用の準備】 ---
   if (!this.measureCtx) {
     const canvas = document.createElement('canvas');
     this.measureCtx = canvas.getContext('2d');
@@ -359,17 +389,22 @@ Timeline.prototype.render = function () {
   for (var i = 0; i < events.length; i++) {
     var ev = events[i];
     var li = document.createElement("li");
-    li.className = "event" + (ev.id === this.originId ? " origin" : "");
+
+    // ★修正: 基本クラスに加え、自分がふぁぼった投稿なら event-liked を付与
+    var className = "event" + (ev.id === this.originId ? " origin" : "");
+    if (dataStore.isLikedByMe(ev.id)) {
+      className += " event-liked";
+    }
+    li.className = className;
 
     li.setAttribute('data-id', ev.id);
     li.setAttribute('data-pubkey', ev.pubkey);
 
     const isDark = document.body.classList.contains('dark-mode');
     const prof = dataStore.profiles.get(ev.pubkey);
-    const fullName = MyNostrUtils.getDisplayName(prof, ev.pubkey); // 元の名前
+    const fullName = MyNostrUtils.getDisplayName(prof, ev.pubkey);
     const color = MyNostrUtils.getHslColor(ev.pubkey, isDark);
 
-    // --- 【名前の短縮ロジック】 ---
     let truncatedName = "";
     let currentWidth = 0;
     let isTruncated = false;
@@ -385,7 +420,6 @@ Timeline.prototype.render = function () {
     }
     const finalDisplayName = isTruncated ? truncatedName + "…" : fullName;
 
-    // 1. タイムスタンプ
     const timeStr = new Date(ev.created_at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const nevent = NostrTools.nip19.neventEncode({
       id: ev.id,
@@ -396,16 +430,13 @@ Timeline.prototype.render = function () {
     timeSpan.className = "time";
     timeSpan.innerHTML = `<a href="https://ompomz.github.io/flowgazer/tweet?id=${nevent}" target="_blank" style="color: inherit; text-decoration: none;">${ev.id === this.originId ? "▶ " : ""}[${timeStr}]</a>`;
 
-    // 2. 著者名（短縮済みを利用）
     const npub = NostrTools.nip19.npubEncode(ev.pubkey);
     const authorSpan = document.createElement("span");
     authorSpan.className = "author";
     authorSpan.style.color = color;
     authorSpan.style.fontWeight = "normal";
-    // ここで finalDisplayName を使います
     authorSpan.innerHTML = `<a href="https://ompomz.github.io/flowgazer/tweet?id=${npub}" target="_blank" style="color: inherit; text-decoration: none;">${finalDisplayName}</a>`;
 
-    // 3. コンテンツ
     const separator = document.createElement("span");
     separator.className = "separator";
     separator.textContent = " > ";
@@ -432,7 +463,6 @@ Timeline.prototype.render = function () {
   document.dispatchEvent(new CustomEvent('timeline-rendered'));
 };
 
-// HTMLエスケープ用の補助関数（XSS対策）
 Timeline.prototype.escapeHtml = function (str) {
   if (!str) return "";
   return str.replace(/[&<>"']/g, function (m) {
@@ -456,16 +486,14 @@ window.onload = async function () {
   const relayInput = document.getElementById("relay");
   const themeToggle = document.getElementById('theme-toggle');
 
-  // --- URLパラメータ解析ロジック ---
   const params = new URLSearchParams(window.location.search);
   const queryId = params.get('id');
-  const queryFollow = params.get('follow'); // ★追加：フォローリスト指定のパラメータを取得
+  const queryFollow = params.get('follow');
   let isAutoLoad = false;
 
   if (queryId) {
     eventIdInput.value = queryId;
 
-    // ★追加：URLからフォローリストの指定があれば、pubkey入力欄にセットしておく
     if (queryFollow) {
       pubkeyInput.value = queryFollow;
       console.log("👥 Follow list source from URL:", queryFollow);
@@ -479,7 +507,6 @@ window.onload = async function () {
     }, 100);
   }
 
-  // 取得ボタンの処理
   btn.onclick = async function () {
     document.querySelector(".floating-btn-container").classList.remove("is-visible");
     document.getElementById("share-link").classList.remove("is-visible");
@@ -488,13 +515,11 @@ window.onload = async function () {
     btn.textContent = "解決中...";
 
     try {
-      // 1. まず入力を解析
       const eventRes = await resolveToHex(eventIdInput.value);
       const pubkeyRes = await resolveToHex(pubkeyInput.value);
 
       let complemented = false;
 
-      // 【リレーの補完】
       if (!relayInput.value) {
         let r = null;
         if (eventRes && eventRes.relays?.length > 0) r = eventRes.relays[0];
@@ -506,34 +531,26 @@ window.onload = async function () {
         }
       }
 
-      // 【Pubkeyの補完】
       if (!pubkeyInput.value && eventRes && eventRes.pubkey) {
         pubkeyInput.value = eventRes.pubkey;
         complemented = true;
       }
 
-      // --- 自動ロード時の判定ロジック ---
       if (complemented) {
-        // 自動実行中であっても、リレーがまだ空なら入力を促す必要がある
         if (isAutoLoad && !relayInput.value) {
           btn.textContent = "リレーを入力してください";
           btn.style.backgroundColor = "#ffcc66";
-          isAutoLoad = false; // ユーザー入力を待つため解除
+          isAutoLoad = false;
           return;
         }
 
-        // 手動操作（URLからではない）の場合は、確認のために一旦止める
         if (!isAutoLoad) {
           btn.textContent = "補完しました！もういちどクリック";
           btn.style.backgroundColor = "#ffcc66";
           return;
         }
-
-        // isAutoLoad が true で、かつリレーが埋まっているなら、止まらずに続行！
-        console.log("🚀 Auto-loading with complemented info...");
       }
 
-      // 2. 実際の取得
       const finalPubkeyRes = await resolveToHex(pubkeyInput.value);
       const hexPubkey = finalPubkeyRes ? finalPubkeyRes.hex : "";
       const hexEventId = eventRes ? eventRes.hex : "";
@@ -548,7 +565,6 @@ window.onload = async function () {
       btn.style.backgroundColor = "";
       [pubkeyInput, eventIdInput, relayInput].forEach(el => el.style.backgroundColor = "");
 
-      // ★ここを追加：読み込みが確定したら入力エリアを隠す
       if (isAutoLoad) {
         document.querySelector(".flex-container").classList.add("is-hidden");
       }
@@ -560,11 +576,10 @@ window.onload = async function () {
     } finally {
       btn.disabled = false;
       if (!btn.textContent.includes("再度")) btn.textContent = "取得";
-      isAutoLoad = false; // 処理が終わったのでフラグを確実に下ろす
+      isAutoLoad = false;
     }
   };
 
-  // --- その他のボタン・イベント ---
   document.getElementById("older").onclick = function () {
     timeline.fetchRange({ until: timeline.oldest - 1, limit: 50 });
   };
@@ -585,12 +600,10 @@ window.onload = async function () {
     }
   };
 
-  // テーマスイッチの状態合わせ
   if (document.body.classList.contains('dark-mode')) {
     themeToggle.checked = true;
   }
 
-  // シェアボタンの処理
   document.getElementById("share-link").onclick = async function () {
     const eventInput = document.getElementById("eventId").value;
     const relayInput = document.getElementById("relay").value;
@@ -602,28 +615,22 @@ window.onload = async function () {
     }
 
     try {
-      // 1. 各入力を Hex に変換（既存の resolveToHex を活用）
       const evRes = await resolveToHex(eventInput);
       const pkRes = await resolveToHex(pubkeyInput);
 
-      // 2. nevent を生成（標準的な NIP-19）
       const newNevent = NostrTools.nip19.neventEncode({
         id: evRes.hex,
         relays: relayInput ? [relayInput] : (evRes.relays && evRes.relays.length > 0 ? [evRes.relays[0]] : []),
-        author: evRes.pubkey // イベント本来の作者
+        author: evRes.pubkey
       });
 
-      // 3. ベースURLの構築
       let shareUrl = window.location.origin + window.location.pathname + "?id=" + newNevent;
 
-      // 4. 追加オプション：フォローリスト取得対象が「イベント作者以外」なら付与
-      // 入力された pubkey があり、かつそれがイベント作者と違う場合にパラメータを足す
       if (pkRes && pkRes.hex && pkRes.hex !== evRes.pubkey) {
         const followNpub = NostrTools.nip19.npubEncode(pkRes.hex);
         shareUrl += "&follow=" + followNpub;
       }
 
-      // 5. クリップボードにコピー
       await navigator.clipboard.writeText(shareUrl);
       const btn = this;
       const originalText = btn.textContent;
