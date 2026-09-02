@@ -143,13 +143,8 @@
       margin-left: 1rem;
     }
 
-    #advanced-settings label[for="auto-update-toggle"] {
+    #advanced-settings label[for="pre-wrap-toggle"] {
       margin-left: 0;
-    }
-
-    #filter-flowgazer-only,
-    label[for="filter-flowgazer-only"] {
-      display: none;
     }
 
     #kind-7-content-input {
@@ -282,7 +277,7 @@
       margin: 0.5rem 0;
     }
 
-    .post-options select {
+    select {
       height: 2.25rem;
       padding: 0 0.5rem;
       border: 1px solid var(--border);
@@ -453,9 +448,6 @@
     .lp-item.selected {
       background: #fff;
       transform: scale(1.06);
-      box-shadow:
-        0 0 20px 12px rgba(120, 170, 255, 0.35),
-        0 0 40px 20px rgba(120, 170, 255, 0.25),
     }
   </style>
 </head>
@@ -523,19 +515,26 @@
     </div>
 
     <div id="advanced-settings" class="hidden">
-
       <div>
-        <label for="auto-update-toggle">autoload</label>
-        <input type="checkbox" id="auto-update-toggle" checked>
+        <label for="pre-wrap-toggle">line break</label>
+        <input type="checkbox" id="pre-wrap-toggle">
 
-        <label for="filter-flowgazer-only">via flowgazer しぼりこみ</label>
-        <input type="checkbox" id="filter-flowgazer-only">
+        <label for="auto-update-toggle" style="display: none;">autoload</label>
+        <input type="checkbox" id="auto-update-toggle" checked class="hidden">
+
+        <label for="filter-flowgazer-only" style="display: none;">via flowgazer しぼりこみ</label>
+        <input type="checkbox" id="filter-flowgazer-only" class="hidden">
 
         <label for="toggle-kind42">view kind:42</label>
         <input type="checkbox" id="toggle-kind42">
 
-        <label for="kind-7-content-input">kind:7 content</label>
-        <input id="kind-7-content-input" type="text" maxlength="10" value="⭐">
+        <label for="kind-7-fixed-toggle">kind:7 fixed</label>
+        <input type="checkbox" id="kind-7-fixed-toggle" checked>
+
+        <span id="kind-7-content-wrapper">
+          <label for="kind-7-content-input">kind:7 content</label>
+          <input id="kind-7-content-input" type="text" maxlength="10" value="⭐">
+        </span>
       </div>
 
       <div class="flex-container">
@@ -597,6 +596,7 @@
   <script src="./auth.js"></script>
   <script src="./auth-ui.js"></script>
 
+  <script src="./cusemo.js"></script>
   <script src="./ehagaki-manager.js"></script>
   <script src="./action-menu.js"></script>
 

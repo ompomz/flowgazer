@@ -335,6 +335,10 @@ class FlowgazerApp {
       await this.onLogin();
     }
 
+    if (window.customEmojiManager && window.nostrAuth.pubkey) {
+      window.customEmojiManager.fetchMyEmojis(window.nostrAuth.pubkey);
+    }
+
     console.log('✅ flowgazer起動完了');
   }
 
@@ -867,6 +871,34 @@ class FlowgazerApp {
     }
 
     // ----------------------------------------
+    // kind:7モード（固定 ⇔ 選ぶ）トグル
+    // ----------------------------------------
+    const kind7FixedToggle = document.getElementById('kind-7-fixed-toggle');
+    const kind7ContentWrapper = document.getElementById('kind-7-content-wrapper');
+    if (kind7FixedToggle) {
+      // customEmojiManager が無いページでは「選ぶ」に切り替えさせない
+      const pickerAvailable = !!window.customEmojiManager?.openPicker;
+
+      const saved = localStorage.getItem('kind7Mode') || 'fixed';
+      // 保存値が picker でも機能が無ければ表示上も fixed に矯正
+      const isFixed = (saved !== 'picker') || !pickerAvailable;
+
+      kind7FixedToggle.checked = isFixed;
+      if (kind7ContentWrapper) kind7ContentWrapper.style.display = isFixed ? '' : 'none';
+
+      // ピッカーが使えないページでは常に固定モードに固定する
+      if (!pickerAvailable) {
+        kind7FixedToggle.disabled = true;
+      }
+
+      kind7FixedToggle.addEventListener('change', (e) => {
+        const mode = e.target.checked ? 'fixed' : 'picker';
+        localStorage.setItem('kind7Mode', mode);
+        if (kind7ContentWrapper) kind7ContentWrapper.style.display = e.target.checked ? '' : 'none';
+      });
+    }
+
+    // ----------------------------------------
     // localStorage復元
     // ----------------------------------------
     const savedFilter = localStorage.getItem('hexFilterValue');
@@ -1151,13 +1183,16 @@ class FlowgazerApp {
       limit: 100
     }, (type, event) => {
       if (type === 'EVENT') {
-        const added = window.dataStore.addEvent(event);
-        if (added) {
-          window.viewState.addHistoryEventToTab(event, 'myposts');
-          window.profileFetcher.request(event.pubkey);
-        }
+        // dataStoreへの新規追加可否に関わらず、
+        // 「myposts タブに属するべきイベント」として必ず登録する。
+        // すでにdataStoreにある投稿（Anchor/Stream Phase等で先に取得済み）でも、
+        // ここで登録しないと timeRange が更新されず、直近の投稿が表示から漏れる。
+        window.dataStore.addEvent(event);
+        window.viewState.addHistoryEventToTab(event, 'myposts');
+        window.profileFetcher.request(event.pubkey);
       } else if (type === 'EOSE') {
         console.log('✅ 自分の投稿履歴取得完了');
+        window.relayManager.unsubscribe('my-posts-history'); // ついでに未解除だったのも解除
         window.viewState.renderNow();
       }
     });
@@ -1180,13 +1215,12 @@ class FlowgazerApp {
 
     window.relayManager.subscribe('received-notifications-init', filter, (type, event) => {
       if (type === 'EVENT') {
-        const added = window.dataStore.addEvent(event);
-        if (added) {
-          window.viewState.addHistoryEventToTab(event, 'likes');
-          window.profileFetcher.request(event.pubkey);
-        }
+        window.dataStore.addEvent(event);
+        window.viewState.addHistoryEventToTab(event, 'likes');
+        window.profileFetcher.request(event.pubkey);
       } else if (type === 'EOSE') {
         console.log('✅ 通知初期取得完了');
+        window.relayManager.unsubscribe('received-notifications-init'); // ついでに購読解除も追加するとキレイ
         window.viewState.renderNow();
       }
     });
@@ -1332,6 +1366,9 @@ class FlowgazerApp {
     localStorage.setItem('preWrapEnabled', enabled.toString());
     this._applyPreWrapClass(enabled);
     console.log(`📝 改行表示(pre-wrap): ${enabled ? 'ON' : 'OFF'}`);
+
+    // 🆕 既存表示にも即座に反映させる
+    window.timeline?.refresh(true);
   }
 
   // ========================================
@@ -1414,11 +1451,16 @@ class FlowgazerApp {
       window.relayManager.subscribe('load-more-step1', filter, (type, event) => {
         if (type === 'EVENT') {
           const added = window.dataStore.addEvent(event);
+
+          // 配列の重複カウントを防ぐため、追加された場合だけプッシュする
           if (added) {
             events.push(event);
-            window.viewState.addHistoryEventToTab(event, tab);
-            window.profileFetcher.request(event.pubkey);
           }
+
+          // タブへの登録とプロファイル取得は、重複していようがこのタブが必要としているなら必ず実行する
+          window.viewState.addHistoryEventToTab(event, tab);
+          window.profileFetcher.request(event.pubkey);
+
         } else if (type === 'EOSE') {
           window.relayManager.unsubscribe('load-more-step1');
 
@@ -1448,11 +1490,9 @@ class FlowgazerApp {
 
       window.relayManager.subscribe('load-more-step2', filter, (type, event) => {
         if (type === 'EVENT') {
-          const added = window.dataStore.addEvent(event);
-          if (added) {
-            window.viewState.addHistoryEventToTab(event, tab);
-            window.profileFetcher.request(event.pubkey);
-          }
+          window.dataStore.addEvent(event); // 登録自体は裏で勝手にやってくれる
+          window.viewState.addHistoryEventToTab(event, tab); // どんなイベントであれこのタブの履歴に入れる
+          window.profileFetcher.request(event.pubkey);
         } else if (type === 'EOSE') {
           window.relayManager.unsubscribe('load-more-step2');
           console.log('✅ Step2完了');
@@ -1729,11 +1769,9 @@ class FlowgazerApp {
         limit: 100
       }, (type, event) => {
         if (type === 'EVENT') {
-          const added = window.dataStore.addEvent(event);
-          if (added) {
-            window.viewState.addHistoryEventToTab(event, tabKey);
-            window.profileFetcher.request(event.pubkey);
-          }
+          window.dataStore.addEvent(event);
+          window.viewState.addHistoryEventToTab(event, tabKey);
+          window.profileFetcher.request(event.pubkey);
         } else if (type === 'EOSE') {
           window.relayManager.unsubscribe(`channel-history-${channelId}`);
           console.log(`✅ チャンネル履歴取得完了: ${channelId}`);

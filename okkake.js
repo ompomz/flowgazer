@@ -646,4 +646,20 @@ window.onload = async function () {
       alert("リンクの生成に失敗しました。");
     }
   };
+
+  // #kind-7-content-input の値を localStorage に同期する処理
+  const favInput = document.getElementById('kind-7-content-input');
+  if (favInput) {
+    // 起動時に保存済みの値を反映
+    const saved = localStorage.getItem('favMark');
+    if (saved) favInput.value = saved;
+
+    // 変更時にlocalStorageへ保存（NostrActionMenuの既定favMarkKey='favMark'と一致させる）
+    favInput.addEventListener('change', (e) => {
+      const chars = Array.from(e.target.value);
+      const singleChar = chars.length > 0 ? chars[0] : '+';
+      localStorage.setItem('favMark', singleChar);
+      e.target.value = singleChar;
+    });
+  }
 };

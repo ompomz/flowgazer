@@ -425,9 +425,6 @@
         .lp-item.selected {
             background: #fff;
             transform: scale(1.06);
-            box-shadow:
-                0 0 20px 12px rgba(120, 170, 255, 0.35),
-                0 0 40px 20px rgba(120, 170, 255, 0.25),
         }
     </style>
 </head>
@@ -504,8 +501,13 @@
                 <label for="toggle-kind42">チャンネル投稿</label>
                 <input type="checkbox" id="toggle-kind42">
 
-                <label for="kind-7-content-input">ふぁぼマーク</label>
-                <input id="kind-7-content-input" type="text" maxlength="10" value="⭐">
+                <label for="kind-7-fixed-toggle">ふぁぼ固定</label>
+                <input type="checkbox" id="kind-7-fixed-toggle" checked>
+
+                <span id="kind-7-content-wrapper">
+                    <label for="kind-7-content-input">ふぁぼマーク</label>
+                    <input id="kind-7-content-input" type="text" maxlength="10" value="⭐">
+                </span>
             </div>
 
             <div class="flex-container">
@@ -601,6 +603,7 @@
     <script src="./auth.js"></script>
     <script src="./auth-ui.js"></script>
 
+    <script src="./cusemo.js"></script>
     <script src="./ehagaki-manager.js"></script>
     <script src="./action-menu.js"></script>
 
