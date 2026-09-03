@@ -6,6 +6,11 @@ console.log("🚀 okkake.js loaded");
 
 const DEFAULT_RELAY = "wss://r.kojira.io/"; // フォールバック用デフォルトリレー
 
+window.eventBus.on(window.EVENTS.AUTH_LOGIN_COMPLETED, ({ pubkey, onComplete }) => {
+  console.log('📨 ログイン完了通知を受信:', pubkey.substring(0, 8) + '...');
+  onComplete();
+});
+
 window.okkakeActionMenu = new NostrActionMenu({
   // 必要に応じてオプション（リレー取得関数やクライアントタグなど）を指定
   getRelayUrl: function () { return relayManager.url; },

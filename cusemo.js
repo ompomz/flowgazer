@@ -183,6 +183,21 @@ class CustomEmojiManager {
         if (!list) return;
         list.innerHTML = '';
 
+        // 🆕 先頭に「固定ふぁぼマーク」を表示
+        // タップすると、その1文字がそのままkind:7のcontentとして送信される。
+        // 🆕 input要素があればその値を優先、なければlocalStorage、ダメなら '+'
+        const inputElem = document.getElementById('kind-7-content-input');
+        const favMark = (inputElem && inputElem.value) || localStorage.getItem('favMark') || '+';
+
+        const favMarkItem = document.createElement('div');
+        favMarkItem.textContent = favMark;
+        favMarkItem.title = 'ふぁぼマーク: ' + favMark;
+        favMarkItem.style.cssText =
+            'width:1.6rem; height:1.6rem; display:flex; align-items:center; justify-content:center; ' +
+            'font-size:1.1rem; cursor:pointer; border:none; border-radius:4px; box-sizing:border-box;';
+        favMarkItem.addEventListener('click', () => this.selectManual(favMark));
+        list.appendChild(favMarkItem);
+
         this.getEmojiList().forEach(({ shortcode, url }) => {
             const img = document.createElement('img');
             img.src = url;

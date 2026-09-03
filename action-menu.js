@@ -250,10 +250,20 @@
 
                 const likeDisplay = document.getElementById(self.likeIconId);
                 if (likeDisplay) {
-                    const mode = self._getKind7Mode(); // 🆕
-                    likeDisplay.textContent = mode === 'picker'
-                        ? '🙂'
-                        : (localStorage.getItem(self.favMarkKey) || '⭐');
+                    const mode = self._getKind7Mode();
+                    if (mode === 'picker') {
+                        // 🆕 ニコちゃんマークのSVG（必要に応じてパスやサイズ感を調整してね）
+                        likeDisplay.innerHTML = `
+                            <svg viewBox="0 0 24 24" width="1.2em" height="1.2em" fill="currentColor" style="vertical-align: middle;">
+                                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
+                                <circle cx="9" cy="10" r="1.5"/>
+                                <circle cx="15" cy="10" r="1.5"/>
+                                <path d="M8 14s1.5 2 4 2 4-2 4-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                        `;
+                    } else {
+                        likeDisplay.textContent = localStorage.getItem(self.favMarkKey) || '⭐';
+                    }
                 }
 
                 // 🆕 円形メニュー（circularクラス付き＝動的生成された4項目メニュー）かどうかで

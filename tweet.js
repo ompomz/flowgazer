@@ -1037,9 +1037,10 @@ async function renderProfilePage(pubkey, hintRelays) {
         10000, 'プロフィール取得タイムアウト'
     );
 
+    // 見つからなかった場合は呼び出し側（startWorkflow / retryFetchWithRelay）に
+    // 判断を委ね、リッチなフォールバックUIを出してもらう
     if (!profileEvent) {
-        showStatus('プロフィールが見つかりませんでした');
-        return;
+        return false;
     }
 
     let profile;
@@ -1080,6 +1081,7 @@ async function renderProfilePage(pubkey, hintRelays) {
 
     // 🆕 プロフィールページ：kind:1一覧を追加読み込み
     loadUserPostsList(pubkey, hintRelays);
+    return true;
 }
 
 /**
@@ -1303,9 +1305,198 @@ function renderInputForm() {
 }
 
 // ========================================
-// ルーティング（起点）
+// フォールバックUI（イベント未検出・エラー時）
 // ========================================
 
+/**
+ * originalId（入力されたnip19文字列）をそのまま各外部ビューアのURLに付与する。
+ * note1/nevent1/npub1/nprofile1/naddr1 はどの形式でもlumilumi/njumpがそのまま受け付ける。
+ */
+function buildExternalViewerLinks(originalId) {
+    return [
+        { label: 'lumilumi でひらく', url: `https://lumilumi.app/${originalId}` },
+        { label: 'njump.me でひらく', url: `https://njump.me/${originalId}` },
+    ];
+}
+
+/**
+ * イベント未検出・取得エラー・描画エラー時に表示するリッチなフォールバックUI。
+ *
+ * @param {Object} options
+ * @param {string} options.originalId - URLクエリのid（nevent1...など、そのまま）
+ * @param {Object} options.parsed - parseInput()の結果
+ * @param {string[]} [options.triedRelays] - 実際に問い合わせたリレー一覧
+ * @param {string} [options.errorMessage] - エラーメッセージ（あれば警告表示に切り替え）
+ * @param {Object} [options.rawEvent] - 取得はできたが描画に失敗した場合の生イベント
+ */
+function renderNotFoundFallback({ originalId, parsed, triedRelays = [], errorMessage = null, rawEvent = null }) {
+    const links = buildExternalViewerLinks(originalId);
+    const linksHtml = links
+        .map(l => `<a href="${l.url}" target="_blank" rel="noreferrer" class="fallback-link-btn">${MyNostrUtils.escapeHtml(l.label)}</a>`)
+        .join('');
+
+    const relayBadges = triedRelays
+        .map(r => `<code class="fallback-relay-badge">${MyNostrUtils.escapeHtml(r)}</code>`)
+        .join(' ') || '（なし）';
+
+    const parsedJson = MyNostrUtils.escapeHtml(JSON.stringify(parsed, null, 2));
+    const rawEventSection = rawEvent ? `
+          <div class="fallback-section">
+            <details>
+              <summary class="fallback-label" style="cursor:pointer;">取得できた生イベント（描画に失敗）</summary>
+              <pre class="fallback-json">${MyNostrUtils.escapeHtml(JSON.stringify(rawEvent, null, 2))}</pre>
+            </details>
+          </div>` : '';
+
+    mainEventContainer.innerHTML = `
+        <div class="fallback-card">
+          <h3 class="fallback-title">${errorMessage ? '⚠️ エラーが発生しました' : '🔍 イベントが見つかりませんでした'}</h3>
+          ${errorMessage ? `<p class="fallback-error-msg">${MyNostrUtils.escapeHtml(errorMessage)}</p>` : ''}
+
+          <div class="fallback-section">
+            <p class="fallback-label">入力されたID</p>
+            <div class="fallback-id-row">
+              <code class="fallback-id-text">${MyNostrUtils.escapeHtml(originalId)}</code>
+              <button type="button" class="fallback-copy-btn" data-copy="${MyNostrUtils.escapeHtml(originalId)}">コピー</button>
+            </div>
+          </div>
+
+          <div class="fallback-section">
+            <p class="fallback-label">問い合わせたリレー</p>
+            <div class="fallback-relay-list">${relayBadges}</div>
+          </div>
+
+          <div class="fallback-section">
+            <p class="fallback-label">別のリレーで再試行</p>
+            <div class="fallback-retry-row">
+              <input type="text" id="fallback-retry-relay" placeholder="wss://relay.example.com/" class="fallback-retry-input">
+              <button type="button" id="fallback-retry-btn" class="fallback-retry-btn">再試行</button>
+            </div>
+            <p id="fallback-retry-status" class="fallback-retry-status"></p>
+          </div>
+
+          <div class="fallback-section">
+            <p class="fallback-label">外部クライアントで開く</p>
+            <div class="fallback-link-row">${linksHtml}</div>
+          </div>
+
+          ${rawEventSection}
+
+          <div class="fallback-section">
+            <details>
+              <summary class="fallback-label" style="cursor:pointer;">解析データ (JSON)</summary>
+              <pre class="fallback-json">${parsedJson}</pre>
+            </details>
+          </div>
+        </div>`;
+
+    showCopyButton();
+
+    // コピー機能
+    mainEventContainer.querySelectorAll('.fallback-copy-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            navigator.clipboard.writeText(btn.dataset.copy)
+                .then(() => {
+                    const original = btn.textContent;
+                    btn.textContent = 'コピーしました';
+                    setTimeout(() => { btn.textContent = original; }, 1500);
+                })
+                .catch(() => alert('コピーに失敗しました'));
+        });
+    });
+
+    // 再試行
+    const retryBtn = document.getElementById('fallback-retry-btn');
+    const retryInput = document.getElementById('fallback-retry-relay');
+    const retryStatus = document.getElementById('fallback-retry-status');
+
+    retryBtn?.addEventListener('click', async () => {
+        const relay = retryInput.value.trim();
+        if (!relay || !/^wss?:\/\//i.test(relay)) {
+            retryStatus.textContent = '有効なリレーURL（wss://...）を入力してください';
+            return;
+        }
+        retryStatus.textContent = '取得中...';
+        retryBtn.disabled = true;
+        try {
+            await retryFetchWithRelay(parsed, originalId, relay);
+        } finally {
+            // 成功時はDOMごと差し替わるため、失敗時のみここに戻ってくる
+            if (document.getElementById('fallback-retry-btn')) {
+                retryBtn.disabled = false;
+            }
+        }
+    });
+}
+
+/**
+ * 「別のリレーで再試行」ボタン用。
+ * fetchEventById()のキャッシュ（未検出=null）を踏まないよう、
+ * ここでは素のpool.get()で指定リレーのみに直接問い合わせる。
+ */
+async function retryFetchWithRelay(parsed, originalId, relay) {
+    try {
+        if (parsed.kind === 'profile') {
+            const found = await renderProfilePage(parsed.pubkey, [relay]);
+            if (found) { showStatus(''); return; }
+            renderNotFoundFallback({ originalId, parsed, triedRelays: [relay] });
+            const status = document.getElementById('fallback-retry-status');
+            if (status) status.textContent = `${relay} でも見つかりませんでした`;
+            return;
+        }
+
+        let event;
+        if (parsed.kind === 'addr') {
+            event = await withTimeout(
+                pool.get([relay], { kinds: [parsed.addrKind], authors: [parsed.pubkey], '#d': [parsed.identifier] }),
+                10000, '再取得タイムアウト'
+            );
+        } else {
+            event = await withTimeout(pool.get([relay], { ids: [parsed.id] }), 10000, '再取得タイムアウト');
+            if (event) eventCache.set(parsed.id, event);
+        }
+
+        if (!event) {
+            renderNotFoundFallback({ originalId, parsed, triedRelays: [relay] });
+            const status = document.getElementById('fallback-retry-status');
+            if (status) status.textContent = `${relay} でも見つかりませんでした`;
+            return;
+        }
+
+        try {
+            await renderEventByKind(event, originalId);
+            showStatus('');
+        } catch (renderErr) {
+            renderNotFoundFallback({ originalId, parsed, triedRelays: [relay], errorMessage: renderErr.message, rawEvent: event });
+        }
+    } catch (err) {
+        renderNotFoundFallback({ originalId, parsed, triedRelays: [relay], errorMessage: err.message });
+    }
+}
+
+function renderEventByKind(event, originalId) {
+    switch (event.kind) {
+        case 1:
+        case 30023:
+            return renderStandardPost(event, originalId);
+        case 6:
+        case 16:
+            return renderRepost(event);
+        case 7:
+            return renderReactionEvent(event);
+        case 40:
+        case 41:
+            return renderChannelRoot(event);
+        case 42:
+            return renderChannelMessage(event);
+        default:
+            return renderGenericEvent(event);
+    }
+}
+
+// ========================================
+// ルーティング（起点）
+// ========================================
 async function startWorkflow(originalId) {
     showStatus('読み込み中...');
     const parsed = parseInput(originalId);
@@ -1316,18 +1507,24 @@ async function startWorkflow(originalId) {
         return;
     }
 
+    // 実際に問い合わせるリレー一覧を先に確定させ、失敗時のフォールバックUIでも使い回す
+    const triedRelays = getPriorityRelays(parsed.relays);
+
     try {
         if (parsed.kind === 'profile') {
-            await renderProfilePage(parsed.pubkey, parsed.relays);
+            const found = await renderProfilePage(parsed.pubkey, parsed.relays);
+            if (!found) {
+                renderNotFoundFallback({ originalId, parsed, triedRelays });
+                return;
+            }
             showStatus('');
             return;
         }
 
         let event;
         if (parsed.kind === 'addr') {
-            const relays = getPriorityRelays(parsed.relays);
             event = await withTimeout(
-                pool.get(relays, { kinds: [parsed.addrKind], authors: [parsed.pubkey], '#d': [parsed.identifier] }),
+                pool.get(triedRelays, { kinds: [parsed.addrKind], authors: [parsed.pubkey], '#d': [parsed.identifier] }),
                 10000, '記事取得タイムアウト'
             );
         } else {
@@ -1335,36 +1532,20 @@ async function startWorkflow(originalId) {
         }
 
         if (!event) {
-            showStatus('イベントが見つかりませんでした。しばらく待ってから再読み込みしてください。');
+            renderNotFoundFallback({ originalId, parsed, triedRelays });
             return;
         }
 
-        switch (event.kind) {
-            case 1:
-            case 30023:
-                await renderStandardPost(event, originalId);
-                break;
-            case 6:
-            case 16:
-                await renderRepost(event);
-                break;
-            case 7:
-                await renderReactionEvent(event);
-                break;
-            case 40:
-            case 41:
-                await renderChannelRoot(event);
-                break;
-            case 42:
-                await renderChannelMessage(event);
-                break;
-            default:
-                renderGenericEvent(event);
+        try {
+            await renderEventByKind(event, originalId);
+            showStatus('');
+        } catch (renderErr) {
+            console.error('描画エラー:', renderErr);
+            renderNotFoundFallback({ originalId, parsed, triedRelays, errorMessage: renderErr.message, rawEvent: event });
         }
-        showStatus('');
     } catch (err) {
         console.error('ワークフローエラー:', err);
-        showStatus('エラーが発生しました: ' + err.message);
+        renderNotFoundFallback({ originalId, parsed, triedRelays, errorMessage: err.message });
     }
 }
 

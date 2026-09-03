@@ -536,6 +536,136 @@
             word-break: break-all;
         }
 
+        /* --- 未検出・エラー時のフォールバックカード --- */
+        .fallback-card {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 1rem;
+        }
+
+        .fallback-title {
+            font-size: 1rem;
+            color: #444;
+            margin-bottom: 0.5rem;
+        }
+
+        .fallback-error-msg {
+            color: #c62828;
+            background: #ffebee;
+            padding: 0.5rem;
+            border-radius: 4px;
+            margin-bottom: 0.75rem;
+            font-size: 0.85rem;
+        }
+
+        .fallback-section {
+            margin-bottom: 0.9rem;
+        }
+
+        .fallback-label {
+            font-size: 0.75rem;
+            color: #999;
+            margin-bottom: 0.25rem;
+        }
+
+        .fallback-id-row,
+        .fallback-retry-row {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .fallback-id-text {
+            flex: 1;
+            min-width: 0;
+            word-break: break-all;
+            background: #f3f2f1;
+            padding: 0.4rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+        }
+
+        .fallback-copy-btn,
+        .fallback-retry-btn {
+            flex-shrink: 0;
+            border: none;
+            background-color: #66b3ff;
+            color: #fff;
+            font-size: 0.75rem;
+            font-weight: bold;
+            padding: 0.4rem 0.8rem;
+            border-radius: 999px;
+            cursor: pointer;
+        }
+
+        .fallback-copy-btn:hover,
+        .fallback-retry-btn:hover {
+            background-color: #4da6ff;
+        }
+
+        .fallback-retry-input {
+            flex: 1;
+            min-width: 0;
+            font-size: 0.85rem;
+            padding: 0.4rem 0.5rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .fallback-retry-status {
+            font-size: 0.75rem;
+            color: #ff6699;
+            margin-top: 0.25rem;
+            min-height: 1em;
+        }
+
+        .fallback-relay-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+        }
+
+        .fallback-relay-badge {
+            background: #f3f2f1;
+            padding: 0.2rem 0.5rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            color: #555;
+        }
+
+        .fallback-link-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .fallback-link-btn {
+            display: inline-block;
+            background-color: #7c6fe0;
+            color: #fff !important;
+            font-size: 0.8rem;
+            font-weight: bold;
+            padding: 0.4rem 0.9rem;
+            border-radius: 999px;
+            text-decoration: none;
+        }
+
+        .fallback-link-btn:hover {
+            background-color: #6a5dd0;
+            text-decoration: none;
+        }
+
+        .fallback-json {
+            background: #eee;
+            padding: 0.5rem;
+            overflow-x: auto;
+            font-size: 0.75rem;
+            margin-top: 0.5rem;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
         /* --- フォーム --- */
         .nostr-form {
             display: flex;
