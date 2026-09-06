@@ -196,7 +196,7 @@ const MyNostrUtils = {
             style.textContent = `
                 .modal { display:none; position:fixed; z-index:9999; left:0; top:0; width:100%; height:100%; overflow:auto; background-color:rgba(0,0,0,0.2); backdrop-filter:blur(5px); -webkit-backdrop-filter:blur(5px); }
                 .modal-content { margin:auto; display:flex; align-items:center; justify-content:center; width:100%; height:100%; position:relative; }
-                .modal-image { max-width:90%; max-height:90vh; object-fit:contain; }
+                .modal-image { max-width:90%; max-height:90svh; object-fit:contain; }
                 .close-button { position:absolute; top:20px; right:30px; color:#fff; font-size:40px; font-weight:bold; cursor:pointer; transition:0.3s; z-index:10001; }
                 .close-button:hover { color:#ccc; }
             `;
