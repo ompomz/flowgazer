@@ -120,6 +120,7 @@ class Timeline {
     createEventElement(event) {
         switch (event.kind) {
             case 1:
+            case 1111:
                 return this.createPostElement(event);
             case 6:
             case 16:

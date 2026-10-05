@@ -219,7 +219,7 @@ Timeline.prototype.loadOrigin = async function (pubkey, eventId, isAutoLoad) {
   this.authors = await this.fetchContacts(targetPubkey);
   console.log("👥 followees:", this.authors.length);
 
-  if (origin && origin.kind === 1) {
+  if (origin && (origin.kind === 1 || origin.kind === 1111)) {
     dataStore.addEvent(origin);
     profileFetcher.request(origin.pubkey);
     console.log("📌 起点イベントを特例としてデータストアに登録しました");
@@ -307,10 +307,10 @@ Timeline.prototype.fetchRange = function (filter) {
     // ★修正: ログイン中の自分のpubkeyを取得（ROM専なら undefined）
     var myPubkey = window.nostrAuth?.pubkey;
 
-    // ★修正: タイムライン用フィルター (Kind 1) と、自分が送ったふぁぼ用フィルター (Kind 7) を構築
+    // ★修正: タイムライン用フィルター (Kind 1, 1111) と、自分が送ったふぁぼ用フィルター (Kind 7) を構築
     var filters = [
       {
-        kinds: [1],
+        kinds: [1, 1111], // 変更点
         authors: self.authors,
         since: filter.since,
         until: filter.until,
@@ -347,14 +347,14 @@ Timeline.prototype.fetchRange = function (filter) {
             }
           }
 
-          // Kind 1 の場合のみイベントとしてカウント・保存する
-          if (ev.kind === 1) {
+          // Kind 1 または 1111 の場合のみイベントとしてカウント・保存する
+          if (ev.kind === 1 || ev.kind === 1111) { // 変更点
             count++;
             dataStore.addEvent(ev);
             profileFetcher.request(ev.pubkey);
 
             if (self.oldest === null || ev.created_at < self.oldest) self.oldest = ev.created_at;
-            if (self.newest === null || ev.created_at > self.newest) self.newest = ev.created_at;
+            if (self.newest === null || ev.created_at > self.newest) self.newest = ev.newest = ev.created_at; // (元のコードのままでOKです)
           }
         }
 

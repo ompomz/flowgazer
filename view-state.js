@@ -40,7 +40,7 @@ class ViewState {
     // app.js の init() から setRenderCallbacks() で注入する。
     // ViewState は timeline.js / app.js を直接参照しない。
     this._onScheduleRender = null; // () => void  遅延描画
-    this._onRenderNow     = null; // () => void  即時描画
+    this._onRenderNow = null; // () => void  即時描画
 
     console.log('✅ ViewState初期化完了');
   }
@@ -115,9 +115,8 @@ class ViewState {
     const tabs = [];
 
     // global, following の判定
-    if ([1, 6, 16, 42].includes(event.kind)) {
+    if ([1, 6, 16, 42, 1111].includes(event.kind)) {
       tabs.push('global');
-
       if (window.dataStore.isFollowing(event.pubkey)) {
         tabs.push('following');
       }
@@ -125,7 +124,7 @@ class ViewState {
 
     // myposts タブの判定
     if (myPubkey) {
-      if ([1, 42].includes(event.kind) && event.pubkey === myPubkey) {
+      if ([1, 42, 1111].includes(event.kind) && event.pubkey === myPubkey) {
         tabs.push('myposts');
       }
       if ((event.kind === 6 || event.kind === 16) && event.pubkey === myPubkey) {
@@ -135,8 +134,9 @@ class ViewState {
 
     // likes タブの判定
     if (myPubkey) {
+      // 小文字 p = NIP-22 では「親の作者」。自分への直接の返信を拾える
       const targetPubkey = event.tags.find(t => t[0] === 'p')?.[1];
-      if ([7, 6, 16, 1, 42].includes(event.kind) && targetPubkey === myPubkey) {
+      if ([7, 6, 16, 1, 1111, 42].includes(event.kind) && targetPubkey === myPubkey) {  // ← 1111 追加
         tabs.push('likes');
       }
     }
@@ -239,10 +239,10 @@ class ViewState {
     }
 
     const kindFilters = {
-      global: [1, 6, 16, 42],
-      following: [1, 6, 16, 42],
-      myposts: [1, 6, 16, 42],
-      likes: [7, 6, 16, 1, 42]
+      global: [1, 6, 16, 42, 1111],
+      following: [1, 6, 16, 42, 1111],
+      myposts: [1, 6, 16, 42, 1111],
+      likes: [7, 6, 16, 1, 1111, 42]
     };
 
     if (!kindFilters[tab]?.includes(event.kind)) return false;
@@ -296,10 +296,11 @@ class ViewState {
     const authors = options?.authors || null;
     const showKind42 = options?.showKind42 || false;
 
-    // チャンネルタブはフィルタ追加なし（_shouldShowInTab で完結）
+    // kind:1 と kind:1111 は「テキスト系ノート」として同じフィルタ規則を適用する
+    const isTextNote = (ev) => ev.kind === 1 || ev.kind === 1111;
+
     if (this.isChannelTab(tab)) return events;
 
-    // likesタブ
     if (tab === 'likes') {
       const tabState = this.tabs.likes;
       if (tabState.baseline === null && events.length > 0) {
@@ -312,38 +313,33 @@ class ViewState {
       return events.filter(e => e.created_at >= baseline);
     }
 
-    // kind:42 フィルタ
     if ((tab === 'global' || tab === 'following') && !showKind42) {
       events = events.filter(ev => ev.kind !== 42);
     }
 
-    // 禁止ワードフィルタ
     const forbiddenWords = window.app?.forbiddenWords || [];
     if ((tab === 'global' || tab === 'following') && forbiddenWords.length > 0) {
       events = events.filter(ev => {
-        if (ev.kind !== 1) return true;
+        if (!isTextNote(ev)) return true;
         const content = ev.content.toLowerCase();
         return !forbiddenWords.some(word => content.includes(word.toLowerCase()));
       });
     }
 
-    // 長い投稿の制限
     if (tab === 'global' || tab === 'following') {
       events = events.filter(ev => {
-        if (ev.kind !== 1) return true;
+        if (!isTextNote(ev)) return true;
         return ev.content.length <= 1000;
       });
     }
 
-    // flowgazer絞り込み
     if (flowgazerOnly && tab !== 'likes') {
       events = events.filter(ev =>
-        ev.kind === 1 &&
+        isTextNote(ev) &&
         ev.tags.some(tag => tag[0] === 'client' && tag[1] === 'flowgazer')
       );
     }
 
-    // 投稿者絞り込み
     if (tab === 'global' && authors?.length > 0) {
       const authorSet = new Set(authors);
       events = events.filter(ev => authorSet.has(ev.pubkey));
@@ -385,7 +381,7 @@ class ViewState {
    */
   setRenderCallbacks(onScheduleRender, onRenderNow) {
     this._onScheduleRender = onScheduleRender;
-    this._onRenderNow      = onRenderNow;
+    this._onRenderNow = onRenderNow;
     console.log('✅ ViewState: 描画コールバック注入完了');
   }
 

@@ -254,10 +254,11 @@ function getPostTypeLabel(kind) {
         case 6: return 'リポスト';
         case 7: return 'リアクション';
         case 16: return '引用リポスト';
-        case 30023: return '記事';
         case 40: return 'チャンネル作成';
         case 41: return 'チャンネル情報更新';
         case 42: return 'チャンネルメッセージ';
+        case 1111: return 'コメント';
+        case 30023: return '記事';
         default: return 'イベント';
     }
 }
@@ -622,7 +623,14 @@ async function createNostrCard(nip19Id) {
 //             reply マーカー付きタグのみを正式なリプライ先とし、
 //             マーカーが無い旧式データ向けに「root以外のeタグ」をフォールバックとして扱う
 function getReplyTargetTag(event) {
-    if (event.kind !== 1 && event.kind !== 42) return null;
+    if (event.kind !== 1 && event.kind !== 42 && event.kind !== 1111) return null;
+
+    // 🆕 NIP-22 コメント: 親は小文字 'e'（大文字 'E' はスレッドのルートなので無視）。
+    // 4番目の要素は marker ではなく pubkey のため、NIP-10 の marker 判定は使わない。
+    // 'e' が無い（URLや記事などへのコメント）場合は表示するリプライ先なし。
+    if (event.kind === 1111) {
+        return (event.tags || []).find(t => t[0] === 'e' && t[1]) || null;
+    }
 
     const eTags = (event.tags || []).filter(t => t[0] === 'e');
     if (eTags.length === 0) return null;
@@ -630,8 +638,6 @@ function getReplyTargetTag(event) {
     if (event.kind === 42) {
         const replyMarked = eTags.find(t => t[3] === 'reply');
         if (replyMarked) return replyMarked;
-
-        // 旧式フォールバック: root（無ければ先頭）以外のeタグがあればリプライ先とみなす
         const rootId = (eTags.find(t => t[3] === 'root') || eTags[0])?.[1];
         return eTags.find(t => t[1] !== rootId) || null;
     }
@@ -684,7 +690,7 @@ async function renderStandardPost(event, originalId) {
         </div>`;
 
     showCopyButton();
-    if (event.kind === 1) showJumpButton(event.pubkey, originalId);
+    if (event.kind === 1 || event.kind === 1111) showJumpButton(event.pubkey, originalId);
 
     // 🆕 長押しアクションは自分の投稿部分だけに限定（リプライ先カードのクリックと競合させないため）
     const ownPostEl = mainEventContainer.querySelector('.own-post');
@@ -927,16 +933,25 @@ function renderGenericEvent(event) {
 async function loadRelatedData(eventId) {
     const relays = getPriorityRelays();
     try {
-        const [replies, reactions, reposts] = await Promise.all([
-            withTimeout(pool.querySync(relays, { kinds: [1, 42], '#e': [eventId] }), 10000, '返信取得タイムアウト')
+        const [replies, replies1111Root, reactions, reposts] = await Promise.all([
+            // 親が自分（kind:1 / 42 の返信 + kind:1111 の直接コメント）
+            withTimeout(pool.querySync(relays, { kinds: [1, 42, 1111], '#e': [eventId] }), 10000, '返信取得タイムアウト')
                 .catch(e => { console.warn('返信取得失敗:', e.message); return []; }),
+            // 🆕 ルートが自分の kind:1111（孫コメント以降も含める。大文字 E）
+            withTimeout(pool.querySync(relays, { kinds: [1111], '#E': [eventId] }), 10000, 'コメント取得タイムアウト')
+                .catch(e => { console.warn('コメント取得失敗:', e.message); return []; }),
             withTimeout(pool.querySync(relays, { kinds: [7], '#e': [eventId] }), 10000, 'リアクション取得タイムアウト')
                 .catch(e => { console.warn('リアクション取得失敗:', e.message); return []; }),
             withTimeout(pool.querySync(relays, { kinds: [6, 16], '#e': [eventId] }), 10000, 'リポスト取得タイムアウト')
                 .catch(e => { console.warn('リポスト取得失敗:', e.message); return []; })
         ]);
 
-        const filteredReplies = replies.filter(e => e.id !== eventId);
+        // 🆕 id で重複排除してマージ
+        const mergedReplies = [...new Map(
+            [...replies, ...replies1111Root].map(e => [e.id, e])
+        ).values()];
+
+        const filteredReplies = mergedReplies.filter(e => e.id !== eventId);
         const allPubkeys = [...filteredReplies, ...reactions, ...reposts].map(e => e.pubkey);
         await fetchProfilesBatch(allPubkeys);
 
@@ -1109,7 +1124,7 @@ async function loadUserPostsList(pubkey, hintRelays) {
 
     try {
         const events = await withTimeout(
-            pool.querySync(relays, { kinds: [1], authors: [pubkey], limit: 50 }),
+            pool.querySync(relays, { kinds: [1, 1111], authors: [pubkey], limit: 50 }),
             10000, '投稿一覧取得タイムアウト'
         );
 
@@ -1186,7 +1201,7 @@ async function loadMoreProfilePosts() {
     try {
         const events = await withTimeout(
             pool.querySync(relays, {
-                kinds: [1],
+                kinds: [1, 1111],
                 authors: [profilePostsState.pubkey],
                 until: profilePostsState.oldestTimestamp - 1,
                 limit: 50
@@ -1477,6 +1492,7 @@ async function retryFetchWithRelay(parsed, originalId, relay) {
 function renderEventByKind(event, originalId) {
     switch (event.kind) {
         case 1:
+        case 1111:
         case 30023:
             return renderStandardPost(event, originalId);
         case 6:

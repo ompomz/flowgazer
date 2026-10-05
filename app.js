@@ -30,9 +30,9 @@ class SubscriptionBuilder {
     const { cursorSince, showKind42, filterAuthors } = this.appState;
     const filters = [];
 
-    // === 1. グローバルフィルタ ===
+    // 1. グローバル
     const globalFilter = {
-      kinds: showKind42 ? [1, 6, 16, 42] : [1, 6, 16],
+      kinds: showKind42 ? [1, 6, 16, 42, 1111] : [1, 6, 16, 1111],
       since: cursorSince
     };
     if (filterAuthors && filterAuthors.length > 0) {
@@ -55,7 +55,7 @@ class SubscriptionBuilder {
 
       if (filteredFollowing.length > 0) {
         filters.push({
-          kinds: showKind42 ? [1, 6, 16, 42] : [1, 6, 16],
+          kinds: showKind42 ? [1, 6, 16, 42, 1111] : [1, 6, 16, 1111],
           authors: filteredFollowing,
           since: cursorSince
         });
@@ -66,7 +66,7 @@ class SubscriptionBuilder {
     if (myPubkey) {
       filters.push({ kinds: [7], '#p': [myPubkey], since: cursorSince });
       filters.push({ kinds: [6, 16], '#p': [myPubkey], since: cursorSince });
-      filters.push({ kinds: [1], '#p': [myPubkey], since: cursorSince });
+      filters.push({ kinds: [1, 1111], '#p': [myPubkey], since: cursorSince });
 
       const myPostIds = Array.from(this.dataStore.getEventIdsByAuthor(myPubkey));
       if (myPostIds.length > 0) {
@@ -81,7 +81,7 @@ class SubscriptionBuilder {
     // === 4. 自分の投稿専用フィルタ（myposts のリアルタイム更新）===
     if (myPubkey) {
       filters.push({
-        kinds: [1, 16, 42],
+        kinds: [1, 16, 42, 1111],
         authors: [myPubkey],
         since: cursorSince
       });
@@ -111,7 +111,7 @@ class SubscriptionBuilder {
 
     // ===== 通常タブ（kind:1ベース）=====
     const filter = {
-      kinds: [1],
+      kinds: [1, 1111],
       until: untilTimestamp - 1,
       limit: 50
     };
@@ -142,7 +142,7 @@ class SubscriptionBuilder {
 
       case 'likes':
         if (!myPubkey) return null;
-        filter.kinds = [1, 6, 16, 7];
+        filter.kinds = [1, 1111, 6, 16, 7];
         filter['#p'] = [myPubkey];
         break;
 
@@ -557,7 +557,7 @@ class FlowgazerApp {
     // following タブに登録する（追加ネットワークリクエスト不要）
     let retroCount = 0;
     for (const event of window.dataStore.getAllEvents()) {
-      if ([1, 6, 42].includes(event.kind) && followingSet.has(event.pubkey)) {
+      if ([1, 6, 42, 1111].includes(event.kind) && followingSet.has(event.pubkey)) {
         window.viewState.addHistoryEventToTab(event, 'following');
         retroCount++;
       }
@@ -595,7 +595,7 @@ class FlowgazerApp {
       }, TIMEOUT_MS);
 
       window.relayManager.subscribe('following-anchor-phase', {
-        kinds: [1],
+        kinds: [1, 1111],
         authors,
         limit: 50
       }, (type, event) => {
@@ -1028,7 +1028,7 @@ class FlowgazerApp {
       // これをしないと、Stream Phase（cursorSince以降の新着のみ対象）が動くまで
       // 過去のkind:42が一切表示されない状態になってしまう。
       const filter = {
-        kinds: this.showKind42 ? [1, 42] : [1],
+        kinds: this.showKind42 ? [1, 1111, 42] : [1, 1111],
         limit: 150
       };
 
@@ -1178,7 +1178,7 @@ class FlowgazerApp {
     console.log('📥 自分の投稿履歴を取得中...');
 
     window.relayManager.subscribe('my-posts-history', {
-      kinds: [1, 42],
+      kinds: [1, 42, 1111],
       authors: [myPubkey],
       limit: 100
     }, (type, event) => {
@@ -1208,7 +1208,7 @@ class FlowgazerApp {
     console.log('📥 通知（likesタブ用）を独立取得中...');
 
     const filter = {
-      kinds: [1, 6, 16, 7],
+      kinds: [1, 1111, 6, 16, 7],
       '#p': [myPubkey],
       limit: 50
     };
