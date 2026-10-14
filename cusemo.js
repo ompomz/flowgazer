@@ -130,10 +130,10 @@ class CustomEmojiManager {
     // ==========================
 
     _ensurePickerDom() {
-        // すでにHTML側にあればそれを使う（emoable.htmlは既にこのマークアップを持っている）
+        // すでにHTML側にあればそれを使う
         if (document.getElementById('emoji-picker-modal')) return;
 
-        // 🆕 選択中のアイテム用のスタイルを注入
+        // 🆕 アプリのダークモード変数（--panel, --txt, --border等）に完全連動するスタイル
         const style = document.createElement('style');
         style.id = 'cusemo-picker-style';
         style.textContent = `
@@ -146,18 +146,39 @@ class CustomEmojiManager {
             .cusemo-picker-item.cusemo-selected {
                 background-color: #f0eefe;
             }
+
+            /* ダークモード時：既存のCSS変数に合わせる */
+            body.dark-mode #emoji-picker-modal > div {
+                background: var(--panel, #1b263b) !important;
+                color: var(--txt, #ccc) !important;
+                border: 1px solid var(--border, #444) !important;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+            }
+            body.dark-mode #cusemo-manual-char {
+                background: var(--bg, #132639) !important;
+                color: var(--txt, #ccc) !important;
+                border-color: var(--border, #444) !important;
+            }
+            body.dark-mode #cusemo-manual-send {
+                color: #132639 !important; /* アクセントカラーが明るい場合の文字色調整 */
+                font-weight: bold;
+            }
+            body.dark-mode .cusemo-picker-item.cusemo-selected {
+                background-color: rgba(240, 173, 78, 0.2) !important; /* アクセントカラーを薄く敷く例 */
+            }
         `;
         document.head.appendChild(style);
 
         const modal = document.createElement('div');
         modal.id = 'emoji-picker-modal';
-        modal.style.cssText = 'display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:2000; align-items:center; justify-content:center;';
+        modal.style.cssText = 'display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:2000; align-items:center; justify-content:center;';
+
         modal.innerHTML = `
-          <div style="background:#fff; border-radius:8px; padding:0.75rem; max-width:320px; width:90%; max-height:60vh; overflow-y:auto;">
+          <div style="border-radius:8px; padding:0.75rem; max-width:320px; width:90%; max-height:60vh; overflow-y:auto; background:#fff; color:#333; box-shadow: 0 4px 16px rgba(0,0,0,0.2);">
             <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem;">
               <input id="cusemo-manual-char" type="text" maxlength="8" placeholder="enter an emoji🌞"
                      style="flex-grow:1; padding:0.4rem; border:1px solid #ddd; border-radius:4px;">
-              <button id="cusemo-manual-send" style="min-width:2rem; background: #66b3ff;; color: #fff; border: none; border-radius: 4px; cursor: pointer;">OK</button>
+              <button id="cusemo-manual-send" style="min-width:2rem; background: #66b3ff; color: #fff; border: none; border-radius: 4px; cursor: pointer;">OK</button>
             </div>
             <div id="emoji-picker-list" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
           </div>`;
@@ -172,10 +193,18 @@ class CustomEmojiManager {
         btn.dataset.bound = 'true';
         const submit = () => {
             const val = input.value.trim();
-            if (!val) return;
+            if (!val) {
+                // 🆕 入力欄が空欄のとき：現在選択されている要素があれば、それをクリックしたことにする！
+                const selectedItem = document.querySelector('#emoji-picker-modal .cusemo-picker-item.cusemo-selected');
+                if (selectedItem) {
+                    selectedItem.click();
+                }
+                return;
+            }
             this.selectManual(val);
             input.value = '';
         };
+
         btn.addEventListener('click', submit);
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') submit();
