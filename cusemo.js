@@ -249,7 +249,7 @@ class CustomEmojiManager {
         favMarkItem.title = 'ふぁぼマーク: ' + favMark;
         favMarkItem.style.cssText =
             'width:1.6rem; height:1.6rem; display:flex; align-items:center; justify-content:center; ' +
-            'font-size:1.1rem; cursor:pointer; box-sizing:border-box;';
+            'font-size:1.1rem; cursor:pointer; border:none; border-radius:4px; box-sizing:border-box;';
         favMarkItem.addEventListener('click', () => this.selectManual(favMark));
         list.appendChild(favMarkItem);
 
@@ -259,7 +259,7 @@ class CustomEmojiManager {
             img.src = url;
             img.alt = shortcode;
             img.title = shortcode;
-            img.style.cssText = 'width:1.6rem; height:1.6rem; cursor:pointer; object-fit:contain; box-sizing:border-box;';
+            img.style.cssText = 'width:1.6rem; height:1.6rem; cursor:pointer; object-fit:contain;';
             img.addEventListener('click', () => this.selectCustomEmoji(shortcode));
             list.appendChild(img);
         });
