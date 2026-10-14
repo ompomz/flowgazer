@@ -6,9 +6,35 @@ console.log("🚀 okkake.js loaded");
 
 const DEFAULT_RELAY = "wss://r.kojira.io/"; // フォールバック用デフォルトリレー
 
+let cusemoLoadedKey = null;
+
+function ensureCustomEmojisLoaded() {
+  const mgr = window.customEmojiManager;
+  const auth = window.nostrAuth;
+  if (!mgr || !auth?.pubkey || !auth.canWrite()) return; // ROM閲覧のみなら不要
+  if (!relayManager.isConnected()) return;               // 未接続ならRELAY_CONNECTEDで再試行
+
+  // 同じ「ユーザー×リレー」で二重取得しない（再接続時の無駄打ち防止）
+  const key = auth.pubkey + '@' + relayManager.url;
+  if (cusemoLoadedKey === key) return;
+
+  // ユーザーが変わった場合は前ユーザーの絵文字を引き継がない
+  if (cusemoLoadedKey && !cusemoLoadedKey.startsWith(auth.pubkey + '@')) {
+    mgr.emojis.clear();
+  }
+  cusemoLoadedKey = key;
+  mgr.fetchMyEmojis(auth.pubkey);
+}
+
 window.eventBus.on(window.EVENTS.AUTH_LOGIN_COMPLETED, ({ pubkey, onComplete }) => {
   console.log('📨 ログイン完了通知を受信:', pubkey.substring(0, 8) + '...');
+  ensureCustomEmojisLoaded(); // 🆕 ログイン直後（すでにリレー接続済みの場合）
   onComplete();
+});
+
+// 🆕 リレー接続成功（初回・再接続とも）
+window.eventBus.on(window.EVENTS.RELAY_CONNECTED, () => {
+  ensureCustomEmojisLoaded();
 });
 
 window.okkakeActionMenu = new NostrActionMenu({
@@ -665,6 +691,27 @@ window.onload = async function () {
       const singleChar = chars.length > 0 ? chars[0] : '+';
       localStorage.setItem('favMark', singleChar);
       e.target.value = singleChar;
+    });
+  }
+
+  // 🆕 kind:7 モード（固定 ⇔ ピッカー）トグル。localStorage の 'kind7Mode' は kit-ten 等と共有される
+  const kind7FixedToggle = document.getElementById('kind-7-fixed-toggle');
+  const kind7ContentWrapper = document.getElementById('kind-7-content-wrapper');
+  if (kind7FixedToggle) {
+    // action-menu.js の _getKind7Mode() と同じ基準（グローバルの有無）で判定する
+    const pickerAvailable = !!window.customEmojiManager?.openPicker;
+
+    const saved = localStorage.getItem('kind7Mode') || 'fixed';
+    // 保存値が picker でも機能が無ければ表示上も fixed に矯正
+    const isFixed = (saved !== 'picker') || !pickerAvailable;
+
+    kind7FixedToggle.checked = isFixed;
+    if (kind7ContentWrapper) kind7ContentWrapper.style.display = isFixed ? '' : 'none';
+    if (!pickerAvailable) kind7FixedToggle.disabled = true;
+
+    kind7FixedToggle.addEventListener('change', (e) => {
+      localStorage.setItem('kind7Mode', e.target.checked ? 'fixed' : 'picker');
+      if (kind7ContentWrapper) kind7ContentWrapper.style.display = e.target.checked ? '' : 'none';
     });
   }
 };
