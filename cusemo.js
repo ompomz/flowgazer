@@ -185,7 +185,7 @@ class CustomEmojiManager {
         document.body.appendChild(modal);
     }
 
-    _bindManualInput() {
+        _bindManualInput() {
         const btn = document.getElementById('cusemo-manual-send');
         const input = document.getElementById('cusemo-manual-char');
         if (!btn || !input || btn.dataset.bound) return;
@@ -193,32 +193,38 @@ class CustomEmojiManager {
         btn.dataset.bound = 'true';
         const submit = () => {
             const val = input.value.trim();
-            if (!val) {
-                // 🆕 入力欄が空欄のとき：現在選択されている要素があれば、それをクリックしたことにする！
+            if (val) {
+                // 入力欄に文字が入っているときは、入力された文字を優先して送信
+                this.selectManual(val);
+                input.value = '';
+            } else {
+                // 空欄のときは、現在選択されているアイテム（左上の★など）のクリックを発火
                 const selectedItem = document.querySelector('#emoji-picker-modal .cusemo-picker-item.cusemo-selected');
                 if (selectedItem) {
                     selectedItem.click();
                 }
-                return;
             }
-            this.selectManual(val);
-            input.value = '';
         };
 
         btn.addEventListener('click', submit);
         input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') submit();
+            if (e.key === 'Enter') {
+                if (e.isComposing) return; // IME変換中のEnterはスルー
+                submit();
+            }
         });
     }
 
-    // 🆕 ピッカー表示中のキーボード操作（矢印キーで移動、Enterで決定）
+    // ピッカー表示中のキーボード操作（矢印キーで移動、Enterで決定）
     _bindPickerKeyboard() {
         document.addEventListener('keydown', (e) => {
             const modal = document.getElementById('emoji-picker-modal');
             if (!modal || modal.style.display === 'none') return;
 
+            // IME変換中や、入力欄にフォーカスがあるときはグローバル操作を無視
+            if (e.isComposing) return;
             const manualInput = document.getElementById('cusemo-manual-char');
-            const isInputFocused = document.activeElement === manualInput;
+            if (document.activeElement === manualInput || e.target === manualInput) return;
 
             const items = Array.from(modal.querySelectorAll('.cusemo-picker-item'));
             if (items.length === 0) return;
@@ -227,12 +233,10 @@ class CustomEmojiManager {
             if (currentIndex === -1) currentIndex = 0;
 
             if (e.key === 'Enter') {
-                if (isInputFocused) return; // テキスト入力欄にフォーカスがあるときはそちらのEnterを優先
                 e.preventDefault();
                 e.stopPropagation();
                 items[currentIndex]?.click();
             } else if (['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(e.key)) {
-                if (isInputFocused) return;
                 e.preventDefault();
                 items[currentIndex].classList.remove('cusemo-selected');
 
