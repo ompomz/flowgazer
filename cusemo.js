@@ -9,6 +9,9 @@ class CustomEmojiManager {
 
         // ピッカーからの選択結果を受け取るコールバック
         this._pickerCallback = null;
+
+        // 🆕 ピッカー用のキーボード操作ハンドラを登録
+        this._bindPickerKeyboard();
     }
 
     fetchMyEmojis(pubkey) {
@@ -130,6 +133,22 @@ class CustomEmojiManager {
         // すでにHTML側にあればそれを使う（emoable.htmlは既にこのマークアップを持っている）
         if (document.getElementById('emoji-picker-modal')) return;
 
+        // 🆕 選択中のアイテム用のスタイルを注入
+        const style = document.createElement('style');
+        style.id = 'cusemo-picker-style';
+        style.textContent = `
+            .cusemo-picker-item {
+                border: 2px solid transparent;
+                border-radius: 4px;
+                box-sizing: border-box;
+                cursor: pointer;
+            }
+            .cusemo-picker-item.cusemo-selected {
+                background-color: #f0eefe;
+            }
+        `;
+        document.head.appendChild(style);
+
         const modal = document.createElement('div');
         modal.id = 'emoji-picker-modal';
         modal.style.cssText = 'display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:2000; align-items:center; justify-content:center;';
@@ -163,6 +182,43 @@ class CustomEmojiManager {
         });
     }
 
+    // 🆕 ピッカー表示中のキーボード操作（矢印キーで移動、Enterで決定）
+    _bindPickerKeyboard() {
+        document.addEventListener('keydown', (e) => {
+            const modal = document.getElementById('emoji-picker-modal');
+            if (!modal || modal.style.display === 'none') return;
+
+            const manualInput = document.getElementById('cusemo-manual-char');
+            const isInputFocused = document.activeElement === manualInput;
+
+            const items = Array.from(modal.querySelectorAll('.cusemo-picker-item'));
+            if (items.length === 0) return;
+
+            let currentIndex = items.findIndex(el => el.classList.contains('cusemo-selected'));
+            if (currentIndex === -1) currentIndex = 0;
+
+            if (e.key === 'Enter') {
+                if (isInputFocused) return; // テキスト入力欄にフォーカスがあるときはそちらのEnterを優先
+                e.preventDefault();
+                e.stopPropagation();
+                items[currentIndex]?.click();
+            } else if (['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(e.key)) {
+                if (isInputFocused) return;
+                e.preventDefault();
+                items[currentIndex].classList.remove('cusemo-selected');
+
+                if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                    currentIndex = (currentIndex + 1) % items.length;
+                } else {
+                    currentIndex = (currentIndex - 1 + items.length) % items.length;
+                }
+                items[currentIndex].classList.add('cusemo-selected');
+            } else if (e.key === 'Escape') {
+                this.closePicker();
+            }
+        });
+    }
+
     openPicker(onSelect) {
         this._ensurePickerDom();
         this._bindManualInput();
@@ -183,27 +239,27 @@ class CustomEmojiManager {
         if (!list) return;
         list.innerHTML = '';
 
-        // 🆕 先頭に「固定ふぁぼマーク」を表示
-        // タップすると、その1文字がそのままkind:7のcontentとして送信される。
-        // 🆕 input要素があればその値を優先、なければlocalStorage、ダメなら '+'
         const inputElem = document.getElementById('kind-7-content-input');
         const favMark = (inputElem && inputElem.value) || localStorage.getItem('favMark') || '+';
 
+        // 🆕 先頭の「固定ふぁぼマーク」（初期状態で cusemo-selected を付与してフォーカス状態にする）
         const favMarkItem = document.createElement('div');
+        favMarkItem.className = 'cusemo-picker-item cusemo-selected';
         favMarkItem.textContent = favMark;
         favMarkItem.title = 'ふぁぼマーク: ' + favMark;
         favMarkItem.style.cssText =
             'width:1.6rem; height:1.6rem; display:flex; align-items:center; justify-content:center; ' +
-            'font-size:1.1rem; cursor:pointer; border:none; border-radius:4px; box-sizing:border-box;';
+            'font-size:1.1rem; cursor:pointer; box-sizing:border-box;';
         favMarkItem.addEventListener('click', () => this.selectManual(favMark));
         list.appendChild(favMarkItem);
 
         this.getEmojiList().forEach(({ shortcode, url }) => {
             const img = document.createElement('img');
+            img.className = 'cusemo-picker-item';
             img.src = url;
             img.alt = shortcode;
             img.title = shortcode;
-            img.style.cssText = 'width:1.6rem; height:1.6rem; cursor:pointer; object-fit:contain;';
+            img.style.cssText = 'width:1.6rem; height:1.6rem; cursor:pointer; object-fit:contain; box-sizing:border-box;';
             img.addEventListener('click', () => this.selectCustomEmoji(shortcode));
             list.appendChild(img);
         });
@@ -224,25 +280,11 @@ class CustomEmojiManager {
 
 // 画面全体のどこがクリックされても監視し、それが #emoji-picker-modal 自身なら閉じる
 document.addEventListener('click', (e) => {
-    // e.target.closest('#emoji-picker-modal') でもよいですが、今回は「背景自身」なので直接チェック
     const modal = document.getElementById('emoji-picker-modal');
     if (modal && e.target === modal) {
         modal.style.display = 'none';
         if (window.customEmojiManager) {
             window.customEmojiManager._pickerCallback = null;
-        }
-    }
-});
-
-// ESCキーでの閉じ処理
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-        const modal = document.getElementById('emoji-picker-modal');
-        if (modal && modal.style.display !== 'none') {
-            modal.style.display = 'none';
-            if (window.customEmojiManager) {
-                window.customEmojiManager._pickerCallback = null;
-            }
         }
     }
 });
