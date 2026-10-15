@@ -180,7 +180,7 @@ class CustomEmojiManager {
                      style="flex-grow:1; padding:0.4rem; border:1px solid #ddd; border-radius:4px;">
               <button id="cusemo-manual-send" style="min-width:2rem; background: #66b3ff; color: #fff; border: none; border-radius: 4px; cursor: pointer;">OK</button>
             </div>
-            <div id="emoji-picker-list" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+            <div id="emoji-picker-list" style="display:flex; flex-wrap:wrap; gap:4px;"></div>
           </div>`;
         document.body.appendChild(modal);
     }
