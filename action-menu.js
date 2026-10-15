@@ -45,6 +45,10 @@
             // 長押しメニューを円形/リストどちらで生成するかの判定に使用）
             this.hasComposer = config.hasComposer ?? (() => !!window.ehagakiManager?.open);
 
+            this.getKind7ModeOverride = config.getKind7Mode || null;
+            this.canPickEmoji = config.canPickEmoji
+                || (() => !!window.customEmojiManager?.openPicker);
+
             this._attached = new WeakMap();
             this._ensureMenuDom();
         }
@@ -64,6 +68,8 @@
          * @returns {'fixed'|'picker'}
          */
         _getKind7Mode() {
+            if (this.getKind7ModeOverride) return this.getKind7ModeOverride();
+
             const saved = localStorage.getItem('kind7Mode') || 'fixed';
             if (saved === 'picker' && !window.customEmojiManager?.openPicker) {
                 return 'fixed';
@@ -85,6 +91,24 @@
             }
 
             await this._publishLike(originalEvent, null);
+        }
+
+        // 🆕 「絵文字を選んでふぁぼ」専用。kind7Mode に関係なく常にピッカーを開く
+        async sendLikeWithPicker(originalEvent) {
+            if (!this.requireWriteAccess()) return;
+
+            const mgr = window.customEmojiManager;
+            if (!mgr?.openPicker) {
+                // 保険：ピッカーが無ければ固定マークで送る
+                await this._publishLike(originalEvent, null);
+                return;
+            }
+            mgr.openPicker((selection) => this._publishLike(originalEvent, selection));
+        }
+
+        // 🆕 7つ目の項目を出してよいか（書き込み可能 かつ ピッカーあり）
+        _isPickItemAvailable() {
+            return !!(this.canPickEmoji() && window.nostrAuth?.canWrite?.());
         }
 
         // 🆕 実際の送信処理を切り出し
@@ -216,6 +240,7 @@
         async execute(action, ev) {
             switch (action) {
                 case 'like': return this.sendLike(ev);
+                case 'likePick': return this.sendLikeWithPicker(ev); // 🆕 追加
                 case 'repost': return this.sendRepost(ev);
                 case 'quote': return this.quote(ev);
                 case 'reply': return this.reply(ev);
@@ -266,6 +291,12 @@
                     }
                 }
 
+                // 🆕 ここを追加：動的に7つ目の項目の表示/非表示を切り替える
+                const pickItem = menu.querySelector('[data-action="likePick"]');
+                if (pickItem) {
+                    pickItem.style.display = self._isPickItemAvailable() ? '' : 'none';
+                }
+
                 // 🆕 円形メニュー（circularクラス付き＝動的生成された4項目メニュー）かどうかで
                 // 配置ロジックと表示/非表示の切り替え方法を分ける。
                 // 静的HTML側で用意されたメニュー（index2.html等）はこのクラスを持たないため、
@@ -273,16 +304,14 @@
                 const isCircular = menu.classList.contains('circular');
 
                 if (isCircular) {
-                    // 円形メニュー：指の位置にそのままコンテナを置き、
-                    // CSS側のtransformでオフセット（十字の中心を指からずらす）を行う。
                     menu.style.left = `${startPos.x}px`;
                     menu.style.top = `${startPos.y}px`;
                     menu.classList.add('is-open');
                 } else {
-                    // リストメニュー：画面端でクランプして配置する（従来ロジック）
                     const menuWidth = menu.offsetWidth || 190;
                     const x = Math.min(Math.max(8, startPos.x), window.innerWidth - menuWidth - 8);
-                    const y = Math.min(startPos.y - 20, window.innerHeight - 260);
+                    // 🆕 高さを 260 から 300 に調整
+                    const y = Math.min(startPos.y - 20, window.innerHeight - 300);
                     menu.style.left = `${x}px`;
                     menu.style.top = `${Math.max(8, y)}px`;
                     menu.style.display = 'flex';
@@ -500,6 +529,8 @@
                     <div class="lp-item" data-action="reply"><span>↩️</span><span>リプライ</span></div>
                     <div class="lp-item" data-action="copy"><span>📋</span><span>neventをコピー</span></div>
                     <div class="lp-item" data-action="lumilumi"><span>🔗</span><span>lumilumiで開く</span></div>
+                    <!-- 🆕 7つ目：秘密鍵ログイン時のみ表示される -->
+                    <div class="lp-item" data-action="likePick" style="display:none"><span>⭐</span><span>絵文字を選んでふぁぼ</span></div>
                 `;
             }
 

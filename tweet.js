@@ -54,8 +54,35 @@ window.app = {
 window.tweetActionMenu = new NostrActionMenu({
     clientTag: CLIENT_TAG,
     getRelayUrl: getMainRelayUrl,
-    publish: publishToMainRelay
+    publish: publishToMainRelay,
+    // 🆕 通常の「ふぁぼ」は常に固定マーク。絵文字は7つ目の専用項目(likePick)から選ぶ
+    getKind7Mode: () => 'fixed'
 });
+
+// 🆕 cusemo.js の取得経路を SimplePool に差し替える（tweet.html は relayManager を持たないため）
+if (window.customEmojiManager) {
+    window.customEmojiManager.queryProvider = async (filters) => {
+        const relays = getPriorityRelays([getMainRelayUrl()]);
+        const results = await Promise.all(filters.map(f =>
+            withTimeout(pool.querySync(relays, f), 8000, 'カスタム絵文字取得タイムアウト')
+                .catch(() => [])
+        ));
+        return results.flat();
+    };
+}
+
+// 🆕 ログインユーザーの絵文字を一度だけ読み込む（ユーザーが変わったら入れ替え）
+let cusemoLoadedFor = null;
+function ensureCustomEmojisLoaded() {
+    const mgr = window.customEmojiManager;
+    const auth = window.nostrAuth;
+    if (!mgr || !auth?.pubkey || !auth.canWrite()) return;
+    if (cusemoLoadedFor === auth.pubkey) return;
+
+    if (cusemoLoadedFor) mgr.emojis.clear(); // 前ユーザーの絵文字を引き継がない
+    cusemoLoadedFor = auth.pubkey;
+    mgr.fetchMyEmojis(auth.pubkey);
+}
 
 // timeline.js（Timelineクラス）は window.actionMenu を参照する設計のため、
 // 同じインスタンスをそちらの名前でも公開する
@@ -187,6 +214,7 @@ function updateTweetPageLoginUI() {
 window.eventBus.on(window.EVENTS.AUTH_LOGIN_COMPLETED, ({ pubkey, onComplete }) => {
     console.log('📨 ログイン完了通知を受信:', pubkey.substring(0, 8) + '...');
     updateTweetPageLoginUI();
+    ensureCustomEmojisLoaded(); // 🆕 ここを追加
     onComplete();
 });
 
@@ -1571,6 +1599,7 @@ function initializeApp() {
 
     // 本体(flowgazer)ですでにログイン済みなら、ここでバッジに即反映される
     updateTweetPageLoginUI();
+    ensureCustomEmojisLoaded(); // 🆕 ここを追加
 
     const urlParams = new URLSearchParams(window.location.search);
     const id = urlParams.get('id');

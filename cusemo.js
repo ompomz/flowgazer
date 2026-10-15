@@ -10,33 +10,46 @@ class CustomEmojiManager {
         // ピッカーからの選択結果を受け取るコールバック
         this._pickerCallback = null;
 
+        // 🆕 取得経路の差し替え口。(filters: Object[]) => Promise<event[]>
+        // 未設定なら relayManager（okkake / kit-ten / lite 等）を使う
+        this.queryProvider = null;
+
         // 🆕 ピッカー用のキーボード操作ハンドラを登録
         this._bindPickerKeyboard();
     }
 
-    fetchMyEmojis(pubkey) {
+
+    _query(subId, filters) {
+        if (this.queryProvider) return this.queryProvider(filters);
+
+        return new Promise((resolve) => {
+            const events = [];
+            const ok = window.relayManager?.subscribe(subId, filters, (type, event) => {
+                if (type === 'EVENT') {
+                    events.push(event);
+                } else if (type === 'EOSE') {
+                    window.relayManager.unsubscribe(subId);
+                    resolve(events);
+                }
+            });
+            if (!ok) resolve([]);
+        });
+    }
+
+    async fetchMyEmojis(pubkey) {
         if (!pubkey) return;
         console.log('🔍 カスタム絵文字(kind:10030)を取得中...');
 
-        const filter = { kinds: [10030], authors: [pubkey] };
-        const receivedEvents = [];
+        const events = (await this._query('fetch-emojis', [{ kinds: [10030], authors: [pubkey] }]))
+            .filter(ev => ev?.kind === 10030);
 
-        window.relayManager.subscribe('fetch-emojis', filter, (type, event) => {
-            if (type === 'EVENT') {
-                if (event && event.kind === 10030) receivedEvents.push(event);
-            } else if (type === 'EOSE') {
-                window.relayManager.unsubscribe('fetch-emojis');
-
-                if (receivedEvents.length > 0) {
-                    receivedEvents.sort((a, b) => b.created_at - a.created_at);
-                    this.parseEmojiSet(receivedEvents[0]);
-                    // 🆕 aタグで参照されたkind:30030を追加解決
-                    this.fetchEmojiSets(this._pendingSetRefs);
-                } else {
-                    this._finishLoading();
-                }
-            }
-        });
+        if (events.length === 0) {
+            this._finishLoading();
+            return;
+        }
+        events.sort((a, b) => b.created_at - a.created_at);
+        this.parseEmojiSet(events[0]);
+        await this.fetchEmojiSets(this._pendingSetRefs);
     }
 
     parseEmojiSet(event) {
@@ -66,27 +79,18 @@ class CustomEmojiManager {
     }
 
     // 🆕 aタグで参照された kind:30030 をまとめて取得
-    fetchEmojiSets(refs) {
+    async fetchEmojiSets(refs) {
         if (!refs || refs.length === 0) {
             this._finishLoading();
             return;
         }
-
         const filters = refs.map(r => ({
-            kinds: [30030],
-            authors: [r.pubkey],
-            '#d': [r.dTag],
-            limit: 1
+            kinds: [30030], authors: [r.pubkey], '#d': [r.dTag], limit: 1
         }));
 
-        window.relayManager.subscribe('fetch-emoji-sets', filters, (type, event) => {
-            if (type === 'EVENT' && event?.kind === 30030) {
-                this._mergeEmojiSet(event);
-            } else if (type === 'EOSE') {
-                window.relayManager.unsubscribe('fetch-emoji-sets');
-                this._finishLoading();
-            }
-        });
+        const events = await this._query('fetch-emoji-sets', filters);
+        events.filter(ev => ev?.kind === 30030).forEach(ev => this._mergeEmojiSet(ev));
+        this._finishLoading();
     }
 
     _mergeEmojiSet(event) {
@@ -174,18 +178,18 @@ class CustomEmojiManager {
         modal.style.cssText = 'display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:2000; align-items:center; justify-content:center;';
 
         modal.innerHTML = `
-          <div style="border-radius:8px; padding:0.75rem; max-width:320px; width:90%; max-height:60vh; overflow-y:auto; background:#fff; color:#333; box-shadow: 0 4px 16px rgba(0,0,0,0.2);">
-            <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem;">
-              <input id="cusemo-manual-char" type="text" maxlength="8" placeholder="enter an emoji🌞"
-                     style="flex-grow:1; padding:0.4rem; border:1px solid #ddd; border-radius:4px;">
-              <button id="cusemo-manual-send" style="min-width:2rem; background: #66b3ff; color: #fff; border: none; border-radius: 4px; cursor: pointer;">OK</button>
-            </div>
-            <div id="emoji-picker-list" style="display:flex; flex-wrap:wrap; gap:4px;"></div>
-          </div>`;
+  <div style="border-radius:8px; padding:0.75rem; max-width:320px; width:90%; max-height:60vh; overflow-y:auto; background:#fff; color:#333; box-shadow: 0 4px 16px rgba(0,0,0,0.2);">
+    <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem; width:100%;">
+      <input id="cusemo-manual-char" type="text" maxlength="8" placeholder="enter an emoji🌞"
+             style="flex: 1; min-width: 0; padding:0.4rem; border:1px solid #ddd; border-radius:4px; box-sizing: border-box;">
+      <button id="cusemo-manual-send" style="flex-shrink: 0; min-width: 2rem; padding: 0.4rem 0.8rem; background: #66b3ff; color: #fff; border: none; border-radius: 4px; cursor: pointer; box-sizing: border-box;">OK</button>
+    </div>
+    <div id="emoji-picker-list" style="display:flex; flex-wrap:wrap; gap:4px;"></div>
+  </div>`;
         document.body.appendChild(modal);
     }
 
-        _bindManualInput() {
+    _bindManualInput() {
         const btn = document.getElementById('cusemo-manual-send');
         const input = document.getElementById('cusemo-manual-char');
         if (!btn || !input || btn.dataset.bound) return;
@@ -221,8 +225,15 @@ class CustomEmojiManager {
             const modal = document.getElementById('emoji-picker-modal');
             if (!modal || modal.style.display === 'none') return;
 
-            // IME変換中や、入力欄にフォーカスがあるときはグローバル操作を無視
+            // IME変換中は無視
             if (e.isComposing) return;
+
+            // 🆕 入力欄にフォーカスがあっても、Escキーなら閉じられるようにする
+            if (e.key === 'Escape') {
+                this.closePicker();
+                return;
+            }
+
             const manualInput = document.getElementById('cusemo-manual-char');
             if (document.activeElement === manualInput || e.target === manualInput) return;
 
@@ -246,16 +257,21 @@ class CustomEmojiManager {
                     currentIndex = (currentIndex - 1 + items.length) % items.length;
                 }
                 items[currentIndex].classList.add('cusemo-selected');
-            } else if (e.key === 'Escape') {
-                this.closePicker();
             }
         });
+    }
+
+    // 🆕 手動入力欄のリセット（出口が複数あるため、開く時・閉じる時の両方で呼ぶ）
+    _resetManualInput() {
+        const input = document.getElementById('cusemo-manual-char');
+        if (input) input.value = '';
     }
 
     openPicker(onSelect) {
         this._ensurePickerDom();
         this._bindManualInput();
         this._pickerCallback = onSelect;
+        this._resetManualInput(); // 🆕
         this.renderPicker();
         const modal = document.getElementById('emoji-picker-modal');
         if (modal) modal.style.display = 'flex';
@@ -265,6 +281,7 @@ class CustomEmojiManager {
         const modal = document.getElementById('emoji-picker-modal');
         if (modal) modal.style.display = 'none';
         this._pickerCallback = null;
+        this._resetManualInput(); // 🆕
     }
 
     renderPicker() {
@@ -311,14 +328,10 @@ class CustomEmojiManager {
     }
 }
 
-// 画面全体のどこがクリックされても監視し、それが #emoji-picker-modal 自身なら閉じる
 document.addEventListener('click', (e) => {
     const modal = document.getElementById('emoji-picker-modal');
     if (modal && e.target === modal) {
-        modal.style.display = 'none';
-        if (window.customEmojiManager) {
-            window.customEmojiManager._pickerCallback = null;
-        }
+        window.customEmojiManager?.closePicker();
     }
 });
 
