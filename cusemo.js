@@ -195,27 +195,35 @@ class CustomEmojiManager {
         if (!btn || !input || btn.dataset.bound) return;
 
         btn.dataset.bound = 'true';
+
         const submit = () => {
             const val = input.value.trim();
             if (val) {
-                // 入力欄に文字が入っているときは、入力された文字を優先して送信
+                // 入力欄に文字があるときは、入力内容を最優先で送信
                 this.selectManual(val);
                 input.value = '';
             } else {
-                // 空欄のときは、現在選択されているアイテム（左上の★など）のクリックを発火
-                const selectedItem = document.querySelector('#emoji-picker-modal .cusemo-picker-item.cusemo-selected');
-                if (selectedItem) {
-                    selectedItem.click();
-                }
+                // 空欄のときだけ、選択中アイテム（⭐など）を決定
+                const selectedItem = document.querySelector(
+                    '#emoji-picker-modal .cusemo-picker-item.cusemo-selected'
+                );
+                if (selectedItem) selectedItem.click();
             }
         };
 
         btn.addEventListener('click', submit);
+
         input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                if (e.isComposing) return; // IME変換中のEnterはスルー
-                submit();
-            }
+            if (e.key !== 'Enter') return;
+
+            // IME変換確定のEnterは送信しない
+            if (e.isComposing || e.keyCode === 229) return;
+
+            // 🔑 ここが肝：document側のキーボードハンドラへ伝播させない
+            e.preventDefault();
+            e.stopPropagation();
+
+            submit();
         });
     }
 
@@ -226,16 +234,20 @@ class CustomEmojiManager {
             if (!modal || modal.style.display === 'none') return;
 
             // IME変換中は無視
-            if (e.isComposing) return;
+            if (e.isComposing || e.keyCode === 229) return;
 
-            // 🆕 入力欄にフォーカスがあっても、Escキーなら閉じられるようにする
+            // Escは入力欄にフォーカスがあっても閉じられるようにする
             if (e.key === 'Escape') {
                 this.closePicker();
                 return;
             }
 
-            const manualInput = document.getElementById('cusemo-manual-char');
-            if (document.activeElement === manualInput || e.target === manualInput) return;
+            // 🔑 入力欄・ボタン・リンクなど「それ自身がEnterの意味を持つ要素」が起点なら、
+            // ピッカーのキーボード操作は一切扱わず、ブラウザ標準の動作（ボタンのクリックなど）に任せる
+            if (e.target instanceof Element &&
+                e.target.closest('input, textarea, select, button, a')) {
+                return;
+            }
 
             const items = Array.from(modal.querySelectorAll('.cusemo-picker-item'));
             if (items.length === 0) return;
