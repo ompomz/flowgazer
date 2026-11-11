@@ -206,26 +206,52 @@ class Timeline {
 
         // 1. 判定用の「実質的な長さ」を計算（識別子を無視）
         const virtualContent = fullContent.replace(/(https?:\/\/[^\s]+|nostr:[a-z0-9]+)/gi, 'L');
+        const hasMedia = /https?:\/\/[^\s]+\.(jpg|jpeg|png|gif|webp|mp4|avif|heic|svg)/i.test(fullContent);
 
-        const hasMedia = /https?:\/\/[^\s]+\.(jpg|jpeg|png|gif|webp|mp4)/i.test(fullContent);
-
-        // 判定（仮想的な長さが100未満かつ改行が少なければそのまま）
+        // 判定（仮想的な長さが100未満、改行が少なく、メディアがなければそのまま）
         if (virtualContent.length < 100 && lineCount < 4 && !hasMedia) {
             return this.createContent(event);
         }
 
         const threshold = 120;
-        // 仮想的な長さで「長いかどうか」を決める
         const isPotentiallyLong = virtualContent.length > threshold || lineCount >= 4;
 
         if (!isPotentiallyLong) {
             return this.createContent(event);
         }
 
-        // 2. 短縮版のテキスト作成
-        let shortText = fullContent;
+        // 2. 短縮版のテキスト作成（URLやメディアを途中で切らないように調整）
+        let shortEnd = threshold;
         if (fullContent.length > threshold) {
-            shortText = fullContent.substring(0, threshold);
+            const urlRegex = /https?:\/\/[^\s]+/g;
+            let match;
+            while ((match = urlRegex.exec(fullContent)) !== null) {
+                const urlStart = match.index;
+                const urlEnd = urlStart + match[0].length;
+
+                // もし切り詰め位置（threshold付近）が URL の中にかかっている場合、
+                // あるいは「本文が長すぎて、画像URL自体がバッファ（threshold）の向こう側にある」場合、
+                // 画像URLの手前で綺麗に切るか、あるいはURL全体を巻き込むかを決定します。
+
+                if (urlStart < threshold && urlEnd > threshold) {
+                    // URLの途中で切れるのを防ぐため、URLの最後まで含める
+                    shortEnd = urlEnd;
+                    break;
+                }
+            }
+
+            // ★もし「画像URLの開始位置」自体が 120文字（threshold）よりも後にある場合（例: 長い本文＋最後に画像）
+            // 画像URLの途中で切断されるのを防ぐため、切り詰め位置を「画像URLが始まる直前（あるいは本文のキリがいいところ）」に引き上げます。
+            // これにより、本文は120文字付近で折りたたまれ、バグった中途半端なURLではなく、綺麗に「本文... [全文を表示]」になります！
+            const firstMediaMatch = fullContent.match(/https?:\/\/[^\s]+\.(jpg|jpeg|png|gif|webp|mp4|avif|heic|svg)/i);
+            if (firstMediaMatch && firstMediaMatch.index < shortEnd && firstMediaMatch.index > threshold) {
+                shortEnd = firstMediaMatch.index;
+            }
+        }
+
+        let shortText = fullContent;
+        if (fullContent.length > shortEnd) {
+            shortText = fullContent.substring(0, shortEnd).trim();
         }
 
         const isLong = shortText.length < fullContent.length;
@@ -235,12 +261,21 @@ class Timeline {
         const wrapper = document.createElement('span');
         wrapper.className = 'expandable-content';
 
-        const render = (text) => {
+        const render = (text, isShort) => {
             const tempEvent = { ...event, content: text };
-            return this.createContent(tempEvent);
+            const contentNode = this.createContent(tempEvent);
+
+            // もし短縮表示モードなら、末尾に "..." を添える
+            if (isShort) {
+                const dotSpan = document.createElement('span');
+                dotSpan.textContent = '...';
+                contentNode.appendChild(dotSpan);
+            }
+            return contentNode;
         };
 
-        let currentContentNode = render(shortText + "...");
+        // 最初は短縮版（isShort = true で "..." を別で添える）
+        let currentContentNode = render(shortText, true);
         wrapper.appendChild(currentContentNode);
 
         const toggleLink = document.createElement('span');
@@ -250,11 +285,21 @@ class Timeline {
 
         toggleLink.onclick = (e) => {
             e.stopPropagation();
-            const isExpanded = toggleLink.textContent.includes('とじる');
-            const newNode = render(isExpanded ? shortText + "..." : fullContent);
+
+            // 現在「とじる」が表示されているかどうか（＝今から折りたたむかどうか）
+            const isCurrentlyExpanded = toggleLink.textContent.includes('とじる');
+
+            // 今が展開中なら -> 折りたたむ（shortText を使い、isShort = true で "..." をつける）
+            // 今が折りたたみ中なら -> 展開する（fullContent を使い、isShort = false で "..." をつけない）
+            const nextIsExpanded = !isCurrentlyExpanded;
+
+            // 修正：nextIsExpanded が true（展開中）のときは "..." 不要なので !nextIsExpanded を渡す
+            const newNode = render(nextIsExpanded ? fullContent : shortText, !nextIsExpanded);
+
             currentContentNode.replaceWith(newNode);
             currentContentNode = newNode;
-            toggleLink.textContent = isExpanded ? ' [全文を表示]' : ' [とじる]';
+
+            toggleLink.textContent = nextIsExpanded ? ' [とじる]' : ' [全文を表示]';
         };
 
         wrapper.appendChild(toggleLink);
