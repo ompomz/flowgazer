@@ -135,6 +135,43 @@ class NostrAuth {
     throw new Error('署名に必要な鍵が見つかりません');
   }
 
+  // ---- 追加: NIP-04 / NIP-44 復号 ----
+  // counterpartPubkey: 暗号化の相手の公開鍵（自分宛てリストなら自分の pubkey）
+  // scheme: 'nip44' | 'nip04'
+  async decrypt(counterpartPubkey, ciphertext, scheme = 'nip44') {
+    if (!this.pubkey || this.readOnly) {
+      throw new Error('復号に必要な鍵がありません');
+    }
+
+    // 1. 秘密鍵ログイン
+    if (this.nsec && !this.useNIP07) {
+      const sk = NostrTools.nip19.decode(this.nsec).data; // Uint8Array
+
+      if (scheme === 'nip44') {
+        // nostr-tools のバージョン差（v2 名前空間の有無）を吸収する
+        const n44 = NostrTools.nip44;
+        const getKey = n44?.getConversationKey || n44?.v2?.utils?.getConversationKey;
+        const dec = n44?.decrypt || n44?.v2?.decrypt;
+        if (!getKey || !dec) throw new Error('nip44 が利用できません');
+        return dec(ciphertext, getKey(sk, counterpartPubkey));
+      }
+
+      if (!NostrTools.nip04?.decrypt) throw new Error('nip04 が利用できません');
+      return await NostrTools.nip04.decrypt(sk, counterpartPubkey, ciphertext);
+    }
+
+    // 2. NIP-07（拡張機能のポップアップ許可が発生する）
+    if (this.useNIP07) {
+      const api = window.nostr?.[scheme];
+      if (!api?.decrypt) {
+        throw new Error(`拡張機能が ${scheme} の復号に対応していません`);
+      }
+      return await api.decrypt(counterpartPubkey, ciphertext);
+    }
+
+    throw new Error('復号に使える鍵が見つかりません');
+  }
+
   isLoggedIn() {
     return this.pubkey !== null;
   }

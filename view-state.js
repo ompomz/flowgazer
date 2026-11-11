@@ -299,6 +299,11 @@ class ViewState {
     // kind:1 と kind:1111 は「テキスト系ノート」として同じフィルタ規則を適用する
     const isTextNote = (ev) => ev.kind === 1 || ev.kind === 1111;
 
+    // list-manager.js を読み込まないページでは listManager が無いので何も起きない
+    if (tab !== 'myposts' && window.listManager?.hasMutes()) {
+      events = events.filter(ev => !window.listManager.isMutedEvent(ev));
+    }
+
     if (this.isChannelTab(tab)) return events;
 
     if (tab === 'likes') {
