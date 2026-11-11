@@ -134,6 +134,72 @@ class Timeline {
         }
     }
 
+    // ========================================
+    // CW / NSFW / ミュートの折りたたみ
+    // ========================================
+
+    /**
+     * CW(NIP-36) または NSFW かどうかを判定する。
+     * - ['content-warning', reason] タグ
+     * - ['t', 'nsfw'] タグ
+     * - 本文中の #nsfw
+     * @param {Object} event
+     * @returns {{reason:string}|null}
+     */
+    _getCwInfo(event) {
+        const cwTag = event.tags?.find(t => t[0] === 'content-warning');
+        if (cwTag) return { reason: cwTag[1] || '' };
+
+        const hasNsfwTag = event.tags?.some(t => t[0] === 't' && (t[1] || '').toLowerCase() === 'nsfw');
+        if (hasNsfwTag || /#nsfw(?![A-Za-z0-9_])/i.test(event.content || '')) {
+            return { reason: 'NSFW' };
+        }
+        return null;
+    }
+
+    /**
+     * 本文を「ミュート / CW・NSFW」の折りたたみ付きで生成する。
+     * 優先順: ミュート → CW/NSFW → 通常（createExpandableContent）
+     *
+     * ミュート判定は myposts タブでは行わない（既存方針: myposts にはミュート非適用）。
+     * 展開後は既存CWと同じく createExpandableContent() に置き換わる。
+     *
+     * @param {Object} event - 本文を表示したい元イベント（リポストなら元ポスト）
+     * @returns {Node}
+     */
+    createGuardedContent(event) {
+        let label = null;
+
+        const muteReason = this.currentTab !== 'myposts'
+            ? window.listManager?.getMuteReason?.(event)
+            : null;
+
+        if (muteReason) {
+            // 先頭8バイト（日本語は2バイト換算）で切り詰める。例: w: ビットコ...
+            const short = MyNostrUtils.truncateByByte(muteReason.value, 8);
+            label = `[ミュートされた投稿を表示 (${muteReason.type}: ${short})]`;
+        } else {
+            const cw = this._getCwInfo(event);
+            if (cw) {
+                label = `⚠️${cw.reason ? `：${cw.reason}` : ''} [内容を表示]`;
+            }
+        }
+
+        // 対象外なら従来どおり
+        if (!label) return this.createExpandableContent(event);
+
+        const link = document.createElement('a');
+        link.href = '#';
+        link.className = 'nostr-ref';
+        link.textContent = label;
+        link.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation(); // li の長押し/クリックと競合させない
+            link.replaceWith(this.createExpandableContent(event));
+        };
+        return link;
+    }
+
     createExpandableContent(event) {
         const fullContent = event.content || '';
         const lineCount = (fullContent.match(/\n/g) || []).length;
@@ -404,7 +470,7 @@ class Timeline {
 
         span.appendChild(document.createTextNode(' > '));
 
-        const content = this.createExpandableContent(originalEvent);
+        const content = this.createGuardedContent(originalEvent);
         span.appendChild(content);
 
         return span;
@@ -451,8 +517,8 @@ class Timeline {
                 const contentWrapper = document.createElement('span');
                 contentWrapper.className = 'repost-content';
                 contentWrapper.appendChild(document.createTextNode(' > '));
-                const expandable = this.createExpandableContent(originalEvent);
-                contentWrapper.appendChild(expandable);
+                const guarded = this.createGuardedContent(originalEvent);
+                contentWrapper.appendChild(guarded);
 
                 li.appendChild(contentWrapper);
 

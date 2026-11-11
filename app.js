@@ -313,6 +313,8 @@ class FlowgazerApp {
     const relay = savedRelay || defaultRelay;
     await this.connectRelay(relay);
 
+    this._loadMuteList();
+
     // キャッシュ済みチャンネルリストを復元（ログイン不要）
     const savedChannels = localStorage.getItem('myChannels');
     if (savedChannels) {
@@ -462,6 +464,7 @@ class FlowgazerApp {
     // auth-ui.js はこのメソッドが完了するまで await するため、
     // kind:3 取得完了（またはタイムアウト）後にモーダルが閉じられる。
     await this._fetchAndApplyFollowList(myPubkey);
+    this._loadMuteList();
 
     // タブのデータ取得済みフラグをリセット
     this.tabDataFetched.following = false;
@@ -482,6 +485,22 @@ class FlowgazerApp {
     this.updateLoginUI();
 
     console.log('✅ onAuthSuccessFromUI: 完了');
+  }
+
+  /**
+  * ミュートリストを取得し、更新があれば再描画する。
+  * 取得条件の判定は listManager 側（秘密鍵/NIP-07 のみ）。
+  * 失敗してもタイムラインは止めない。
+  * @private
+  */
+  async _loadMuteList() {
+    if (!window.listManager) return; // list-manager.js 未読み込みのページ
+    try {
+      const changed = await window.listManager.fetchMuteList();
+      if (changed) window.viewState.renderNow();
+    } catch (err) {
+      console.warn('⚠️ ミュートリスト取得で予期せぬエラー:', err);
+    }
   }
 
   /**
@@ -1653,6 +1672,11 @@ class FlowgazerApp {
     } else {
       npubLink.style.display = 'none';
       notLoggedInSpan.style.display = 'inline';
+    }
+
+    // サインアウト/閲覧専用ログインになったら破棄（再描画は必要時のみ）
+    if (!auth.isLoggedIn() || auth.readOnly) {
+      if (window.listManager?.clear()) window.viewState?.renderNow();
     }
 
     // 2. ROMモード時の「書き込み用鍵」の状態表示
