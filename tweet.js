@@ -456,6 +456,59 @@ function parseInput(raw) {
 }
 
 // ========================================
+// NIP-05 対応（name@domain / @domain / domain）
+// ========================================
+
+const NIP05_FULL_REGEX = /^[a-z0-9_.+-]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/i;
+const NIP05_DOMAIN_REGEX = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i;
+
+/**
+ * NIP-05 らしい入力を "name@domain" に正規化する。
+ * NIP-05 と解釈できなければ null。
+ */
+function normalizeNip05(str) {
+    const s = (str || '').trim();
+    if (!s) return null;
+
+    if (NIP05_FULL_REGEX.test(s)) return s;
+    if (s.startsWith('@') && NIP05_DOMAIN_REGEX.test(s.slice(1))) return `_${s}`;
+    if (NIP05_DOMAIN_REGEX.test(s)) return `_@${s}`;
+    return null;
+}
+
+function isNip05(str) {
+    return normalizeNip05(str) !== null;
+}
+
+/**
+ * parseInput の非同期ラッパー。
+ * NIP-05（省略形含む）なら .well-known/nostr.json を引いて { kind:'profile' } に正規化する。
+ * 解決に失敗した場合は { kind:'nip05-error' } を返す。
+ */
+async function resolveInput(raw) {
+    const input = (raw || '').trim();
+    if (!input) return null;
+
+    const nip05 = normalizeNip05(input);
+    if (nip05) {
+        try {
+            const p = await withTimeout(
+                NostrTools.nip05.queryProfile(nip05),
+                8000, 'NIP-05解決タイムアウト'
+            );
+            if (!p?.pubkey) {
+                return { kind: 'nip05-error', nip05, message: 'アドレスが見つかりませんでした' };
+            }
+            return { kind: 'profile', pubkey: p.pubkey, relays: p.relays || [], nip05 };
+        } catch (e) {
+            return { kind: 'nip05-error', nip05, message: e.message };
+        }
+    }
+
+    return parseInput(input);
+}
+
+// ========================================
 // 本文フォーマット（エスケープ → linkify → 絵文字 → 引用カード展開）
 // ========================================
 
@@ -1339,10 +1392,10 @@ function renderInputForm() {
         e.preventDefault();
         const input = document.getElementById('nostr-id-input').value.trim();
         const validPrefixes = ['note1', 'nevent1', 'naddr1', 'npub1', 'nprofile1'];
-        if (validPrefixes.some(p => input.startsWith(p))) {
-            window.location.href = `?id=${input}`;
+        if (validPrefixes.some(p => input.startsWith(p)) || isNip05(input)) {
+            window.location.href = `?id=${encodeURIComponent(input)}`;
         } else {
-            alert('有効なNostr ID (note1, nevent1, naddr1, npub1, nprofile1) を入力してください。');
+            alert('有効なNostr ID (note1, nevent1, naddr1, npub1, nprofile1) または NIP-05 (name@domain) を入力してください。');
         }
     });
 }
@@ -1543,12 +1596,24 @@ function renderEventByKind(event, originalId) {
 // ========================================
 async function startWorkflow(originalId) {
     showStatus('読み込み中...');
-    const parsed = parseInput(originalId);
+    const parsed = await resolveInput(originalId);   // ← parseInput から変更
+
+    if (parsed?.kind === 'nip05-error') {
+        renderInputForm();
+        showStatus(`NIP-05「${parsed.nip05}」を解決できませんでした（${parsed.message}）`);
+        return;
+    }
 
     if (!parsed) {
         showStatus('');
         renderInputForm();
         return;
+    }
+
+    // NIP-05 経由で解決できた場合、外部ビューア用リンクなどのフォールバックUIには
+    // npub を使う（lumilumi 等が NIP-05 を受け付けるとは限らないため）
+    if (parsed.nip05) {
+        originalId = NostrTools.nip19.npubEncode(parsed.pubkey);
     }
 
     // 実際に問い合わせるリレー一覧を先に確定させ、失敗時のフォールバックUIでも使い回す
