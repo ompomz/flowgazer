@@ -8,6 +8,7 @@
 class Timeline {
     constructor(containerElement, options = {}) {
         this.container = containerElement;
+        this.options = options;
         this.currentTab = 'global';
         this.activeElements = new Set();
         this.channelNameMap = window.channelNameMap || new Map();
