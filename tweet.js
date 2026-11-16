@@ -1197,7 +1197,10 @@ async function loadUserPostsList(pubkey, hintRelays) {
     // 🆕 この一覧専用のTimelineインスタンスを生成する。
     // containerは renderProfilePage() の innerHTML 差し替えのたびに作り直されるため、
     // 都度 new し直す（前回分の activeElements 参照は自然に破棄される）。
-    window.profileTimeline = new Timeline(listContainer, { timestampFormatter: formatProfileDate });
+    window.profileTimeline = new Timeline(listContainer, {
+    timestampFormatter: formatProfileDate,
+    hideAuthorInMetadata: true // 👈 これを追加！
+    });
 
     if (loadMoreBtn) loadMoreBtn.classList.add('hidden');
 

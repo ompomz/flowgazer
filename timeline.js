@@ -662,6 +662,11 @@ class Timeline {
         const time = this.createTimestamp(event);
         span.appendChild(time);
         span.appendChild(document.createTextNode(' '));
+
+        if (this.options.hideAuthorInMetadata) {
+            return span;
+        }
+
         const author = this.createAuthorLink(event.pubkey);
         span.appendChild(author);
         span.appendChild(document.createTextNode(' > '));
