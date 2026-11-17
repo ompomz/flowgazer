@@ -388,7 +388,7 @@ class Timeline {
 
     updateChannelBadge(channelId, name) {
         if (!channelId) return;
-        const selector = `.-badgchannele[data-channel-id="${CSS.escape(channelId)}"]`;
+        const selector = `.channel-badge[data-channel-id="${CSS.escape(channelId)}"]`;
         this.container.querySelectorAll(selector).forEach(badge => {
             badge.textContent = `*${name} `;
         });
