@@ -171,7 +171,7 @@ const MyNostrUtils = {
 
     // linkify も options を受け取る
     linkify(text, options = { expandMedia: false }) {
-        const combinedRegex = /(https?:\/\/[\w/:%#\$&\?\(\)~\.=\+\-;\*!]+)|(nostr:[a-z0-9]+1[a-z0-9]+)/gi;
+        const combinedRegex = /(https?:\/\/[\w/:%#\$&\?\(\)~\.=\+\-;\*!@]+)|(nostr:[a-z0-9]+1[a-z0-9]+)/gi;
 
         return text.replace(combinedRegex, (match) => {
             if (match.toLowerCase().startsWith("nostr:")) {

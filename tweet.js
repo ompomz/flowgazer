@@ -7,22 +7,23 @@
 // 🆕 Step1: 純粋関数・定数は tweet-utils.js から取り込む。
 // 以降のコード本体は変更不要（呼び出し名がそのまま使える）。
 const {
-    withTimeout, getPostTypeLabel, formatProfileDate, replaceCustomEmojis,
-    parseInput, normalizeNip05, isNip05, getReplyTargetTag, CONFIG
+    getPostTypeLabel, formatProfileDate, replaceCustomEmojis,
+    isNip05, getReplyTargetTag, CONFIG
 } = window.TweetUtils;
-const {
-    FALLBACK_RELAYS, DEFAULT_PROFILE_IMAGE, MAX_RELAYS_PER_QUERY,
-    CLIENT_TAG, DEFAULT_MAIN_RELAY
-} = CONFIG;
+const { FALLBACK_RELAYS, DEFAULT_PROFILE_IMAGE, CLIENT_TAG } = CONFIG;
 
-// nostr-tools v2: SimplePool は 'wss://relay/' のような複数リレーを
-// 横断してイベントを探す責務を持つ（単一接続専用のRelayManagerとは役割が異なる）
-const pool = new NostrTools.SimplePool({ eoseSubTimeout: 6000 });
+// 🆕 Step2: 通信・キャッシュは tweet-api.js から。
+// 以降の呼び出し側コードを変えずに済むよう、this を束縛したエイリアスを用意する
+// （移行用。落ち着いたら tweetApi.xxx() 呼び出しに置き換えてもよい）。
+const tweetApi = window.tweetApi;
+const getPriorityRelays = tweetApi.getPriorityRelays.bind(tweetApi);
+const getMainRelayUrl = tweetApi.getMainRelayUrl.bind(tweetApi);
+const publishToMainRelay = tweetApi.publishToMainRelay.bind(tweetApi);
+const fetchProfile = tweetApi.fetchProfile.bind(tweetApi);
+const fetchEventById = tweetApi.fetchEventById.bind(tweetApi);
+const fetchChannelMeta = tweetApi.fetchChannelMeta.bind(tweetApi);
+const resolveInput = tweetApi.resolveInput.bind(tweetApi);
 
-// キャッシュ（同一セッション内での再取得を防ぐ）
-const profileCache = new Map();   // pubkey -> profile object | null
-const eventCache = new Map();     // eventId -> event | undefined(未取得)
-const channelMetaCache = new Map(); // channelId -> { name, about, picture }
 
 // 🆕 プロフィールページの投稿一覧：もっと見る用の状態
 let profilePostsState = null; // { pubkey, hintRelays, oldestTimestamp, isLoading }
@@ -59,16 +60,9 @@ window.tweetActionMenu = new NostrActionMenu({
     getKind7Mode: () => 'fixed'
 });
 
-// 🆕 cusemo.js の取得経路を SimplePool に差し替える（tweet.html は relayManager を持たないため）
+// 🆕 cusemo.js の取得経路を tweetApi（SimplePool）に差し替える（tweet.html は relayManager を持たないため）
 if (window.customEmojiManager) {
-    window.customEmojiManager.queryProvider = async (filters) => {
-        const relays = getPriorityRelays([getMainRelayUrl()]);
-        const results = await Promise.all(filters.map(f =>
-            withTimeout(pool.querySync(relays, f), 8000, 'カスタム絵文字取得タイムアウト')
-                .catch(() => [])
-        ));
-        return results.flat();
-    };
+    window.customEmojiManager.queryProvider = (filters) => tweetApi.queryEmojiEvents(filters);
 }
 
 // 🆕 ログインユーザーの絵文字を一度だけ読み込む（ユーザーが変わったら入れ替え）
@@ -99,13 +93,6 @@ function attachActionHandler(element, event) {
 // 共通ユーティリティ
 // ========================================
 
-function getPriorityRelays(hintRelays) {
-    const cleaned = (hintRelays || []).filter(Boolean);
-    const combined = [...new Set([...cleaned, ...FALLBACK_RELAYS])];
-    const relays = combined.slice(0, MAX_RELAYS_PER_QUERY);
-    console.log('🔌 使用リレー:', relays);
-    return relays;
-}
 
 function showStatus(message) {
     if (!statusElement) return;
@@ -190,27 +177,6 @@ window.eventBus.on(window.EVENTS.AUTH_LOGIN_COMPLETED, ({ pubkey, onComplete }) 
 });
 
 /**
- * 本体(flowgazer)が使っているメインリレーのURLを取得する。
- * localStorage の 'relayUrl' は本体(app.js)と共有されるキーなので、
- * 本体でリレーを変更していればそれを引き継ぎ、未設定ならデフォルトに揃える。
- */
-function getMainRelayUrl() {
-    return localStorage.getItem('relayUrl') || DEFAULT_MAIN_RELAY;
-}
-
-/**
- * 署名済みイベントを本体と同じメインリレーへpublishする。
- * SimplePool.publish() はリレーごとのPromiseを配列で返すため、
- * 1件でも成功すればOKとする（Promise.any）。
- */
-async function publishToMainRelay(signedEvent) {
-    const relay = getMainRelayUrl();
-    const results = pool.publish([relay], signedEvent);
-    await withTimeout(Promise.any(results), 8000, 'リレーへの送信がタイムアウトしました');
-    return relay;
-}
-
-/**
  * 書き込み操作の前提条件（署名可能な鍵があるか）をチェックする。
  * 満たさない場合はログインモーダルを開いて false を返す。
  */
@@ -225,7 +191,6 @@ function requireWriteAccess() {
 
 // 要素ごとに長押しハンドラーを使い回さないよう、対象要素に紐づけて管理する
 const attachedHandlers = new WeakMap();
-
 
 // eHagakiモーダルの閉じるボタン・背景クリック配線
 document.getElementById('close-ehagaki-modal')?.addEventListener('click', () => {
@@ -246,151 +211,6 @@ window.addEventListener('message', (event) => {
         alert('投稿しました！最新の状態を見るにはページを再読み込みしてください。');
     }
 });
-
-// ========================================
-// データ取得（プロフィール・イベント・チャンネル情報）
-// ========================================
-
-async function fetchProfile(pubkey, hintRelays) {
-    if (profileCache.has(pubkey)) return profileCache.get(pubkey);
-    const relays = getPriorityRelays(hintRelays);
-    try {
-        const event = await withTimeout(
-            pool.get(relays, { kinds: [0], authors: [pubkey] }),
-            8000, 'プロフィール取得タイムアウト'
-        );
-        if (event) {
-            const profile = JSON.parse(event.content);
-            profileCache.set(pubkey, profile);
-            return profile;
-        }
-    } catch (e) {
-        console.warn('プロフィール取得失敗:', pubkey.substring(0, 8), e.message);
-    }
-    profileCache.set(pubkey, null);
-    return null;
-}
-
-async function fetchProfilesBatch(pubkeys, hintRelays) {
-    const uncached = [...new Set(pubkeys)].filter(pk => pk && !profileCache.has(pk));
-    if (uncached.length === 0) return;
-    const relays = getPriorityRelays(hintRelays);
-    const latestByPubkey = new Map();
-    try {
-        const events = await withTimeout(
-            pool.querySync(relays, { kinds: [0], authors: uncached }),
-            8000, 'プロフィール一括取得タイムアウト'
-        );
-        events.forEach(ev => {
-            const current = latestByPubkey.get(ev.pubkey);
-            if (!current || ev.created_at > current.created_at) latestByPubkey.set(ev.pubkey, ev);
-        });
-    } catch (e) {
-        console.warn('プロフィール一括取得失敗:', e.message);
-    }
-
-    uncached.forEach(pk => {
-        const ev = latestByPubkey.get(pk);
-        if (ev) {
-            try { profileCache.set(pk, JSON.parse(ev.content)); }
-            catch (e) { profileCache.set(pk, null); }
-        } else if (!profileCache.has(pk)) {
-            profileCache.set(pk, null);
-        }
-    });
-}
-
-async function fetchEventById(id, hintRelays) {
-    if (eventCache.has(id)) return eventCache.get(id);
-    const relays = getPriorityRelays(hintRelays);
-    try {
-        const event = await withTimeout(
-            pool.get(relays, { ids: [id] }),
-            10000, 'イベント取得タイムアウト'
-        );
-        eventCache.set(id, event || null);
-        return event || null;
-    } catch (e) {
-        console.warn('イベント取得失敗:', id.substring(0, 8), e.message);
-        eventCache.set(id, null);
-        return null;
-    }
-}
-
-async function fetchChannelMeta(channelId, hintRelays) {
-    if (channelMetaCache.has(channelId)) return channelMetaCache.get(channelId);
-    const relays = getPriorityRelays(hintRelays);
-    let meta = null;
-
-    // kind:41（チャンネル情報更新）を優先
-    try {
-        const metaEvents = await withTimeout(
-            pool.querySync(relays, { kinds: [41], '#e': [channelId] }),
-            6000, 'チャンネル情報(kind41)取得タイムアウト'
-        );
-        if (metaEvents.length > 0) {
-            metaEvents.sort((a, b) => b.created_at - a.created_at);
-            const parsed = JSON.parse(metaEvents[0].content);
-            meta = { name: parsed.name || null, about: parsed.about || null, picture: parsed.picture || null };
-        }
-    } catch (e) {
-        console.warn('kind41取得失敗:', e.message);
-    }
-
-    // 名前が取れなければ kind:40（チャンネル作成）で補完
-    if (!meta || !meta.name) {
-        try {
-            const createEvent = await withTimeout(
-                pool.get(relays, { kinds: [40], ids: [channelId] }),
-                6000, 'チャンネル情報(kind40)取得タイムアウト'
-            );
-            if (createEvent) {
-                const parsed = JSON.parse(createEvent.content);
-                meta = meta || {};
-                meta.name = meta.name || parsed.name || null;
-                meta.about = meta.about || parsed.about || null;
-                meta.picture = meta.picture || parsed.picture || null;
-            }
-        } catch (e) {
-            console.warn('kind40取得失敗:', e.message);
-        }
-    }
-
-    const result = meta || {};
-    result.name = result.name || `Channel ${channelId.substring(0, 8)}`;
-    result.about = result.about || null;
-    result.picture = result.picture || null;
-    channelMetaCache.set(channelId, result);
-    return result;
-}
-
-/**
- * parseInput の非同期ラッパー。
- * NIP-05（省略形含む）なら .well-known/nostr.json を引いて { kind:'profile' } に正規化する。
- * 解決に失敗した場合は { kind:'nip05-error' } を返す。
- */
-async function resolveInput(raw) {
-    const input = (raw || '').trim();
-    if (!input) return null;
-
-    const nip05 = normalizeNip05(input);
-    if (nip05) {
-        try {
-            const p = await withTimeout(
-                NostrTools.nip05.queryProfile(nip05),
-                8000, 'NIP-05解決タイムアウト'
-            );
-            if (!p?.pubkey) {
-                return { kind: 'nip05-error', nip05, message: 'アドレスが見つかりませんでした' };
-            }
-            return { kind: 'profile', pubkey: p.pubkey, relays: p.relays || [], nip05 };
-        } catch (e) {
-            return { kind: 'nip05-error', nip05, message: e.message };
-        }
-    }
-
-    return parseInput(input);
-}
 
 // ========================================
 // 本文フォーマット（エスケープ → linkify → 絵文字 → 引用カード展開）
@@ -524,13 +344,9 @@ async function createNostrCard(nip19Id) {
     if (decoded.type === 'naddr') {
         const relays = getPriorityRelays(decoded.data.relays || []);
         try {
-            const ev = await withTimeout(
-                pool.get(relays, {
-                    kinds: [decoded.data.kind],
-                    authors: [decoded.data.pubkey],
-                    '#d': [decoded.data.identifier]
-                }),
-                8000, '記事取得タイムアウト'
+            const ev = await tweetApi.fetchAddrEvent(
+                { addrKind: decoded.data.kind, pubkey: decoded.data.pubkey, identifier: decoded.data.identifier },
+                relays, 8000, '記事取得タイムアウト'
             );
             if (!ev) return `<div class="related-post-card">記事が見つかりませんでした</div>`;
             return await buildEventPreviewCard(ev, nip19Id);
@@ -725,20 +541,15 @@ async function renderChannelRoot(event) {
 async function loadChannelMessages(channelId) {
     const container = document.getElementById('channel-messages');
     container.innerHTML = `<p style="color:#888; padding:0.5rem;">メッセージを読み込み中...</p>`;
-    const relays = getPriorityRelays();
     try {
-        const events = await withTimeout(
-            pool.querySync(relays, { kinds: [42], '#e': [channelId], limit: 50 }),
-            10000, 'メッセージ取得タイムアウト'
-        );
-        events.sort((a, b) => a.created_at - b.created_at);
+        // 取得・古い順ソート・投稿者プロフィールの先読みまで api 側で行う
+        const events = await tweetApi.fetchChannelMessages(channelId);
 
         if (events.length === 0) {
             container.innerHTML = `<p style="color:#888; padding:0.5rem;">メッセージが見つかりませんでした</p>`;
             return;
         }
 
-        await fetchProfilesBatch(events.map(e => e.pubkey));
         const rows = await Promise.all(events.map(ev => buildChatRow(ev)));
         container.innerHTML = `<div class="chat-list">${rows.join('')}</div>`;
     } catch (e) {
@@ -748,7 +559,7 @@ async function loadChannelMessages(channelId) {
 }
 
 async function buildChatRow(event) {
-    const profile = profileCache.get(event.pubkey);
+    const profile = tweetApi.getCachedProfile(event.pubkey);
     const name = MyNostrUtils.getDisplayName(profile, event.pubkey);
     const picture = (profile && profile.picture) ? profile.picture : DEFAULT_PROFILE_IMAGE;
     const npub = NostrTools.nip19.npubEncode(event.pubkey);
@@ -842,33 +653,13 @@ function renderGenericEvent(event) {
 // ========================================
 
 async function loadRelatedData(eventId) {
-    const relays = getPriorityRelays();
     try {
-        const [replies, replies1111Root, reactions, reposts] = await Promise.all([
-            // 親が自分（kind:1 / 42 の返信 + kind:1111 の直接コメント）
-            withTimeout(pool.querySync(relays, { kinds: [1, 42, 1111], '#e': [eventId] }), 10000, '返信取得タイムアウト')
-                .catch(e => { console.warn('返信取得失敗:', e.message); return []; }),
-            // 🆕 ルートが自分の kind:1111（孫コメント以降も含める。大文字 E）
-            withTimeout(pool.querySync(relays, { kinds: [1111], '#E': [eventId] }), 10000, 'コメント取得タイムアウト')
-                .catch(e => { console.warn('コメント取得失敗:', e.message); return []; }),
-            withTimeout(pool.querySync(relays, { kinds: [7], '#e': [eventId] }), 10000, 'リアクション取得タイムアウト')
-                .catch(e => { console.warn('リアクション取得失敗:', e.message); return []; }),
-            withTimeout(pool.querySync(relays, { kinds: [6, 16], '#e': [eventId] }), 10000, 'リポスト取得タイムアウト')
-                .catch(e => { console.warn('リポスト取得失敗:', e.message); return []; })
-        ]);
-
-        // 🆕 id で重複排除してマージ
-        const mergedReplies = [...new Map(
-            [...replies, ...replies1111Root].map(e => [e.id, e])
-        ).values()];
-
-        const filteredReplies = mergedReplies.filter(e => e.id !== eventId);
-        const allPubkeys = [...filteredReplies, ...reactions, ...reposts].map(e => e.pubkey);
-        await fetchProfilesBatch(allPubkeys);
+        // 取得・重複排除・自分自身の除外・プロフィール先読みまで api 側で行う
+        const { replies, reactions, reposts } = await tweetApi.fetchRelated(eventId);
 
         if (reactions.length > 0) renderReactionsList(reactions);
-        if (filteredReplies.length > 0 || reposts.length > 0) {
-            await renderRelatedList(filteredReplies, reposts);
+        if (replies.length > 0 || reposts.length > 0) {
+            await renderRelatedList(replies, reposts);
         }
     } catch (e) {
         console.error('関連データ取得失敗:', e);
@@ -893,7 +684,7 @@ function renderReactionsList(reactions) {
             : MyNostrUtils.escapeHtml(displayEmoji);
 
         const avatars = Array.from(group.pubkeys).map(pk => {
-            const profile = profileCache.get(pk);
+            const profile = tweetApi.getCachedProfile(pk);
             const pic = (profile && profile.picture) ? profile.picture : DEFAULT_PROFILE_IMAGE;
             const npub = NostrTools.nip19.npubEncode(pk);
             const name = MyNostrUtils.getDisplayName(profile, pk);
@@ -918,7 +709,7 @@ async function renderRelatedList(replies, reposts) {
     all.sort((a, b) => a.event.created_at - b.event.created_at);
 
     const cards = await Promise.all(all.map(async ({ event, label }) => {
-        const profile = profileCache.get(event.pubkey);
+        const profile = tweetApi.getCachedProfile(event.pubkey);
         const date = new Date(event.created_at * 1000).toLocaleString();
         let bodyHtml;
         if (event.kind === 6) {
@@ -957,21 +748,16 @@ async function renderRelatedList(replies, reposts) {
 // ========================================
 
 async function renderProfilePage(pubkey, hintRelays) {
-    const relays = getPriorityRelays(hintRelays);
-    const profileEvent = await withTimeout(
-        pool.get(relays, { kinds: [0], authors: [pubkey] }),
-        10000, 'プロフィール取得タイムアウト'
-    );
+
+    // 取得・パース・キャッシュ登録は api 側。タイムアウト等の例外はそのまま呼び出し側へ伝わる
+    const result = await tweetApi.fetchProfileEvent(pubkey, hintRelays);
 
     // 見つからなかった場合は呼び出し側（startWorkflow / retryFetchWithRelay）に
     // 判断を委ね、リッチなフォールバックUIを出してもらう
-    if (!profileEvent) {
+    if (!result) {
         return false;
     }
-
-    let profile;
-    try { profile = JSON.parse(profileEvent.content); } catch (e) { profile = {}; }
-    profileCache.set(pubkey, profile);
+    const { event: profileEvent, profile } = result;
 
     const npub = NostrTools.nip19.npubEncode(pubkey);
     const aboutHtml = await formatPostContent(profile.about || '', profileEvent.tags);
@@ -1024,33 +810,26 @@ async function loadUserPostsList(pubkey, hintRelays) {
 
     profilePostsState = { pubkey, hintRelays: hintRelays || [], oldestTimestamp: null, isLoading: false };
 
-    // 🆕 この一覧専用のTimelineインスタンスを生成する。
+    // この一覧専用のTimelineインスタンスを生成する。
     // containerは renderProfilePage() の innerHTML 差し替えのたびに作り直されるため、
     // 都度 new し直す（前回分の activeElements 参照は自然に破棄される）。
     window.profileTimeline = new Timeline(listContainer, {
         timestampFormatter: formatProfileDate,
-        hideAuthorInMetadata: true // 👈 これを追加！
+        hideAuthorInMetadata: true
     });
 
     if (loadMoreBtn) loadMoreBtn.classList.add('hidden');
 
-    const relays = getPriorityRelays(hintRelays);
-
     try {
-        const events = await withTimeout(
-            pool.querySync(relays, { kinds: [1, 1111], authors: [pubkey], limit: 50 }),
-            10000, '投稿一覧取得タイムアウト'
-        );
+        // 新しい順・引用先の先読み済みで返ってくる
+        const events = await tweetApi.fetchUserPosts(pubkey, hintRelays);
 
         if (events.length === 0) {
             statusEl.textContent = '投稿が見つかりませんでした';
             return;
         }
 
-        events.sort((a, b) => b.created_at - a.created_at);
         profilePostsState.oldestTimestamp = events[events.length - 1].created_at;
-
-        await prefetchNostrReferences(events, relays);
 
         renderProfilePostBatch(events);
         statusEl.textContent = '';
@@ -1110,17 +889,11 @@ async function loadMoreProfilePosts() {
     profilePostsState.isLoading = true;
     loadMoreBtn.classList.add('loading');
 
-    const relays = getPriorityRelays(profilePostsState.hintRelays);
-
     try {
-        const events = await withTimeout(
-            pool.querySync(relays, {
-                kinds: [1, 1111],
-                authors: [profilePostsState.pubkey],
-                until: profilePostsState.oldestTimestamp - 1,
-                limit: 50
-            }),
-            10000, '投稿一覧取得タイムアウト'
+        const events = await tweetApi.fetchUserPosts(
+            profilePostsState.pubkey,
+            profilePostsState.hintRelays,
+            { until: profilePostsState.oldestTimestamp - 1 }
         );
 
         if (events.length === 0) {
@@ -1129,10 +902,7 @@ async function loadMoreProfilePosts() {
             return;
         }
 
-        events.sort((a, b) => b.created_at - a.created_at);
         profilePostsState.oldestTimestamp = events[events.length - 1].created_at;
-
-        await prefetchNostrReferences(events, relays);
 
         renderProfilePostBatch(events);
 
@@ -1149,60 +919,6 @@ async function loadMoreProfilePosts() {
     } finally {
         profilePostsState.isLoading = false;
         loadMoreBtn.classList.remove('loading');
-    }
-}
-
-/**
- * 取得したイベント群の本文中にある nostr: 参照（nevent, noteなど）をスキャンし、
- * まだデータストアにないものをリレーから一括で先読みしてキャッシュする。
- * これにより、タイムライン描画時に引用プレビューやインラインRTが正しく機能するようになる。
- */
-async function prefetchNostrReferences(events, relays) {
-    const targetIds = new Set();
-    const nip19Regex = /nostr:(npub1|nevent1|note1|nprofile1|nrelay1)[a-zA-Z0-9]+/g;
-
-    // 1. 全イベントの本文から nostr: リンクを探してIDを抽出する
-    events.forEach(ev => {
-        if (!ev.content) return;
-        const matches = ev.content.match(nip19Regex);
-        if (!matches) return;
-
-        matches.forEach(match => {
-            const nip19Str = match.replace('nostr:', '');
-            try {
-                const decoded = window.NostrTools.nip19.decode(nip19Str);
-                if (decoded.type === 'nevent' && decoded.data?.id) {
-                    targetIds.add(decoded.data.id);
-                } else if (decoded.type === 'note' && decoded.data) {
-                    targetIds.add(decoded.data);
-                }
-            } catch (e) {
-                // デコード失敗は無視
-            }
-        });
-    });
-
-    if (targetIds.size === 0) return;
-
-    // 2. すでに dataStore にあるものは省く
-    const missingIds = Array.from(targetIds).filter(id => !window.dataStore.getEvent(id));
-    if (missingIds.length === 0) return;
-
-    console.log(`🔍 引用先の投稿を先読みします: ${missingIds.length}件`);
-
-    try {
-        // 3. 不足しているものをリレーに問い合せる
-        const referencedEvents = await pool.querySync(relays, {
-            ids: missingIds
-        });
-
-        // 4. dataStore に突っ込んでおく
-        referencedEvents.forEach(ev => {
-            window.dataStore.addEvent(ev);
-        });
-        console.log(`✨ 引用先の先読み完了: ${referencedEvents.length}件取得`);
-    } catch (e) {
-        console.warn('引用先の先読み失敗:', e.message);
     }
 }
 
@@ -1376,13 +1092,9 @@ async function retryFetchWithRelay(parsed, originalId, relay) {
 
         let event;
         if (parsed.kind === 'addr') {
-            event = await withTimeout(
-                pool.get([relay], { kinds: [parsed.addrKind], authors: [parsed.pubkey], '#d': [parsed.identifier] }),
-                10000, '再取得タイムアウト'
-            );
+            event = await tweetApi.fetchAddrEvent(parsed, [relay], 10000, '再取得タイムアウト');
         } else {
-            event = await withTimeout(pool.get([relay], { ids: [parsed.id] }), 10000, '再取得タイムアウト');
-            if (event) eventCache.set(parsed.id, event);
+            event = await tweetApi.fetchEventFromRelays(parsed.id, [relay]);
         }
 
         if (!event) {
@@ -1465,10 +1177,7 @@ async function startWorkflow(originalId) {
 
         let event;
         if (parsed.kind === 'addr') {
-            event = await withTimeout(
-                pool.get(triedRelays, { kinds: [parsed.addrKind], authors: [parsed.pubkey], '#d': [parsed.identifier] }),
-                10000, '記事取得タイムアウト'
-            );
+            event = await tweetApi.fetchAddrEvent(parsed, triedRelays, 10000, '記事取得タイムアウト');
         } else {
             event = await fetchEventById(parsed.id, parsed.relays);
         }
@@ -1513,5 +1222,5 @@ window.addEventListener('load', initializeApp);
 
 // ページ離脱時にリレー接続を解放
 window.addEventListener('beforeunload', () => {
-    try { pool.close(FALLBACK_RELAYS); } catch (e) { /* noop */ }
+    tweetApi.close();
 });
